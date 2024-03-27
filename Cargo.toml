@@ -4,3 +4,10 @@ resolver = "2"
 members = [
     "vessel-core",
 ]
+
+[workspace.dependencies]
+prople-did-core = {version = "~0.2"}
+prople-crypto = {version = "~0.2"}
+rst-common = {version = "~1", features=["with-errors"]}
+rstdev-domain = {version = "~0.1"}
+mockall  = {version = "0.12.1"}
