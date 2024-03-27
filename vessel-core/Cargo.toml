@@ -6,3 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+prople-did-core.workspace = true
+prople-crypto.workspace = true
+rst-common.workspace = true
+rstdev-domain.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
