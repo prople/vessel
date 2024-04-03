@@ -71,6 +71,10 @@ where
 
         Ok(account)
     }
+
+    fn remove_did(&self, did: String) -> Result<(), AccountError> {
+        self.repo.remove_by_did(did)
+    }
 }
 
 #[cfg(test)]
@@ -83,6 +87,7 @@ mod tests {
 
         impl AccountRepositoryBuilder for FakeRepo {
             fn save(&self, account: &Account) -> Result<(), AccountError>;
+            fn remove_by_did(&self, did: String) -> Result<(), AccountError>;
         }
     );
 

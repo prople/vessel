@@ -82,6 +82,9 @@ pub trait AccountUsecaseBuilder {
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
     fn generate_did(&self, address: String, password: String) -> Result<Account, AccountError>;
+
+    /// `remove_did` used to remove saved [`Account`] based on given `DID`
+    fn remove_did(&self, did: String) -> Result<(), AccountError>;
 }
 
 /// `AccountRepository` is a trait behavior that used as base
@@ -92,4 +95,5 @@ pub trait AccountUsecaseBuilder {
 /// persistent storage or database such as SQL or NoSQL
 pub trait AccountRepositoryBuilder {
     fn save(&self, account: &Account) -> Result<(), AccountError>;
+    fn remove_by_did(&self, did: String) -> Result<(), AccountError>;
 }
