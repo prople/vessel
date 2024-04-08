@@ -1,12 +1,5 @@
 use prople_crypto::keysecure::types::ToKeySecure;
-
-use prople_did_core::did::{IdentityPayload, DID};
-use prople_did_core::identity::payload::account::Account as IdentityPayloadAccount;
-use prople_did_core::identity::payload::resolver::Resolver as IdentityPayloadResolver;
-use prople_did_core::identity::payload::resolver::{
-    Address as IdentityPayloadAddress, AddressType as IdentityPayloadAddressType,
-};
-use prople_did_core::identity::payload::Payload as IdentityPayloadCore;
+use prople_did_core::did::DID;
 
 use crate::ssi::account::types::{
     Account, AccountError, AccountRepositoryBuilder, AccountUsecaseBuilder,
@@ -35,29 +28,14 @@ impl<TRepo> AccountUsecaseBuilder for Usecase<TRepo>
 where
     TRepo: AccountRepositoryBuilder,
 {
-    fn generate_did(&self, address: String, password: String) -> Result<Account, AccountError> {
-        let identity_payload_account = IdentityPayloadAccount::new();
-        let identity_payload_addr =
-            IdentityPayloadAddress::new(IdentityPayloadAddressType::Peer, address);
-        let identity_payload_resolver = IdentityPayloadResolver::new(identity_payload_addr);
-        let identity_payload_core =
-            IdentityPayloadCore::new(identity_payload_account.clone(), identity_payload_resolver);
-        let identity_payload = IdentityPayload::new(identity_payload_core)
-            .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
-
-        let did = DID::new(identity_payload);
+    fn generate_did(&self, password: String) -> Result<Account, AccountError> {
+        let did = DID::new();
         let identity = did
             .identity()
             .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
 
-        let account_payload =
-            identity_payload_account
-                .account
-                .ok_or(AccountError::GenerateIdentityError(
-                    "unable to generate account".to_string(),
-                ))?;
-
-        let account_keysecure = account_payload
+        let account_keysecure = did
+            .account()
             .privkey()
             .to_keysecure(password)
             .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
@@ -101,7 +79,7 @@ mod tests {
         repo.expect_save().returning(|_| Ok(()));
 
         let uc = generate_usecase(repo);
-        let output = uc.generate_did("addr".to_string(), "password".to_string());
+        let output = uc.generate_did("password".to_string());
         assert!(!output.is_err());
 
         let acc = output.unwrap();
@@ -119,10 +97,13 @@ mod tests {
                 "error fake repo".to_string(),
             ))
         });
-        
+
         let uc = generate_usecase(repo);
-        let output = uc.generate_did("addr".to_string(), "password".to_string());
+        let output = uc.generate_did("password".to_string());
         assert!(output.is_err());
-        assert!(matches!(output.unwrap_err(), AccountError::GenerateIdentityError(_)))
+        assert!(matches!(
+            output.unwrap_err(),
+            AccountError::GenerateIdentityError(_)
+        ))
     }
 }

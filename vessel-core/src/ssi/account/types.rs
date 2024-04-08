@@ -67,21 +67,15 @@ impl Account {
 /// basic logic for the account management activities
 pub trait AccountUsecaseBuilder {
     /// `generate_did` used to geenerate new `DID Account`
-    /// 
+    ///
     /// This method will depends on two parameters:
-    /// - `address`
     /// - `password`
-    /// 
-    /// The `address` should be an address of current running vessel,
-    /// it can be a multiaddress format from libp2p or common HTTP API address.
-    /// This property will be embedded inside user's `DID Account` syntax, so
-    /// other people will know how to resolve the DID 
-    /// 
+    ///
     /// The `password` used to save the generated private key pair into encrypted
     /// storage data structure. This strategy following `Ethereum KeyStore` mechanism.
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
-    fn generate_did(&self, address: String, password: String) -> Result<Account, AccountError>;
+    fn generate_did(&self, password: String) -> Result<Account, AccountError>;
 
     /// `remove_did` used to remove saved [`Account`] based on given `DID`
     fn remove_did(&self, did: String) -> Result<(), AccountError>;
