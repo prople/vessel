@@ -1,4 +1,6 @@
 use prople_crypto::keysecure::KeySecure;
+use prople_did_core::did::query::Params;
+use prople_did_core::doc::types::Doc;
 
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
@@ -30,6 +32,9 @@ pub enum AccountError {
 
     #[error("unable to generate identity: {0}")]
     GenerateIdentityError(String),
+
+    #[error("unable to build DID uri: {0}")]
+    BuildURIError(String),
 }
 
 /// `Account` is main entity data structure
@@ -42,6 +47,7 @@ pub enum AccountError {
 pub struct Account {
     pub id: String,
     pub did: String,
+    pub doc: Doc,
     pub keysecure: KeySecure,
 
     #[serde(with = "ts_seconds")]
@@ -52,10 +58,11 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn new(did: String, keysecure: KeySecure) -> Self {
+    pub fn new(did: String, doc: Doc, keysecure: KeySecure) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             did,
+            doc,
             keysecure,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -76,6 +83,9 @@ pub trait AccountUsecaseBuilder {
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
     fn generate_did(&self, password: String) -> Result<Account, AccountError>;
+
+    /// `build_did_uri` used to generate the `DID URI`, a specific URI for the DID
+    fn build_did_uri(&self, did: String, params: Option<Params>) -> Result<String, AccountError>;
 
     /// `remove_did` used to remove saved [`Account`] based on given `DID`
     fn remove_did(&self, did: String) -> Result<(), AccountError>;
