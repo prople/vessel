@@ -52,16 +52,22 @@ where
         Ok(account)
     }
 
-    fn build_did_uri(&self, did: String, params: Option<Params>) -> Result<String, AccountError> {
-        match params {
-            Some(query_params) => query_params
-                .build_query()
-                .map(|val| format!("{}?{}", did, val))
-                .ok_or(AccountError::BuildURIError(
-                    "unable to build DID URI".to_string(),
-                )),
-            None => Ok(did),
-        }
+    fn build_did_uri(
+        &self,
+        did: String,
+        password: String,
+        params: Option<Params>,
+    ) -> Result<String, AccountError> {
+        let account = self
+            .repo
+            .get_by_did(did)
+            .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
+
+        let did = DID::from_keysecure(password, account.keysecure)
+            .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
+
+        did.build_uri(params)
+            .map_err(|err| AccountError::BuildURIError(err.to_string()))
     }
 
     fn remove_did(&self, did: String) -> Result<(), AccountError> {
@@ -73,6 +79,7 @@ where
 mod tests {
     use super::*;
     use mockall::mock;
+    use prople_did_core::doc::types::ToDoc;
     use prople_did_core::hashlink::generate_from_json;
 
     mock!(
@@ -81,6 +88,7 @@ mod tests {
         impl AccountRepositoryBuilder for FakeRepo {
             fn save(&self, account: &Account) -> Result<(), AccountError>;
             fn remove_by_did(&self, did: String) -> Result<(), AccountError>;
+            fn get_by_did(&self, did: String) -> Result<Account, AccountError>;
         }
     );
 
@@ -124,45 +132,75 @@ mod tests {
 
     #[test]
     fn test_build_did_uri_without_params() {
+        let did = DID::new();
+        let identity = did.identity().unwrap();
+
+        let identity_value = identity.value();
+        let identity_doc = identity.to_doc();
+
         let mut repo = MockFakeRepo::new();
         repo.expect_save().returning(|_| Ok(()));
+        repo.expect_get_by_did().returning(move |_| {
+            let keysecure = did
+                .account()
+                .privkey()
+                .to_keysecure("password".to_string())
+                .unwrap();
+            let account = Account::new(identity_value.clone(), identity_doc.clone(), keysecure);
+            Ok(account)
+        });
 
         let uc = generate_usecase(repo);
-        let account = uc.generate_did("password".to_string());
-        assert!(!account.is_err());
-
-        let did = account.unwrap().did;
-        let uri = uc.build_did_uri(did.clone(), None);
+        let uri = uc.build_did_uri(identity.clone().value(), "password".to_string(), None);
         assert!(!uri.is_err());
-        assert_eq!(uri.unwrap(), did)
+        assert_eq!(uri.unwrap(), identity.clone().value())
     }
 
     #[test]
     fn test_build_did_uri_with_params() {
+        let did = DID::new();
+        let identity = did.identity().unwrap();
+
+        let identity_value = identity.value();
+        let identity_doc = identity.to_doc();
+
         let mut repo = MockFakeRepo::new();
         repo.expect_save().returning(|_| Ok(()));
+        repo.expect_get_by_did().returning(move |_| {
+            let keysecure = did
+                .account()
+                .privkey()
+                .to_keysecure("password".to_string())
+                .unwrap();
+            let account = Account::new(identity_value.clone(), identity_doc.clone(), keysecure);
+            Ok(account)
+        });
 
         let uc = generate_usecase(repo);
-        let result = uc.generate_did("password".to_string());
-        assert!(!result.is_err());
 
-        let account = result.unwrap();
-        let doc = account.doc;
+        let doc = identity.clone().to_doc();
         let doc_hl_result = generate_from_json(doc);
         assert!(!doc_hl_result.is_err());
 
         let doc_hl = doc_hl_result.unwrap();
-        let did = account.did;
         let params = Params {
             address: Some("test-addr".to_string()),
             hl: Some(doc_hl.clone()),
             service: Some("peer".to_string()),
         };
 
-        let uri = uc.build_did_uri(did.clone(), Some(params));
+        let uri = uc.build_did_uri(
+            identity.clone().value(),
+            "password".to_string(),
+            Some(params),
+        );
         assert!(!uri.is_err());
 
-        let uri_expected = format!("{}?service=peer&address=test-addr&hl={}", did, doc_hl);
+        let uri_expected = format!(
+            "{}?service=peer&address=test-addr&hl={}",
+            identity.clone().value(),
+            doc_hl
+        );
         assert_eq!(uri.unwrap(), uri_expected)
     }
 }
