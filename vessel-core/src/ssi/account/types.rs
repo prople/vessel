@@ -84,7 +84,13 @@ pub trait AccountUsecaseBuilder {
     /// and decrypt the generated private key
     fn generate_did(&self, password: String) -> Result<Account, AccountError>;
 
-    /// `build_did_uri` used to generate the `DID URI`, a specific URI for the DID
+    /// `build_did_uri` used to generate the `DID URI`, a specific URI syntax for the DID
+    /// 
+    /// Example
+    /// 
+    /// ```
+    /// did:prople:<base58_encoded_data>?service=peer&address=<multiaddr_format>&hl=<hashed_link>
+    /// ```
     fn build_did_uri(&self, did: String, params: Option<Params>) -> Result<String, AccountError>;
 
     /// `remove_did` used to remove saved [`Account`] based on given `DID`
