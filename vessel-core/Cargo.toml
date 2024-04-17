@@ -10,6 +10,7 @@ prople-did-core.workspace = true
 prople-crypto.workspace = true
 rst-common.workspace = true
 rstdev-domain.workspace = true
+multiaddr.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true

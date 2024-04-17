@@ -1,3 +1,5 @@
+use multiaddr::Multiaddr;
+
 use prople_crypto::keysecure::KeySecure;
 use prople_did_core::did::query::Params;
 use prople_did_core::doc::types::Doc;
@@ -88,7 +90,7 @@ pub trait AccountUsecaseBuilder {
     ///
     /// Example
     ///
-    /// ```
+    /// ```text
     /// did:prople:<base58_encoded_data>?service=peer&address=<multiaddr_format>&hl=<hashed_link>
     /// ```
     fn build_did_uri(
@@ -97,6 +99,10 @@ pub trait AccountUsecaseBuilder {
         password: String,
         params: Option<Params>,
     ) -> Result<String, AccountError>;
+
+    /// `resolve_did_uri` used to resolve given `DID URI` and must be able to return `DID DOC`
+    /// by calling an `JSON-RPC` method of `resolve_did_doc` to oher `Vessel Agent`
+    fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError>;
 
     /// `remove_did` used to remove saved [`Account`] based on given `DID`
     fn remove_did(&self, did: String) -> Result<(), AccountError>;
@@ -112,4 +118,10 @@ pub trait AccountRepositoryBuilder {
     fn save(&self, account: &Account) -> Result<(), AccountError>;
     fn remove_by_did(&self, did: String) -> Result<(), AccountError>;
     fn get_by_did(&self, did: String) -> Result<Account, AccountError>;
+}
+
+/// `AccountRPCClientBuilder` is a trait behavior used as `JSON-RPC` client builder
+/// to calling other `Vessel` agents.
+pub trait AccountRPCClientBuilder {
+    fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
 }
