@@ -37,6 +37,9 @@ pub enum AccountError {
 
     #[error("unable to build DID uri: {0}")]
     BuildURIError(String),
+
+    #[error("unknown DID")]
+    DIDNotFound,
 }
 
 /// `Account` is main entity data structure
@@ -103,6 +106,9 @@ pub trait AccountUsecaseBuilder {
     /// `resolve_did_uri` used to resolve given `DID URI` and must be able to return `DID DOC`
     /// by calling an `JSON-RPC` method of `resolve_did_doc` to oher `Vessel Agent`
     fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError>;
+
+    /// `resolve_did_doc` used to get saved `DID DOC` based on given `DID Account`
+    fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError>;
 
     /// `remove_did` used to remove saved [`Account`] based on given `DID`
     fn remove_did(&self, did: String) -> Result<(), AccountError>;
