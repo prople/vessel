@@ -1,1 +1,1 @@
-pub mod ssi;
+pub mod identity;

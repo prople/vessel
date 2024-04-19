@@ -1,4 +1,5 @@
-//! `ssi` is a sub-domain used to manage `SSI (Self Sovereign Identity)` domain
+//! `identity` is a sub-domain used to manage identity which following the framework of 
+//! `SSI (Self Sovereign Identity)` based on `DID Framework`
 //!
 //! The `SSI (Self Sovereign Identity)` has three sub-domain in it:
 //!

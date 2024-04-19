@@ -4,7 +4,7 @@ use prople_did_core::did::{query::Params, DID};
 use prople_did_core::doc::types::{Doc, ToDoc};
 use prople_did_core::hashlink::verify_from_json;
 
-use crate::ssi::account::types::{
+use crate::identity::account::types::{
     Account, AccountError, AccountRPCClientBuilder, AccountRepositoryBuilder, AccountUsecaseBuilder,
 };
 
