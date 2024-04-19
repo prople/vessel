@@ -3,7 +3,7 @@
 //!
 //! The `SSI (Self Sovereign Identity)` has three sub-domain in it:
 //!
-//! - `agent`
+//! - `verifiable`
 //! - `account`
 //! - `connection`
 //!
@@ -18,6 +18,11 @@
 //! including for `Social` and `Financial` activities. The `agent` defined at this domain
 //! will focus only to the entity **identity** and the peer-to-peer identity communication
 //! through `DIDComm Messaging`
+//! 
+//! ---
+//! 
+//! The `verifiable` sub-domain is a domain that focus on managing the `VC` and `VP` for the generation
+//! and also verifying data including for sending and receiving credentials
 //!
 //! ---
 //!  
@@ -44,3 +49,4 @@
 //! they will generate the `VC` and `VP` with it's proofs which contains a digital signature, which means
 //! they need to exchange their public keys.
 pub mod account;
+pub mod verifiable;
