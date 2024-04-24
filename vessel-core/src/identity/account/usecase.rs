@@ -109,6 +109,10 @@ where
     fn remove_did(&self, did: String) -> Result<(), AccountError> {
         self.repo.remove_by_did(did)
     }
+
+    fn get_account_did(&self, did: String) -> Result<Account, AccountError> {
+        self.repo.get_by_did(did)
+    }
 }
 
 #[cfg(test)]

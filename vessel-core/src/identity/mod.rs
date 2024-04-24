@@ -1,4 +1,4 @@
-//! `identity` is a sub-domain used to manage identity which following the framework of 
+//! `identity` is a sub-domain used to manage identity which following the framework of
 //! `SSI (Self Sovereign Identity)` based on `DID Framework`
 //!
 //! The `SSI (Self Sovereign Identity)` has three sub-domain in it:
@@ -18,9 +18,9 @@
 //! including for `Social` and `Financial` activities. The `agent` defined at this domain
 //! will focus only to the entity **identity** and the peer-to-peer identity communication
 //! through `DIDComm Messaging`
-//! 
+//!
 //! ---
-//! 
+//!
 //! The `verifiable` sub-domain is a domain that focus on managing the `VC` and `VP` for the generation
 //! and also verifying data including for sending and receiving credentials
 //!

@@ -47,7 +47,7 @@ pub enum AccountError {
 /// This entity will able to define user/person, organization
 /// machine, everything. For the non-human data identity, it should
 /// has it's own controller
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(crate = "self::serde")]
 pub struct Account {
     pub id: String,
@@ -112,6 +112,15 @@ pub trait AccountUsecaseBuilder {
 
     /// `remove_did` used to remove saved [`Account`] based on given `DID`
     fn remove_did(&self, did: String) -> Result<(), AccountError>;
+
+    /// `get_account_did` used to load data [`Account`] from its persistent storage
+    fn get_account_did(&self, did: String) -> Result<Account, AccountError>;
+}
+
+pub trait AccountUsecaseEntryPoint {
+    type Implementer: AccountUsecaseBuilder;
+
+    fn account(&self) -> Self::Implementer;
 }
 
 /// `AccountRepository` is a trait behavior that used as base
