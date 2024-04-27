@@ -33,9 +33,12 @@ pub enum VerifiableError {
 
     #[error("unable to list vc: {0}")]
     VCListError(String),
+
+    #[error("repo error: {0}")]
+    RepoError(String),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(crate = "self::serde")]
 pub struct Credential {
     pub id: String,
@@ -85,7 +88,6 @@ pub trait VerifiableUsecaseBuilder: AccountUsecaseEntryPoint {
         &self,
         password: String,
         did_issuer: String,
-        did_cred: String,
         credential: Value,
         proof_params: Option<ProofParams>,
     ) -> Result<Credential, VerifiableError>;
