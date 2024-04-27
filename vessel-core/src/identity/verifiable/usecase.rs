@@ -1,3 +1,5 @@
+use multiaddr::Multiaddr;
+
 use rst_common::standard::serde_json::Value;
 use rst_common::standard::uuid::Uuid;
 
@@ -132,8 +134,9 @@ where
         Ok(())
     }
 
-    fn vc_send(&self, _id: String) -> Result<(), VerifiableError> {
-        Ok(())
+    fn vc_send(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError> {
+        let cred = self.repo.get_by_id(id)?;
+        self.rpc.vc_send_to(receiver, cred.vc)
     }
 
     fn vc_verify_by_issuer(&self, _vc: VC) -> Result<(), VerifiableError> {
@@ -150,7 +153,7 @@ mod tests {
     use super::*;
     use mockall::mock;
     use mockall::predicate::eq;
-    use multiaddr::Multiaddr;
+    use multiaddr::{multiaddr, Multiaddr};
 
     use prople_crypto::keysecure::types::ToKeySecure;
     use prople_did_core::did::{query::Params, DID};
@@ -478,5 +481,110 @@ mod tests {
         );
         assert!(vc.is_err());
         assert!(matches!(vc.unwrap_err(), VerifiableError::RepoError(_)))
+    }
+
+    #[test]
+    fn test_vc_send_success() {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did_vc = generate_did();
+        let did_vc_cloned = did_vc.clone();
+
+        let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
+        let vc_cloned = vc.clone();
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_get_by_id()
+            .with(eq("cred-id".to_string()))
+            .return_once(move |_| {
+                Ok(Credential {
+                    id: "cred-id".to_string(),
+                    did: did_issuer_value,
+                    vc: vc_cloned,
+                    keysecure: did_vc_cloned
+                        .account()
+                        .privkey()
+                        .to_keysecure("password".to_string())
+                        .unwrap(),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                })
+            });
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let mut rpc = MockFakeRPCClient::new();
+        rpc.expect_vc_send_to()
+            .with(eq(addr.clone()), eq(vc))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let account = MockFakeAccountUsecase::new();
+        let uc = generate_usecase(repo, rpc, account);
+        let send_output = uc.vc_send("cred-id".to_string(), addr);
+        assert!(!send_output.is_err())
+    }
+
+    #[test]
+    fn test_vc_send_error_repo() { 
+        let mut repo = MockFakeRepo::new();
+        repo.expect_get_by_id()
+            .with(eq("cred-id".to_string()))
+            .return_once(move |_| {
+                Err(VerifiableError::RepoError("error repo".to_string()))
+            });
+        
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let rpc = MockFakeRPCClient::new();
+        let account = MockFakeAccountUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account);
+        let send_output = uc.vc_send("cred-id".to_string(), addr);
+        assert!(send_output.is_err());
+        assert!(matches!(send_output.unwrap_err(), VerifiableError::RepoError(_)))
+    }
+
+    #[test]
+    fn test_vc_send_error_rpc() {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did_vc = generate_did();
+        let did_vc_cloned = did_vc.clone();
+
+        let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
+        let vc_cloned = vc.clone();
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_get_by_id()
+            .with(eq("cred-id".to_string()))
+            .return_once(move |_| {
+                Ok(Credential {
+                    id: "cred-id".to_string(),
+                    did: did_issuer_value,
+                    vc: vc_cloned,
+                    keysecure: did_vc_cloned
+                        .account()
+                        .privkey()
+                        .to_keysecure("password".to_string())
+                        .unwrap(),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                })
+            });
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let mut rpc = MockFakeRPCClient::new();
+        rpc.expect_vc_send_to()
+            .with(eq(addr.clone()), eq(vc))
+            .times(1)
+            .returning(|_, _| Err(VerifiableError::VCSendError("send error".to_string())));
+        
+        let account = MockFakeAccountUsecase::new();
+        let uc = generate_usecase(repo, rpc, account);
+        let send_output = uc.vc_send("cred-id".to_string(), addr);
+        assert!(send_output.is_err());
+        assert!(matches!(send_output.unwrap_err(), VerifiableError::VCSendError(_)))
     }
 }
