@@ -15,7 +15,7 @@ use crate::identity::verifiable::types::{
     VerifiableUsecaseBuilder,
 };
 
-use super::types::ProofParams;
+use super::types::{CredentialHolder, ProofParams};
 
 pub struct Usecase<TRPCClient, TRepo, TAccount>
 where
@@ -65,6 +65,18 @@ where
         credential: Value,
         proof_params: Option<ProofParams>,
     ) -> Result<Credential, VerifiableError> {
+        if password.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "password was missing".to_string(),
+            ));
+        }
+
+        if did_issuer.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "did_issuer was missing".to_string(),
+            ));
+        }
+
         let account = self
             .account()
             .generate_did(password.clone())
@@ -116,7 +128,7 @@ where
         let cred = Credential::new(did_issuer, vc, account_keysecure);
         let _ = self
             .repo
-            .save(cred.clone())
+            .save_credential(cred.clone())
             .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
 
         Ok(cred)
@@ -130,13 +142,37 @@ where
         Ok(vec![])
     }
 
-    fn vc_receive(&self, _id: String, _vc: VC) -> Result<(), VerifiableError> {
-        Ok(())
+    fn vc_receive_by_holder(
+        &self,
+        request_id: String,
+        issuer_addr: String,
+        vc: VC,
+    ) -> Result<(), VerifiableError> {
+        if request_id.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "request_id was missing".to_string(),
+            ));
+        }
+
+        if issuer_addr.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "issuer_addr was missing".to_string(),
+            ));
+        }
+
+        let cred_holder = CredentialHolder::new(request_id, issuer_addr, vc)?;
+        self.repo.save_credential_holder(cred_holder)
     }
 
-    fn vc_send(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError> {
+    fn vc_send_to_holder(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError> {
+        if id.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "id was missing".to_string(),
+            ));
+        }
+
         let cred = self.repo.get_by_id(id)?;
-        self.rpc.vc_send_to(receiver, cred.vc)
+        self.rpc.vc_send_to_holder(receiver, cred.vc)
     }
 
     fn vc_verify_by_issuer(&self, _vc: VC) -> Result<(), VerifiableError> {
@@ -169,7 +205,8 @@ mod tests {
         FakeRepo{}
 
         impl VerifiableRepoBuilder for FakeRepo {
-            fn save(&self, data: Credential) -> Result<(), VerifiableError>;
+            fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
+            fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
             fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
             fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
             fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
@@ -183,8 +220,8 @@ mod tests {
         FakeRPCClient{}
 
         impl VerifiableRPCBuilder for FakeRPCClient {
-            fn vc_send_to(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
-            fn vc_verify_to(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
+            fn vc_send_to_holder(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
+            fn vc_verify_to_issuer(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
         }
     );
 
@@ -242,7 +279,7 @@ mod tests {
         let did_vc_cloned = did_vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save().returning(|_| Ok(()));
+        repo.expect_save_credential().returning(|_| Ok(()));
 
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(move || {
@@ -313,7 +350,7 @@ mod tests {
         let did_vc_cloned = did_vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save().returning(|_| Ok(()));
+        repo.expect_save_credential().returning(|_| Ok(()));
 
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(move || {
@@ -386,12 +423,58 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_validation_error() {
+        let repo = MockFakeRepo::new();
+        let account = MockFakeAccountUsecase::new();
+        let rpc = MockFakeRPCClient::new();
+
+        let uc = generate_usecase(repo, rpc, account);
+
+        let cred_value = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let generate_pass = uc.vc_generate(
+            "".to_string(),
+            "issuer".to_string(),
+            cred_value.clone(),
+            None,
+        );
+        assert!(generate_pass.is_err());
+
+        let generate_pass_err = generate_pass.unwrap_err();
+        assert!(matches!(
+            generate_pass_err,
+            VerifiableError::ValidationError(_)
+        ));
+
+        if let VerifiableError::ValidationError(msg) = generate_pass_err {
+            assert!(msg.contains("password"))
+        }
+
+        let generate_issuer =
+            uc.vc_generate("password".to_string(), "".to_string(), cred_value, None);
+        assert!(generate_issuer.is_err());
+
+        let generate_issuer_err = generate_issuer.unwrap_err();
+        assert!(matches!(
+            generate_issuer_err,
+            VerifiableError::ValidationError(_)
+        ));
+
+        if let VerifiableError::ValidationError(msg) = generate_issuer_err {
+            assert!(msg.contains("did_issuer"))
+        }
+    }
+
+    #[test]
     fn test_generate_error_generate_did() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save().returning(|_| Ok(()));
+        repo.expect_save_credential().returning(|_| Ok(()));
 
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(|| {
@@ -432,7 +515,7 @@ mod tests {
         let did_vc_cloned = did_vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save()
+        repo.expect_save_credential()
             .returning(|_| Err(VerifiableError::RepoError("repo error".to_string())));
 
         let mut account = MockFakeAccountUsecase::new();
@@ -515,34 +598,57 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
 
         let mut rpc = MockFakeRPCClient::new();
-        rpc.expect_vc_send_to()
+        rpc.expect_vc_send_to_holder()
             .with(eq(addr.clone()), eq(vc))
             .times(1)
             .returning(|_, _| Ok(()));
 
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.vc_send("cred-id".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr);
         assert!(!send_output.is_err())
     }
 
     #[test]
-    fn test_vc_send_error_repo() { 
+    fn test_vc_send_validation_error() {
+        let repo = MockFakeRepo::new();
+        let rpc = MockFakeRPCClient::new();
+        let account = MockFakeAccountUsecase::new();
+
+        let uc = generate_usecase(repo, rpc, account);
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let send_output = uc.vc_send_to_holder("".to_string(), addr);
+        assert!(send_output.is_err());
+
+        let send_output_err = send_output.unwrap_err();
+        assert!(matches!(
+            send_output_err,
+            VerifiableError::ValidationError(_)
+        ));
+
+        if let VerifiableError::ValidationError(msg) = send_output_err {
+            assert!(msg.contains("id"))
+        }
+    }
+
+    #[test]
+    fn test_vc_send_error_repo() {
         let mut repo = MockFakeRepo::new();
         repo.expect_get_by_id()
             .with(eq("cred-id".to_string()))
-            .return_once(move |_| {
-                Err(VerifiableError::RepoError("error repo".to_string()))
-            });
-        
+            .return_once(move |_| Err(VerifiableError::RepoError("error repo".to_string())));
+
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let rpc = MockFakeRPCClient::new();
         let account = MockFakeAccountUsecase::new();
-        
+
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.vc_send("cred-id".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr);
         assert!(send_output.is_err());
-        assert!(matches!(send_output.unwrap_err(), VerifiableError::RepoError(_)))
+        assert!(matches!(
+            send_output.unwrap_err(),
+            VerifiableError::RepoError(_)
+        ))
     }
 
     #[test]
@@ -576,15 +682,78 @@ mod tests {
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let mut rpc = MockFakeRPCClient::new();
-        rpc.expect_vc_send_to()
+        rpc.expect_vc_send_to_holder()
             .with(eq(addr.clone()), eq(vc))
             .times(1)
             .returning(|_, _| Err(VerifiableError::VCSendError("send error".to_string())));
-        
+
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.vc_send("cred-id".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr);
         assert!(send_output.is_err());
-        assert!(matches!(send_output.unwrap_err(), VerifiableError::VCSendError(_)))
+        assert!(matches!(
+            send_output.unwrap_err(),
+            VerifiableError::VCSendError(_)
+        ))
+    }
+
+    #[test]
+    fn test_receive_by_holder() {
+        let mut repo = MockFakeRepo::new();
+        repo.expect_save_credential_holder().returning(|_| Ok(()));
+
+        let rpc = MockFakeRPCClient::new();
+        let account = MockFakeAccountUsecase::new();
+        let uc = generate_usecase(repo, rpc, account);
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
+
+        let receive = uc.vc_receive_by_holder("request-id-1".to_string(), addr.to_string(), vc);
+        assert!(!receive.is_err());
+    }
+
+    #[test]
+    fn test_receive_by_holder_validation_error() {
+        let repo = MockFakeRepo::new();
+        let rpc = MockFakeRPCClient::new();
+        let account = MockFakeAccountUsecase::new();
+        let uc = generate_usecase(repo, rpc, account);
+
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+        let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
+
+        let receive_request_id =
+            uc.vc_receive_by_holder("".to_string(), "issuer-addr".to_string(), vc.clone());
+        assert!(receive_request_id.is_err());
+
+        let receive_err_request_id = receive_request_id.unwrap_err();
+        assert!(matches!(
+            receive_err_request_id.clone(),
+            VerifiableError::ValidationError(_)
+        ));
+
+        if let VerifiableError::ValidationError(msg) = receive_err_request_id {
+            assert!(msg.contains("request_id"))
+        }
+
+        let receive_issuer_addr =
+            uc.vc_receive_by_holder("request_id".to_string(), "".to_string(), vc);
+        assert!(receive_issuer_addr.is_err());
+
+        let receive_err_issuer_addr = receive_issuer_addr.unwrap_err();
+        assert!(matches!(
+            receive_err_issuer_addr.clone(),
+            VerifiableError::ValidationError(_)
+        ));
+
+        if let VerifiableError::ValidationError(msg) = receive_err_issuer_addr {
+            assert!(msg.contains("issuer_addr"))
+        }
     }
 }
