@@ -178,7 +178,6 @@ pub trait VerifiableUsecaseBuilder: AccountUsecaseEntryPoint {
         vc: VC,
     ) -> Result<(), VerifiableError>;
 
-    fn vc_confirm(&self, id: String) -> Result<(), VerifiableError>;
     fn vc_verify_by_verifier(&self, uri: String, vc: VC) -> Result<(), VerifiableError>;
     fn vc_verify_by_issuer(&self, vc: VC) -> Result<(), VerifiableError>;
     fn vc_lists(&self, did: String) -> Result<Vec<Credential>, VerifiableError>;

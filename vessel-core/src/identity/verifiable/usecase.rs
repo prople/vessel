@@ -134,10 +134,6 @@ where
         Ok(cred)
     }
 
-    fn vc_confirm(&self, _id: String) -> Result<(), VerifiableError> {
-        Ok(())
-    }
-
     fn vc_lists(&self, _did: String) -> Result<Vec<Credential>, VerifiableError> {
         Ok(vec![])
     }
