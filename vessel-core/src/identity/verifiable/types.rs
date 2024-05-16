@@ -136,6 +136,14 @@ impl ProofParams {
     }
 }
 
+/// `PaginationParams` used when we need to load a list of something from persistent storage
+/// it assumed using common pagination params contains of page, limit and skip
+pub struct PaginationParams {
+    pub page: usize,
+    pub limit: usize,
+    pub skip: usize
+}
+
 /// `VerifiableUsecaseBuilder` is a main trait to build the usecase business logic
 /// for the `Verifiable` domain. This trait will inherit trait behaviors from [`AccountUsecaseEntryPoint`]
 /// this mean, the implementer need to define the `Implementer` type and define how to
@@ -178,9 +186,11 @@ pub trait VerifiableUsecaseBuilder: AccountUsecaseEntryPoint {
         vc: VC,
     ) -> Result<(), VerifiableError>;
 
-    fn vc_verify_by_verifier(&self, uri: String, vc: VC) -> Result<(), VerifiableError>;
-    fn vc_verify_by_issuer(&self, vc: VC) -> Result<(), VerifiableError>;
-    fn vc_lists(&self, did: String) -> Result<Vec<Credential>, VerifiableError>;
+    /// `vc_lists` used to load a list of saved `VC` based on `DID` issuer
+    /// 
+    /// This method doesn't contain any logic, actually this method is just a simple proxy 
+    /// to the repository method, [`VerifiableRepoBuilder::list_by_did`]
+    fn vc_lists(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
 }
 
 pub trait VerifiableRepoBuilder {
@@ -190,8 +200,7 @@ pub trait VerifiableRepoBuilder {
     fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
     fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
     fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-    fn list_by_did(&self, did: String) -> Result<Vec<Credential>, VerifiableError>;
-    fn list_all(&self, limit: u32, offset: u32) -> Result<Vec<Credential>, VerifiableError>;
+    fn list_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
 }
 
 pub trait VerifiableRPCBuilder {

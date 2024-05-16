@@ -15,7 +15,7 @@ use crate::identity::verifiable::types::{
     VerifiableUsecaseBuilder,
 };
 
-use super::types::{CredentialHolder, ProofParams};
+use super::types::{CredentialHolder, ProofParams, PaginationParams};
 
 pub struct Usecase<TRPCClient, TRepo, TAccount>
 where
@@ -134,8 +134,8 @@ where
         Ok(cred)
     }
 
-    fn vc_lists(&self, _did: String) -> Result<Vec<Credential>, VerifiableError> {
-        Ok(vec![])
+    fn vc_lists(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError> {
+        self.repo.list_by_did(did, pagination)
     }
 
     fn vc_receive_by_holder(
@@ -170,14 +170,6 @@ where
         let cred = self.repo.get_by_id(id)?;
         self.rpc.vc_send_to_holder(receiver, cred.vc)
     }
-
-    fn vc_verify_by_issuer(&self, _vc: VC) -> Result<(), VerifiableError> {
-        Ok(())
-    }
-
-    fn vc_verify_by_verifier(&self, _uri: String, _vc: VC) -> Result<(), VerifiableError> {
-        Ok(())
-    }
 }
 
 #[cfg(test)]
@@ -207,8 +199,7 @@ mod tests {
             fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
             fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
             fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-            fn list_by_did(&self, did: String) -> Result<Vec<Credential>, VerifiableError>;
-            fn list_all(&self, limit: u32, offset: u32) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
         }
     );
 
