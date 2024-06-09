@@ -5,19 +5,19 @@ use rst_common::standard::uuid::Uuid;
 
 use prople_crypto::eddsa::keypair::KeyPair;
 
-use prople_did_core::account::Account;
 use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 use prople_did_core::verifiable::objects::{Proof, ProofValue, VC};
 
-use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseEntryPoint};
-use crate::identity::verifiable::types::{
-    Credential, VerifiableError, VerifiableRPCBuilder, VerifiableRepoBuilder,
-    VerifiableUsecaseBuilder,
+use super::types::{
+    Credential, CredentialHolder, PaginationParams, ProofParams,
+    VerifiableCredentialUsecaseBuilder, VerifiableError, VerifiableRPCBuilder,
+    VerifiableRepoBuilder,
 };
+use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseEntryPoint};
 
-use super::types::{CredentialHolder, ProofParams, PaginationParams};
+// use super::types::{CredentialHolder, ProofParams, PaginationParams};
 
-pub struct Usecase<TRPCClient, TRepo, TAccount>
+pub struct CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
     TRepo: VerifiableRepoBuilder,
@@ -28,7 +28,7 @@ where
     account: TAccount,
 }
 
-impl<TRPCClient, TRepo, TAccount> Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
     TRepo: VerifiableRepoBuilder,
@@ -39,7 +39,8 @@ where
     }
 }
 
-impl<TRPCClient, TRepo, TAccount> AccountUsecaseEntryPoint for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> AccountUsecaseEntryPoint
+    for CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
     TRepo: VerifiableRepoBuilder,
@@ -52,7 +53,8 @@ where
     }
 }
 
-impl<TRPCClient, TRepo, TAccount> VerifiableUsecaseBuilder for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> VerifiableCredentialUsecaseBuilder
+    for CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
     TRepo: VerifiableRepoBuilder,
@@ -82,16 +84,9 @@ where
             .generate_did(password.clone())
             .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
 
+        let account_did = account.clone().did;
         let account_keysecure = account.clone().keysecure;
-        let account_did = Account::from_keysecure(password, account_keysecure.clone())
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
-
-        let account_pem = account_did
-            .build_pem()
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
-
-        let account_keypair = KeyPair::from_pem(account_pem)
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+        let account_doc_private_key_pairs = account.doc_private_keys;
 
         let mut vc = VC::new(account.did.clone(), did_issuer.clone());
         vc.add_context(CONTEXT_VC.to_string())
@@ -100,7 +95,25 @@ where
             .set_credential(credential);
 
         if let Some(params) = proof_params {
-            let proof_value = ProofValue::from_jcs(account_keypair, vc.clone())
+            let account_doc_password = password.clone();
+            let account_doc_verification_pem_bytes = account_doc_private_key_pairs.clone()
+                .authentication
+                .map(|val| {
+                    val.decrypt_verification(account_doc_password.clone())
+                        .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+                })
+                .ok_or(VerifiableError::VCGenerateError(
+                    "PrivateKeyPairs is missing".to_string(),
+                ))??;
+
+            let account_doc_verification_pem =
+                String::from_utf8(account_doc_verification_pem_bytes)
+                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+
+            let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem)
+                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+
+            let (_, sig) = ProofValue::transform(account_doc_keypair, vc.clone())
                 .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
 
             let uid = Uuid::new_v4().to_string();
@@ -108,7 +121,7 @@ where
             proof.typ(params.typ);
             proof.purpose(params.purpose);
             proof.method(params.method);
-            proof.signature(proof_value);
+            proof.set_signature_as_string(sig);
 
             if let Some(cryptosuite) = params.cryptosuite {
                 proof.cryptosuite(cryptosuite);
@@ -125,7 +138,7 @@ where
             vc.proof(proof);
         }
 
-        let cred = Credential::new(did_issuer, vc, account_keysecure);
+        let cred = Credential::new(did_issuer, account_did, account_doc_private_key_pairs, vc, account_keysecure);
         let _ = self
             .repo
             .save_credential(cred.clone())
@@ -134,8 +147,12 @@ where
         Ok(cred)
     }
 
-    fn vc_lists(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError> {
-        self.repo.list_by_did(did, pagination)
+    fn vc_lists(
+        &self,
+        did: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Credential>, VerifiableError> {
+        self.repo.list_vc_by_did(did, pagination)
     }
 
     fn vc_receive_by_holder(
@@ -183,23 +200,27 @@ mod tests {
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
 
+    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use rst_common::standard::chrono::Utc;
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;
 
     use crate::identity::account::types::{Account as AccountIdentity, AccountError};
+    use crate::identity::verifiable::types::Presentation;
 
     mock!(
         FakeRepo{}
 
         impl VerifiableRepoBuilder for FakeRepo {
             fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
+            fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
             fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
             fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
             fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
             fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
             fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-            fn list_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_vc_by_id(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_vc_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
         }
     );
 
@@ -249,8 +270,8 @@ mod tests {
         repo: TRepo,
         rpc: TRPCClient,
         account: TAccount,
-    ) -> Usecase<TRPCClient, TRepo, TAccount> {
-        Usecase::new(repo, rpc, account)
+    ) -> CredentialUsecase<TRPCClient, TRepo, TAccount> {
+        CredentialUsecase::new(repo, rpc, account)
     }
 
     fn generate_did() -> DID {
@@ -277,8 +298,18 @@ mod tests {
                 .expect_generate_did()
                 .with(eq("password".to_string()))
                 .return_once(move |_| {
-                    let did_vc_value_cloned = did_vc.identity().unwrap().value();
-                    let did_vc_doc = did_vc.identity().unwrap().to_doc();
+                    let mut did_vc_identity = did_vc.identity().unwrap();
+                    let did_vc_value_cloned = did_vc_identity.value();
+
+                    let did_vc_doc = did_vc_identity
+                        .build_assertion_method()
+                        .build_auth_method()
+                        .to_doc();
+
+                    let did_vc_doc_private_keys = did_vc_identity
+                        .build_private_keys("password".to_string())
+                        .unwrap();
+
                     let did_vc_keysecure = did_vc
                         .account()
                         .privkey()
@@ -290,6 +321,7 @@ mod tests {
                         did: did_vc_value_cloned.clone(),
                         keysecure: did_vc_keysecure,
                         doc: did_vc_doc,
+                        doc_private_keys: did_vc_doc_private_keys,
                         created_at: Utc::now(),
                         updated_at: Utc::now(),
                     })
@@ -348,8 +380,18 @@ mod tests {
                 .expect_generate_did()
                 .with(eq("password".to_string()))
                 .return_once(move |_| {
-                    let did_vc_value_cloned = did_vc.identity().unwrap().value();
-                    let did_vc_doc = did_vc.identity().unwrap().to_doc();
+                    let mut did_vc_identity = did_vc.identity().unwrap();
+                    let did_vc_value_cloned = did_vc_identity.value();
+
+                    let did_vc_doc = did_vc_identity
+                        .build_auth_method()
+                        .build_assertion_method()
+                        .to_doc();
+
+                    let did_vc_doc_private_keys = did_vc_identity
+                        .build_private_keys("password".to_string())
+                        .unwrap();
+
                     let did_vc_keysecure = did_vc
                         .account()
                         .privkey()
@@ -361,6 +403,7 @@ mod tests {
                         did: did_vc_value_cloned.clone(),
                         keysecure: did_vc_keysecure,
                         doc: did_vc_doc,
+                        doc_private_keys: did_vc_doc_private_keys,
                         created_at: Utc::now(),
                         updated_at: Utc::now(),
                     })
@@ -401,12 +444,48 @@ mod tests {
         assert_eq!(credential.vc.issuer, did_issuer_value);
         assert_eq!(credential.vc.id, did_vc.identity().unwrap().value());
 
-        let vc_types = credential.vc.types;
+        let vc = credential.vc;
+        let vc_types = vc.clone().types;
         assert_eq!(vc_types.len(), 1);
         assert_eq!(vc_types[0], "VerifiableCredential".to_string());
 
-        let vc_cred = credential.vc.credential_subject;
-        assert_eq!(vc_cred, cred_value)
+        let vc_cred = vc.clone().credential_subject;
+        assert_eq!(vc_cred, cred_value);
+
+        // verify generated vc proof
+        let vc_doc_private_keys = credential.did_vc_doc_private_keys;
+        let account_doc_verification_pem_bytes = vc_doc_private_keys.clone()
+            .authentication
+            .map(|val| {
+                val.decrypt_verification("password".to_string())
+                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+            })
+            .ok_or(VerifiableError::VCGenerateError(
+                "PrivateKeyPairs is missing".to_string(),
+            ));
+        assert!(!account_doc_verification_pem_bytes.is_err());
+
+        let account_doc_verification_pem_bytes_unwrap = account_doc_verification_pem_bytes.unwrap().unwrap();
+        let account_doc_verification_pem =
+            String::from_utf8(account_doc_verification_pem_bytes_unwrap)
+                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+        assert!(!account_doc_verification_pem.is_err());
+
+        let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
+            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+        assert!(!account_doc_keypair.is_err());
+
+        let (vc_original, proof) = vc.split_proof();
+        assert!(proof.is_some());
+
+        let verified = ProofValue::transform_verifier(account_doc_keypair.clone().unwrap(), vc_original, proof.clone().unwrap().proof_value);
+        assert!(!verified.is_err());
+        assert!(verified.unwrap());
+
+        // verification should be error if using VC directly
+        let verified_invalid = ProofValue::transform_verifier(account_doc_keypair.unwrap(), vc, proof.unwrap().proof_value);
+        assert!(!verified_invalid.is_err());
+        assert!(!verified_invalid.unwrap());
     }
 
     #[test]
@@ -516,6 +595,11 @@ mod tests {
                 .return_once(move |_| {
                     let did_vc_value_cloned = did_vc.identity().unwrap().value();
                     let did_vc_doc = did_vc.identity().unwrap().to_doc();
+                    let did_vc_doc_private_keys = did_vc
+                        .identity()
+                        .unwrap()
+                        .build_private_keys("password".to_string())
+                        .unwrap();
                     let did_vc_keysecure = did_vc
                         .account()
                         .privkey()
@@ -527,6 +611,7 @@ mod tests {
                         did: did_vc_value_cloned.clone(),
                         keysecure: did_vc_keysecure,
                         doc: did_vc_doc,
+                        doc_private_keys: did_vc_doc_private_keys,
                         created_at: Utc::now(),
                         updated_at: Utc::now(),
                     })
@@ -571,6 +656,8 @@ mod tests {
                 Ok(Credential {
                     id: "cred-id".to_string(),
                     did: did_issuer_value,
+                    did_vc: did_vc.to_owned().identity().unwrap().value(),
+                    did_vc_doc_private_keys: did_vc.to_owned().identity().unwrap().build_private_keys("password".to_string()).unwrap(),
                     vc: vc_cloned,
                     keysecure: did_vc_cloned
                         .account()
@@ -656,6 +743,8 @@ mod tests {
                 Ok(Credential {
                     id: "cred-id".to_string(),
                     did: did_issuer_value,
+                    did_vc: did_vc.to_owned().identity().unwrap().value(),
+                    did_vc_doc_private_keys: did_vc.to_owned().identity().unwrap().build_private_keys("password".to_string()).unwrap(),
                     vc: vc_cloned,
                     keysecure: did_vc_cloned
                         .account()

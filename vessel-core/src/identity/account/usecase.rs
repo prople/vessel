@@ -3,6 +3,7 @@ use prople_crypto::keysecure::types::ToKeySecure;
 use prople_did_core::did::{query::Params, DID};
 use prople_did_core::doc::types::{Doc, ToDoc};
 use prople_did_core::hashlink::verify_from_json;
+use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
 
 use crate::identity::account::types::{
     Account, AccountError, AccountRPCClientBuilder, AccountRepositoryBuilder, AccountUsecaseBuilder,
@@ -37,18 +38,26 @@ where
 {
     fn generate_did(&self, password: String) -> Result<Account, AccountError> {
         let did = DID::new();
-        let identity = did
+        let mut identity = did
             .identity()
             .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
 
         let account_keysecure = did
             .account()
             .privkey()
-            .to_keysecure(password)
+            .to_keysecure(password.clone())
             .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
 
-        let doc = identity.to_doc();
-        let account = Account::new(identity.value(), doc, account_keysecure);
+        let doc = identity
+            .build_auth_method()
+            .build_assertion_method()
+            .to_doc();
+
+        let doc_private_keys = identity.build_private_keys(password).map_err(|_| {
+            AccountError::GenerateIdentityError("unable to build private keys".to_string())
+        })?;
+
+        let account = Account::new(identity.value(), doc, doc_private_keys, account_keysecure);
 
         let _ = self
             .repo
@@ -195,6 +204,8 @@ mod tests {
 
         let identity_value = identity.value();
         let identity_doc = identity.to_doc();
+        let identity_doc_private_keys =
+            identity.build_private_keys("password".to_string()).unwrap();
 
         let mut repo = MockFakeRepo::new();
         repo.expect_save().returning(|_| Ok(()));
@@ -204,7 +215,13 @@ mod tests {
                 .privkey()
                 .to_keysecure("password".to_string())
                 .unwrap();
-            let account = Account::new(identity_value.clone(), identity_doc.clone(), keysecure);
+
+            let account = Account::new(
+                identity_value.clone(),
+                identity_doc.clone(),
+                identity_doc_private_keys.clone(),
+                keysecure,
+            );
             Ok(account)
         });
 
@@ -222,6 +239,8 @@ mod tests {
 
         let identity_value = identity.value();
         let identity_doc = identity.to_doc();
+        let identity_doc_private_keys =
+            identity.build_private_keys("password".to_string()).unwrap();
 
         let mut repo = MockFakeRepo::new();
         repo.expect_save().returning(|_| Ok(()));
@@ -231,7 +250,12 @@ mod tests {
                 .privkey()
                 .to_keysecure("password".to_string())
                 .unwrap();
-            let account = Account::new(identity_value.clone(), identity_doc.clone(), keysecure);
+            let account = Account::new(
+                identity_value.clone(),
+                identity_doc.clone(),
+                identity_doc_private_keys.clone(),
+                keysecure,
+            );
             Ok(account)
         });
 
@@ -271,6 +295,10 @@ mod tests {
 
         let identity_repo_clone = identity.clone();
         let identity_repo_clone_doc = identity.clone().to_doc();
+        let identity_repo_clone_doc_private_keys = identity
+            .clone()
+            .build_private_keys("password".to_string())
+            .unwrap();
 
         let identity_clone = identity.clone();
         let identity_clone_doc = identity.clone().to_doc();
@@ -286,6 +314,7 @@ mod tests {
             let account = Account::new(
                 identity_repo_clone.clone().value(),
                 identity_repo_clone_doc.clone(),
+                identity_repo_clone_doc_private_keys.clone(),
                 keysecure,
             );
             Ok(account)
@@ -381,6 +410,10 @@ mod tests {
 
         let identity_repo_clone = identity.clone();
         let identity_repo_clone_doc = identity.clone().to_doc();
+        let identity_repo_clone_doc_private_keys = identity
+            .clone()
+            .build_private_keys("password".to_string())
+            .unwrap();
 
         let identity_clone = identity.clone();
         let identity_clone_doc = identity.clone().to_doc();
@@ -396,6 +429,7 @@ mod tests {
             let account = Account::new(
                 identity_repo_clone.clone().value(),
                 identity_repo_clone_doc.clone(),
+                identity_repo_clone_doc_private_keys.clone(),
                 keysecure,
             );
             Ok(account)
@@ -443,6 +477,10 @@ mod tests {
 
         let identity_repo_clone = identity.clone();
         let identity_repo_clone_doc = identity.clone().to_doc();
+        let identity_repo_clone_doc_private_keys = identity
+            .clone()
+            .build_private_keys("password".to_string())
+            .unwrap();
 
         let mut repo = MockFakeRepo::new();
         repo.expect_get_by_did()
@@ -458,6 +496,7 @@ mod tests {
                 let account = Account::new(
                     identity_repo_clone.clone().value(),
                     identity_repo_clone_doc.clone(),
+                    identity_repo_clone_doc_private_keys.clone(),
                     keysecure,
                 );
                 Ok(account)

@@ -10,9 +10,12 @@ use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json::value::Value;
 
 use prople_crypto::keysecure::KeySecure;
-use prople_did_core::verifiable::objects::{Proof, VC};
+use prople_did_core::keys::IdentityPrivateKeyPairs;
+use prople_did_core::verifiable::objects::{Proof, VC, VP};
 
 use crate::identity::account::types::AccountUsecaseEntryPoint;
+
+pub const VP_TYPE: &str = "VerifiablePresentation";
 
 #[derive(Debug, Error, Clone)]
 pub enum VerifiableError {
@@ -34,6 +37,9 @@ pub enum VerifiableError {
     #[error("unable to list vc: {0}")]
     VCListError(String),
 
+    #[error("unable to generate vp: {0}")]
+    VPGenerateError(String),
+
     #[error("repo error: {0}")]
     RepoError(String),
 
@@ -42,6 +48,9 @@ pub enum VerifiableError {
 
     #[error("validaiton error: {0}")]
     ValidationError(String),
+
+    #[error("unknown error: {0}")]
+    UnknownError(String),
 }
 
 /// `Credential` is a main entity used to save to internal persistent storage
@@ -51,6 +60,8 @@ pub enum VerifiableError {
 pub struct Credential {
     pub id: String,
     pub did: String,
+    pub did_vc: String,
+    pub did_vc_doc_private_keys: IdentityPrivateKeyPairs,
     pub vc: VC,
     pub keysecure: KeySecure,
 
@@ -64,16 +75,33 @@ pub struct Credential {
 }
 
 impl Credential {
-    pub fn new(did: String, vc: VC, keysecure: KeySecure) -> Self {
+    pub fn new(did: String, did_vc: String, did_vc_doc_private_keys: IdentityPrivateKeyPairs, vc: VC, keysecure: KeySecure) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             keysecure,
             did,
+            did_vc,
+            did_vc_doc_private_keys,
             vc,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         }
     }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(crate = "self::serde")]
+pub struct Presentation {
+    pub id: String,
+    pub vp: VP,
+
+    #[serde(with = "ts_seconds")]
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
+
+    #[serde(with = "ts_seconds")]
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
 }
 
 /// `CredentialHolder` is an entity used by a `Holder` to save incoming [`VC`] that sent
@@ -141,7 +169,7 @@ impl ProofParams {
 pub struct PaginationParams {
     pub page: usize,
     pub limit: usize,
-    pub skip: usize
+    pub skip: usize,
 }
 
 /// `VerifiableUsecaseBuilder` is a main trait to build the usecase business logic
@@ -151,7 +179,7 @@ pub struct PaginationParams {
 ///
 /// This trait will maintain all logic that relate with the `VC (Verifiable Credential)` and also
 /// `VP (Verifiable Presentation)`
-pub trait VerifiableUsecaseBuilder: AccountUsecaseEntryPoint {
+pub trait VerifiableCredentialUsecaseBuilder: AccountUsecaseEntryPoint {
     /// `vc_generate` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
     /// our implementer of [`VerifiableRepoBuilder`]
@@ -187,20 +215,40 @@ pub trait VerifiableUsecaseBuilder: AccountUsecaseEntryPoint {
     ) -> Result<(), VerifiableError>;
 
     /// `vc_lists` used to load a list of saved `VC` based on `DID` issuer
-    /// 
-    /// This method doesn't contain any logic, actually this method is just a simple proxy 
+    ///
+    /// This method doesn't contain any logic, actually this method is just a simple proxy
     /// to the repository method, [`VerifiableRepoBuilder::list_by_did`]
-    fn vc_lists(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
+    fn vc_lists(
+        &self,
+        did: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Credential>, VerifiableError>;
+}
+
+pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseEntryPoint {
+    fn vp_generate(
+        &self,
+        password: String,
+        did_issuer: String,
+        credentials: Vec<String>,
+    ) -> Result<Presentation, VerifiableError>;
 }
 
 pub trait VerifiableRepoBuilder {
     fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
+    fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
     fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
     fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
     fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
     fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
     fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-    fn list_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
+    fn list_vc_by_id(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+
+    fn list_vc_by_did(
+        &self,
+        did: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Credential>, VerifiableError>;
 }
 
 pub trait VerifiableRPCBuilder {

@@ -3,6 +3,7 @@ use multiaddr::Multiaddr;
 use prople_crypto::keysecure::KeySecure;
 use prople_did_core::did::query::Params;
 use prople_did_core::doc::types::Doc;
+use prople_did_core::keys::IdentityPrivateKeyPairs;
 
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
@@ -53,6 +54,7 @@ pub struct Account {
     pub id: String,
     pub did: String,
     pub doc: Doc,
+    pub doc_private_keys: IdentityPrivateKeyPairs,
     pub keysecure: KeySecure,
 
     #[serde(with = "ts_seconds")]
@@ -63,11 +65,17 @@ pub struct Account {
 }
 
 impl Account {
-    pub fn new(did: String, doc: Doc, keysecure: KeySecure) -> Self {
+    pub fn new(
+        did: String,
+        doc: Doc,
+        doc_private_keys: IdentityPrivateKeyPairs,
+        keysecure: KeySecure,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             did,
             doc,
+            doc_private_keys,
             keysecure,
             created_at: Utc::now(),
             updated_at: Utc::now(),

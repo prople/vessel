@@ -1,2 +1,3 @@
 pub mod types;
-pub mod usecase;
+pub mod vc;
+pub mod vp;
