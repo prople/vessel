@@ -213,6 +213,7 @@ mod tests {
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
+    use prople_did_core::verifiable::objects::VP;
 
     use crate::identity::account::types::{Account as AccountIdentity, AccountError};
     use crate::identity::verifiable::types::Presentation;
@@ -228,8 +229,10 @@ mod tests {
             fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
             fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
             fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-            fn list_vc_by_id(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
             fn list_vc_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_vp_by_id(&self, ids: String, pagination: Option<PaginationParams>) -> Result<Vec<Presentation>, VerifiableError>;
+            fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
         }
     );
 
@@ -239,6 +242,7 @@ mod tests {
         impl VerifiableRPCBuilder for FakeRPCClient {
             fn vc_send_to_holder(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
             fn vc_verify_to_issuer(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
+            fn vp_send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), VerifiableError>;
         }
     );
 

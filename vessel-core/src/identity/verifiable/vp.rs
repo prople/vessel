@@ -76,7 +76,7 @@ where
 
         let vcs = self
             .repo
-            .list_vc_by_id(credentials)
+            .list_vc_by_ids(credentials)
             .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
 
         let mut vp = VP::new();
@@ -145,14 +145,38 @@ where
 
         Ok(presentation)
     }
+
+    fn vp_send_to_verifier(
+        &self,
+        id: String,
+        receiver: multiaddr::Multiaddr,
+    ) -> Result<(), VerifiableError> {
+        if id.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "id was missing".to_string(),
+            ));
+        }
+
+        let presentation = self.repo.get_vp_by_id(id)?;
+        self.rpc.vp_send_to_verifier(receiver, presentation.vp)
+    }
+
+    fn vp_lists(
+            &self,
+            id: String,
+            pagination: Option<super::types::PaginationParams>,
+        ) -> Result<Vec<Presentation>, VerifiableError> {
+        self.repo.list_vp_by_id(id, pagination)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use mockall::mock;
+    use mockall::predicate::eq;
 
-    use multiaddr::Multiaddr;
+    use multiaddr::{multiaddr, Multiaddr};
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
 
@@ -177,8 +201,10 @@ mod tests {
             fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
             fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
             fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-            fn list_vc_by_id(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
             fn list_vc_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
+            fn list_vp_by_id(&self, ids: String, pagination: Option<PaginationParams>) -> Result<Vec<Presentation>, VerifiableError>;
+            fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
         }
     );
 
@@ -188,6 +214,7 @@ mod tests {
         impl VerifiableRPCBuilder for FakeRPCClient {
             fn vc_send_to_holder(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
             fn vc_verify_to_issuer(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
+            fn vp_send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), VerifiableError>;
         }
     );
 
@@ -234,6 +261,19 @@ mod tests {
 
     fn generate_did() -> DID {
         DID::new()
+    }
+
+    fn generate_presentation() -> Presentation {
+        let did = generate_did();
+
+        let mut identity = did.identity().unwrap();
+
+        identity.build_assertion_method().build_auth_method();
+        let doc_priv_keys = identity.build_private_keys("password".to_string()).unwrap();
+        let mut vp = VP::new();
+        vp.set_holder(identity.value());
+
+        Presentation::new(vp, doc_priv_keys)
     }
 
     fn generate_credentials() -> Vec<Credential> {
@@ -287,7 +327,7 @@ mod tests {
 
         let mut repo = MockFakeRepo::new();
         repo.expect_save_presentation().returning(|_| Ok(()));
-        repo.expect_list_vc_by_id()
+        repo.expect_list_vc_by_ids()
             .returning(move |_| Ok(creds.clone()));
 
         let mut account = MockFakeAccountUsecase::new();
@@ -361,7 +401,7 @@ mod tests {
 
         let mut repo = MockFakeRepo::new();
         repo.expect_save_presentation().returning(|_| Ok(()));
-        repo.expect_list_vc_by_id()
+        repo.expect_list_vc_by_ids()
             .returning(move |_| Ok(creds.clone()));
 
         let mut account = MockFakeAccountUsecase::new();
@@ -425,7 +465,7 @@ mod tests {
         let vp = presentation.vp;
 
         let privkeys = presentation.private_keys;
-        let account_doc_verification_pem_bytes = privkeys 
+        let account_doc_verification_pem_bytes = privkeys
             .clone()
             .authentication
             .map(|val| {
@@ -436,31 +476,31 @@ mod tests {
                 "PrivateKeyPairs is missing".to_string(),
             ));
         assert!(!account_doc_verification_pem_bytes.is_err());
-        
+
         let account_doc_verification_pem_bytes_unwrap =
             account_doc_verification_pem_bytes.unwrap().unwrap();
-       
+
         let account_doc_verification_pem =
             String::from_utf8(account_doc_verification_pem_bytes_unwrap)
                 .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
         assert!(!account_doc_verification_pem.is_err());
-        
+
         let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
             .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
-        
+
         let (vp_original, proof) = vp.split_proof();
         assert!(proof.is_some());
-        
+
         let verified = ProofValue::transform_verifier(
             account_doc_keypair.clone().unwrap(),
             vp_original,
             proof.clone().unwrap().proof_value,
         );
-        
+
         assert!(!verified.is_err());
         assert!(verified.unwrap());
-        
+
         // verification should be error if using VP directly
         let verified_invalid = ProofValue::transform_verifier(
             account_doc_keypair.unwrap(),
@@ -470,5 +510,76 @@ mod tests {
 
         assert!(!verified_invalid.is_err());
         assert!(!verified_invalid.unwrap());
+    }
+
+    #[test]
+    fn test_send_to_verifier_success() {
+        let presentation = generate_presentation();
+        let presentation_mock = presentation.clone();
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_get_vp_by_id()
+            .with(eq("id1".to_string()))
+            .returning(move |_| Ok(presentation_mock.clone()));
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let mut rpc = MockFakeRPCClient::new();
+        rpc.expect_vp_send_to_verifier()
+            .with(eq(addr.clone()), eq(presentation.vp))
+            .times(1)
+            .returning(|_, _| Ok(()));
+
+        let account = MockFakeAccountUsecase::new();
+        let uc = generate_usecase(repo, rpc, account);
+
+        let send_output = uc.vp_send_to_verifier("id1".to_string(), addr);
+        assert!(!send_output.is_err())
+    }
+
+    #[test]
+    fn test_send_to_verifier_validation_error() {
+        let repo = MockFakeRepo::new();
+        let rpc = MockFakeRPCClient::new();
+        let account = MockFakeAccountUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account);
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        
+        let send_output = uc.vp_send_to_verifier("".to_string(), addr);
+        assert!(send_output.is_err());
+        
+        let send_output_err = send_output.unwrap_err();
+        assert!(matches!(
+            send_output_err,
+            VerifiableError::ValidationError(_)
+        ));
+        
+        if let VerifiableError::ValidationError(msg) = send_output_err {
+            assert!(msg.contains("id"))
+        }
+    }
+
+    #[test]
+    fn test_send_to_verifier_error_repo() {
+        let mut repo = MockFakeRepo::new();
+        repo.expect_get_vp_by_id()
+            .with(eq("id1".to_string()))
+            .returning(move |_| Err(VerifiableError::RepoError("error repo".to_string())));
+        
+        let rpc = MockFakeRPCClient::new();
+        let account = MockFakeAccountUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account);
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        
+        let send_output = uc.vp_send_to_verifier("id1".to_string(), addr);
+        assert!(send_output.is_err());
+        
+        let send_output_err = send_output.unwrap_err();
+        assert!(matches!(
+            send_output_err,
+            VerifiableError::RepoError(_)
+        ));
     }
 }

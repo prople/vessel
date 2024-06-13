@@ -255,6 +255,14 @@ pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseEntryPoint {
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
     ) -> Result<Presentation, VerifiableError>;
+
+    fn vp_send_to_verifier(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError>;
+    
+    fn vp_lists(
+        &self,
+        id: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Presentation>, VerifiableError>;
 }
 
 pub trait VerifiableRepoBuilder {
@@ -263,9 +271,12 @@ pub trait VerifiableRepoBuilder {
     fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
     fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
     fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
+
+    fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
     fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
     fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-    fn list_vc_by_id(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+    fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+    fn list_vp_by_id(&self, ids: String, pagination: Option<PaginationParams>) -> Result<Vec<Presentation>, VerifiableError>;
 
     fn list_vc_by_did(
         &self,
@@ -277,4 +288,5 @@ pub trait VerifiableRepoBuilder {
 pub trait VerifiableRPCBuilder {
     fn vc_send_to_holder(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
     fn vc_verify_to_issuer(&self, addr: Multiaddr, vc: VC) -> Result<(), VerifiableError>;
+    fn vp_send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), VerifiableError>;
 }
