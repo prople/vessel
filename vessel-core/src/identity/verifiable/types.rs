@@ -19,6 +19,9 @@ pub const VP_TYPE: &str = "VerifiablePresentation";
 
 #[derive(Debug, Error, Clone)]
 pub enum VerifiableError {
+    #[error("did error: {0}")]
+    DIDError(String),
+
     #[error("unable to generate vc: {0}")]
     VCGenerateError(String),
 
@@ -75,7 +78,13 @@ pub struct Credential {
 }
 
 impl Credential {
-    pub fn new(did: String, did_vc: String, did_vc_doc_private_keys: IdentityPrivateKeyPairs, vc: VC, keysecure: KeySecure) -> Self {
+    pub fn new(
+        did: String,
+        did_vc: String,
+        did_vc_doc_private_keys: IdentityPrivateKeyPairs,
+        vc: VC,
+        keysecure: KeySecure,
+    ) -> Self {
         Self {
             id: Uuid::new_v4().to_string(),
             keysecure,
@@ -94,6 +103,7 @@ impl Credential {
 pub struct Presentation {
     pub id: String,
     pub vp: VP,
+    pub private_keys: IdentityPrivateKeyPairs,
 
     #[serde(with = "ts_seconds")]
     #[serde(rename = "createdAt")]
@@ -102,6 +112,18 @@ pub struct Presentation {
     #[serde(with = "ts_seconds")]
     #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
+}
+
+impl Presentation {
+    pub fn new(vp: VP, private_keys: IdentityPrivateKeyPairs) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            vp,
+            private_keys,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
 }
 
 /// `CredentialHolder` is an entity used by a `Holder` to save incoming [`VC`] that sent
@@ -231,6 +253,7 @@ pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseEntryPoint {
         password: String,
         did_issuer: String,
         credentials: Vec<String>,
+        proof_params: Option<ProofParams>,
     ) -> Result<Presentation, VerifiableError>;
 }
 

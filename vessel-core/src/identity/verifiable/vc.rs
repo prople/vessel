@@ -96,7 +96,8 @@ where
 
         if let Some(params) = proof_params {
             let account_doc_password = password.clone();
-            let account_doc_verification_pem_bytes = account_doc_private_key_pairs.clone()
+            let account_doc_verification_pem_bytes = account_doc_private_key_pairs
+                .clone()
                 .authentication
                 .map(|val| {
                     val.decrypt_verification(account_doc_password.clone())
@@ -138,7 +139,13 @@ where
             vc.proof(proof);
         }
 
-        let cred = Credential::new(did_issuer, account_did, account_doc_private_key_pairs, vc, account_keysecure);
+        let cred = Credential::new(
+            did_issuer,
+            account_did,
+            account_doc_private_key_pairs,
+            vc,
+            account_keysecure,
+        );
         let _ = self
             .repo
             .save_credential(cred.clone())
@@ -194,16 +201,18 @@ mod tests {
     use super::*;
     use mockall::mock;
     use mockall::predicate::eq;
-    use multiaddr::{multiaddr, Multiaddr};
 
-    use prople_crypto::keysecure::types::ToKeySecure;
-    use prople_did_core::did::{query::Params, DID};
-    use prople_did_core::doc::types::{Doc, ToDoc};
-
-    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use rst_common::standard::chrono::Utc;
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;
+
+    use multiaddr::{multiaddr, Multiaddr};
+
+    use prople_crypto::keysecure::types::ToKeySecure;
+
+    use prople_did_core::did::{query::Params, DID};
+    use prople_did_core::doc::types::{Doc, ToDoc};
+    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
 
     use crate::identity::account::types::{Account as AccountIdentity, AccountError};
     use crate::identity::verifiable::types::Presentation;
@@ -454,7 +463,8 @@ mod tests {
 
         // verify generated vc proof
         let vc_doc_private_keys = credential.did_vc_doc_private_keys;
-        let account_doc_verification_pem_bytes = vc_doc_private_keys.clone()
+        let account_doc_verification_pem_bytes = vc_doc_private_keys
+            .clone()
             .authentication
             .map(|val| {
                 val.decrypt_verification("password".to_string())
@@ -465,7 +475,8 @@ mod tests {
             ));
         assert!(!account_doc_verification_pem_bytes.is_err());
 
-        let account_doc_verification_pem_bytes_unwrap = account_doc_verification_pem_bytes.unwrap().unwrap();
+        let account_doc_verification_pem_bytes_unwrap =
+            account_doc_verification_pem_bytes.unwrap().unwrap();
         let account_doc_verification_pem =
             String::from_utf8(account_doc_verification_pem_bytes_unwrap)
                 .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
@@ -478,12 +489,20 @@ mod tests {
         let (vc_original, proof) = vc.split_proof();
         assert!(proof.is_some());
 
-        let verified = ProofValue::transform_verifier(account_doc_keypair.clone().unwrap(), vc_original, proof.clone().unwrap().proof_value);
+        let verified = ProofValue::transform_verifier(
+            account_doc_keypair.clone().unwrap(),
+            vc_original,
+            proof.clone().unwrap().proof_value,
+        );
         assert!(!verified.is_err());
         assert!(verified.unwrap());
 
         // verification should be error if using VC directly
-        let verified_invalid = ProofValue::transform_verifier(account_doc_keypair.unwrap(), vc, proof.unwrap().proof_value);
+        let verified_invalid = ProofValue::transform_verifier(
+            account_doc_keypair.unwrap(),
+            vc,
+            proof.unwrap().proof_value,
+        );
         assert!(!verified_invalid.is_err());
         assert!(!verified_invalid.unwrap());
     }
@@ -657,7 +676,12 @@ mod tests {
                     id: "cred-id".to_string(),
                     did: did_issuer_value,
                     did_vc: did_vc.to_owned().identity().unwrap().value(),
-                    did_vc_doc_private_keys: did_vc.to_owned().identity().unwrap().build_private_keys("password".to_string()).unwrap(),
+                    did_vc_doc_private_keys: did_vc
+                        .to_owned()
+                        .identity()
+                        .unwrap()
+                        .build_private_keys("password".to_string())
+                        .unwrap(),
                     vc: vc_cloned,
                     keysecure: did_vc_cloned
                         .account()
@@ -744,7 +768,12 @@ mod tests {
                     id: "cred-id".to_string(),
                     did: did_issuer_value,
                     did_vc: did_vc.to_owned().identity().unwrap().value(),
-                    did_vc_doc_private_keys: did_vc.to_owned().identity().unwrap().build_private_keys("password".to_string()).unwrap(),
+                    did_vc_doc_private_keys: did_vc
+                        .to_owned()
+                        .identity()
+                        .unwrap()
+                        .build_private_keys("password".to_string())
+                        .unwrap(),
                     vc: vc_cloned,
                     keysecure: did_vc_cloned
                         .account()
