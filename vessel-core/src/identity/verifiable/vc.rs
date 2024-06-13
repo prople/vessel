@@ -15,8 +15,6 @@ use super::types::{
 };
 use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseEntryPoint};
 
-// use super::types::{CredentialHolder, ProofParams, PaginationParams};
-
 pub struct CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
