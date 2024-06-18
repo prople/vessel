@@ -1,5 +1,5 @@
-use rst_common::standard::uuid::Uuid;
 use rst_common::standard::async_trait::async_trait;
+use rst_common::standard::uuid::Uuid;
 
 use prople_crypto::eddsa::keypair::KeyPair;
 
@@ -9,9 +9,11 @@ use prople_did_core::verifiable::objects::{Proof, ProofValue, VP};
 use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseImplementer};
 
 use super::types::{
-    Presentation, ProofParams, VerifiableError, VerifiablePresentationUsecaseBuilder,
-    VerifiableRPCBuilder, VerifiableRepoBuilder, VP_TYPE,
+    Presentation, VerifiableError, VerifiablePresentationUsecaseBuilder, VerifiableRPCBuilder,
+    VerifiableRepoBuilder, VP_TYPE,
 };
+
+use super::proof::types::Params as ProofParams;
 
 pub struct PresentationUsecase<TRPCClient, TRepo, TAccount>
 where
@@ -78,7 +80,8 @@ where
 
         let vcs = self
             .repo
-            .list_vc_by_ids(credentials).await
+            .list_vc_by_ids(credentials)
+            .await
             .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
 
         let mut vp = VP::new();
@@ -92,7 +95,8 @@ where
 
         let account = self
             .account()
-            .get_account_did(did_issuer).await
+            .get_account_did(did_issuer)
+            .await
             .map_err(|err| VerifiableError::DIDError(err.to_string()))?;
 
         let account_doc_private_key_pairs = account.doc_private_keys;
@@ -192,7 +196,8 @@ mod tests {
 
     use crate::identity::account::types::AccountError;
     use crate::identity::account::Account as AccountIdentity;
-    use crate::identity::verifiable::types::{Credential, CredentialHolder, PaginationParams};
+    use crate::identity::verifiable::types::{CredentialHolder, PaginationParams};
+    use crate::identity::verifiable::Credential;
 
     mock!(
         FakeRepo{}
@@ -374,12 +379,14 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account);
 
-        let result = uc.vp_generate(
-            "password".to_string(),
-            did_issuer_value,
-            vec!["id1".to_string(), "id2".to_string()],
-            None,
-        ).await;
+        let result = uc
+            .vp_generate(
+                "password".to_string(),
+                did_issuer_value,
+                vec!["id1".to_string(), "id2".to_string()],
+                None,
+            )
+            .await;
 
         assert!(!result.is_err());
 
@@ -456,12 +463,14 @@ mod tests {
             nonce: None,
         };
 
-        let result = uc.vp_generate(
-            "password".to_string(),
-            did_issuer_value,
-            vec!["id1".to_string(), "id2".to_string()],
-            Some(proof_params),
-        ).await;
+        let result = uc
+            .vp_generate(
+                "password".to_string(),
+                did_issuer_value,
+                vec!["id1".to_string(), "id2".to_string()],
+                Some(proof_params),
+            )
+            .await;
 
         assert!(!result.is_err());
 
