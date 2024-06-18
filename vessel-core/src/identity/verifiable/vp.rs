@@ -196,7 +196,7 @@ mod tests {
 
     use crate::identity::account::types::AccountError;
     use crate::identity::account::Account as AccountIdentity;
-    use crate::identity::verifiable::types::{CredentialHolder, PaginationParams};
+    use crate::identity::verifiable::types::PaginationParams;
     use crate::identity::verifiable::Credential;
 
     mock!(
@@ -206,7 +206,6 @@ mod tests {
         impl VerifiableRepoBuilder for FakeRepo {
             async fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
             async fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
-            async fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
             async fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
             async fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
             async fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;

@@ -85,47 +85,6 @@ impl Presentation {
     }
 }
 
-/// `CredentialHolder` is an entity used by a `Holder` to save incoming [`VC`] that sent
-/// from `Issuer`
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(crate = "self::serde")]
-pub struct CredentialHolder {
-    pub id: String,
-    pub vc: VC,
-
-    #[serde(rename = "requestID")]
-    pub request_id: String,
-
-    #[serde(rename = "issuerAddr")]
-    pub issuer_addr: Multiaddr,
-
-    #[serde(with = "ts_seconds")]
-    #[serde(rename = "createdAt")]
-    pub created_at: DateTime<Utc>,
-
-    #[serde(with = "ts_seconds")]
-    #[serde(rename = "updatedAt")]
-    pub updated_at: DateTime<Utc>,
-}
-
-impl CredentialHolder {
-    pub fn new(request_id: String, issuer_addr: String, vc: VC) -> Result<Self, VerifiableError> {
-        let uid = Uuid::new_v4().to_string();
-        let addr = issuer_addr
-            .parse::<Multiaddr>()
-            .map_err(|err| VerifiableError::ParseMultiAddrError(err.to_string()))?;
-
-        Ok(Self {
-            id: uid,
-            vc,
-            request_id,
-            issuer_addr: addr,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        })
-    }
-}
-
 /// `PaginationParams` used when we need to load a list of something from persistent storage
 /// it assumed using common pagination params contains of page, limit and skip
 pub struct PaginationParams {
@@ -161,7 +120,6 @@ pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseImplementer {
 pub trait VerifiableRepoBuilder {
     async fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
     async fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
-    async fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
     async fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
     async fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
 
