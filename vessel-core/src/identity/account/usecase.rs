@@ -123,7 +123,10 @@ mod tests {
         }
     );
 
-    fn generate_usecase<TRepo: AccountRepositoryBuilder + Sync, TRPCClient: AccountRPCClientBuilder + Sync>(
+    fn generate_usecase<
+        TRepo: AccountRepositoryBuilder + Sync,
+        TRPCClient: AccountRPCClientBuilder + Sync,
+    >(
         repo: TRepo,
         rpc: TRPCClient,
     ) -> Usecase<TRepo, TRPCClient> {
@@ -198,7 +201,9 @@ mod tests {
 
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc);
-        let uri = uc.build_did_uri(identity.clone().value(), "password".to_string(), None).await;
+        let uri = uc
+            .build_did_uri(identity.clone().value(), "password".to_string(), None)
+            .await;
         assert!(!uri.is_err());
         assert_eq!(uri.unwrap(), identity.clone().value())
     }
@@ -244,11 +249,13 @@ mod tests {
             service: Some("peer".to_string()),
         };
 
-        let uri = uc.build_did_uri(
-            identity.clone().value(),
-            "password".to_string(),
-            Some(params),
-        ).await;
+        let uri = uc
+            .build_did_uri(
+                identity.clone().value(),
+                "password".to_string(),
+                Some(params),
+            )
+            .await;
         assert!(!uri.is_err());
 
         let uri_expected = format!(
@@ -316,11 +323,13 @@ mod tests {
             service: Some("peer".to_string()),
         };
 
-        let uri = uc.build_did_uri(
-            identity.clone().value(),
-            "password".to_string(),
-            Some(params),
-        ).await;
+        let uri = uc
+            .build_did_uri(
+                identity.clone().value(),
+                "password".to_string(),
+                Some(params),
+            )
+            .await;
         assert!(!uri.is_err());
 
         let resolved = uc.resolve_did_uri(uri.unwrap()).await;
@@ -346,7 +355,9 @@ mod tests {
         };
 
         let query = params.build_query();
-        let resolved = uc.resolve_did_uri(format!("did:prople:test?{}", query.unwrap())).await;
+        let resolved = uc
+            .resolve_did_uri(format!("did:prople:test?{}", query.unwrap()))
+            .await;
         assert!(resolved.is_err());
         assert!(resolved
             .unwrap_err()
@@ -368,7 +379,9 @@ mod tests {
         };
 
         let query = params.build_query();
-        let resolved = uc.resolve_did_uri(format!("did:prople:test?{}", query.unwrap())).await;
+        let resolved = uc
+            .resolve_did_uri(format!("did:prople:test?{}", query.unwrap()))
+            .await;
         assert!(resolved.is_err());
         assert!(resolved
             .unwrap_err()
@@ -430,11 +443,13 @@ mod tests {
             service: Some("peer".to_string()),
         };
 
-        let uri = uc.build_did_uri(
-            identity.clone().value(),
-            "password".to_string(),
-            Some(params),
-        ).await;
+        let uri = uc
+            .build_did_uri(
+                identity.clone().value(),
+                "password".to_string(),
+                Some(params),
+            )
+            .await;
         assert!(!uri.is_err());
 
         let resolved = uc.resolve_did_uri(uri.unwrap()).await;

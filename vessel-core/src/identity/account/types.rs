@@ -84,7 +84,7 @@ pub trait AccountUsecaseBuilder {
 }
 
 /// `AccountUsecaseImplementer` it's a simple trait used as parent super trait by other
-/// traits that need to inherit from the [`AccountUsecaseBuilder`] 
+/// traits that need to inherit from the [`AccountUsecaseBuilder`]
 pub trait AccountUsecaseImplementer {
     type Implementer: AccountUsecaseBuilder;
 
