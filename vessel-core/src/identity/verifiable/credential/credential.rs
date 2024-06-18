@@ -1,0 +1,341 @@
+use rst_common::standard::chrono::serde::ts_seconds;
+use rst_common::standard::chrono::{DateTime, Utc};
+use rst_common::standard::uuid::Uuid;
+
+use rst_common::standard::serde::{self, Deserialize, Serialize};
+use rst_common::standard::serde_json::value::Value;
+
+use prople_crypto::keysecure::KeySecure;
+
+use prople_did_core::keys::IdentityPrivateKeyPairs;
+use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
+use prople_did_core::verifiable::objects::VC;
+
+use crate::identity::account::types::AccountUsecaseBuilder;
+
+use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
+use crate::identity::verifiable::proof::types::Params as ProofParams;
+use crate::identity::verifiable::types::VerifiableError;
+
+/// `Credential` is a main entity used to save to internal persistent storage
+/// This data must contain a [`VC`] and [`KeySecure`]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(crate = "self::serde")]
+pub struct Credential {
+    pub id: String,
+    pub did: String,
+    pub did_vc: String,
+    pub did_vc_doc_private_keys: IdentityPrivateKeyPairs,
+    pub vc: VC,
+    pub keysecure: KeySecure,
+
+    #[serde(with = "ts_seconds")]
+    #[serde(rename = "createdAt")]
+    pub created_at: DateTime<Utc>,
+
+    #[serde(with = "ts_seconds")]
+    #[serde(rename = "updatedAt")]
+    pub updated_at: DateTime<Utc>,
+}
+
+impl Credential {
+    pub fn new(
+        did: String,
+        did_vc: String,
+        did_vc_doc_private_keys: IdentityPrivateKeyPairs,
+        vc: VC,
+        keysecure: KeySecure,
+    ) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            keysecure,
+            did,
+            did_vc,
+            did_vc_doc_private_keys,
+            vc,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    pub async fn generate(
+        account_builder: impl AccountUsecaseBuilder,
+        password: String,
+        did_issuer: String,
+        claims: Value,
+        proof_params: Option<ProofParams>,
+    ) -> Result<Credential, VerifiableError> {
+        if password.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "password was missing".to_string(),
+            ));
+        }
+
+        if did_issuer.is_empty() {
+            return Err(VerifiableError::ValidationError(
+                "did_issuer was missing".to_string(),
+            ));
+        }
+
+        let account = account_builder
+            .generate_did(password.clone())
+            .await
+            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+
+        let account_did = account.clone().did;
+        let account_keysecure = account.clone().keysecure;
+        let account_doc_private_key_pairs = account.doc_private_keys;
+
+        let mut vc = VC::new(account.did.clone(), did_issuer.clone());
+        vc.add_context(CONTEXT_VC.to_string())
+            .add_context(CONTEXT_VC_V2.to_string())
+            .add_type("VerifiableCredential".to_string())
+            .set_credential(claims);
+
+        let proof_builder = ProofBuilder::build_proof(
+            vc.clone(),
+            password,
+            account_doc_private_key_pairs.clone(),
+            proof_params,
+        )?;
+
+        if let Some(proof) = proof_builder {
+            vc.proof(proof);
+        }
+
+        let cred = Credential::new(
+            did_issuer,
+            account_did,
+            account_doc_private_key_pairs,
+            vc,
+            account_keysecure,
+        );
+
+        Ok(cred)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockall::mock;
+    use mockall::predicate::eq;
+
+    use rst_common::standard::async_trait::async_trait;
+    use rst_common::standard::chrono::Utc;
+    use rst_common::standard::serde::{self, Deserialize, Serialize};
+    use rst_common::standard::serde_json;
+    use rst_common::with_tokio::tokio;
+
+    use prople_crypto::eddsa::keypair::KeyPair;
+    use prople_crypto::keysecure::types::ToKeySecure;
+
+    use prople_did_core::did::{query::Params, DID};
+    use prople_did_core::doc::types::{Doc, ToDoc};
+    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
+    use prople_did_core::verifiable::objects::ProofValue;
+
+    use crate::identity::account::types::AccountError;
+    use crate::identity::account::types::AccountUsecaseBuilder;
+    use crate::identity::account::Account as AccountIdentity;
+
+    mock!(
+        FakeAccountUsecase{}
+
+        impl Clone for FakeAccountUsecase {
+            fn clone(&self) -> Self;
+        }
+
+        #[async_trait]
+        impl AccountUsecaseBuilder for FakeAccountUsecase {
+
+            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
+            async fn build_did_uri(
+                &self,
+                did: String,
+                password: String,
+                params: Option<Params>,
+            ) -> Result<String, AccountError>;
+            async fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError>;
+            async fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError>;
+            async fn remove_did(&self, did: String) -> Result<(), AccountError>;
+            async fn get_account_did(&self, did: String) -> Result<AccountIdentity, AccountError>;
+        }
+    );
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(crate = "self::serde")]
+    struct FakeCredential {
+        pub msg: String,
+    }
+
+    fn generate_did() -> DID {
+        DID::new()
+    }
+
+    #[tokio::test]
+    async fn test_generate_credential_without_params() {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did_vc = generate_did();
+
+        let mut expected = MockFakeAccountUsecase::new();
+        expected
+            .expect_generate_did()
+            .with(eq("password".to_string()))
+            .return_once(move |_| {
+                let mut did_vc_identity = did_vc.identity().unwrap();
+                let did_vc_value_cloned = did_vc_identity.value();
+
+                let did_vc_doc = did_vc_identity
+                    .build_assertion_method()
+                    .build_auth_method()
+                    .to_doc();
+
+                let did_vc_doc_private_keys = did_vc_identity
+                    .build_private_keys("password".to_string())
+                    .unwrap();
+
+                let did_vc_keysecure = did_vc
+                    .account()
+                    .privkey()
+                    .to_keysecure("password".to_string())
+                    .unwrap();
+
+                Ok(AccountIdentity {
+                    id: Uuid::new_v4().to_string(),
+                    did: did_vc_value_cloned.clone(),
+                    keysecure: did_vc_keysecure,
+                    doc: did_vc_doc,
+                    doc_private_keys: did_vc_doc_private_keys,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                })
+            });
+
+        let claims = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let credential_builder = Credential::generate(
+            expected,
+            "password".to_string(),
+            did_issuer_value,
+            claims,
+            None,
+        )
+        .await;
+        assert!(!credential_builder.is_err());
+
+        let credential = credential_builder.unwrap();
+        assert!(credential.vc.proof.is_none())
+    }
+
+    #[tokio::test]
+    async fn test_generate_credential_with_params() {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did_vc = generate_did();
+
+        let mut expected = MockFakeAccountUsecase::new();
+        expected
+            .expect_generate_did()
+            .with(eq("password".to_string()))
+            .return_once(move |_| {
+                let mut did_vc_identity = did_vc.identity().unwrap();
+                let did_vc_value_cloned = did_vc_identity.value();
+
+                let did_vc_doc = did_vc_identity
+                    .build_assertion_method()
+                    .build_auth_method()
+                    .to_doc();
+
+                let did_vc_doc_private_keys = did_vc_identity
+                    .build_private_keys("password".to_string())
+                    .unwrap();
+
+                let did_vc_keysecure = did_vc
+                    .account()
+                    .privkey()
+                    .to_keysecure("password".to_string())
+                    .unwrap();
+
+                Ok(AccountIdentity {
+                    id: Uuid::new_v4().to_string(),
+                    did: did_vc_value_cloned.clone(),
+                    keysecure: did_vc_keysecure,
+                    doc: did_vc_doc,
+                    doc_private_keys: did_vc_doc_private_keys,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                })
+            });
+
+        let claims = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let proof_params = ProofParams {
+            id: "uid".to_string(),
+            typ: "type".to_string(),
+            method: "method".to_string(),
+            purpose: "purpose".to_string(),
+            cryptosuite: None,
+            expires: None,
+            nonce: None,
+        };
+
+        let credential_builder = Credential::generate(
+            expected,
+            "password".to_string(),
+            did_issuer_value,
+            claims,
+            Some(proof_params),
+        )
+        .await;
+        assert!(!credential_builder.is_err());
+
+        let credential = credential_builder.unwrap();
+        assert!(credential.vc.proof.is_some());
+
+        let vc = credential.vc;
+        let doc_private_keys = credential.did_vc_doc_private_keys;
+
+        let account_doc_verification_pem_bytes = doc_private_keys
+            .clone()
+            .authentication
+            .map(|val| {
+                val.decrypt_verification("password".to_string())
+                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+            })
+            .ok_or(VerifiableError::VCGenerateError(
+                "PrivateKeyPairs is missing".to_string(),
+            ));
+        assert!(!account_doc_verification_pem_bytes.is_err());
+
+        let account_doc_verification_pem_bytes_unwrap =
+            account_doc_verification_pem_bytes.unwrap().unwrap();
+        let account_doc_verification_pem =
+            String::from_utf8(account_doc_verification_pem_bytes_unwrap)
+                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+        assert!(!account_doc_verification_pem.is_err());
+
+        let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
+            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+        assert!(!account_doc_keypair.is_err());
+
+        let (vc_original, proof_original) = vc.split_proof();
+        let verified = ProofValue::transform_verifier(
+            account_doc_keypair.clone().unwrap(),
+            vc_original,
+            proof_original.clone().unwrap().proof_value,
+        );
+
+        assert!(!verified.is_err());
+        assert!(verified.unwrap())
+    }
+}
