@@ -2,6 +2,7 @@ use multiaddr::Multiaddr;
 
 use rst_common::with_errors::thiserror::{self, Error};
 
+use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::uuid::Uuid;
@@ -13,7 +14,7 @@ use prople_crypto::keysecure::KeySecure;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::{Proof, VC, VP};
 
-use crate::identity::account::types::AccountUsecaseEntryPoint;
+use crate::identity::account::types::AccountUsecaseImplementer;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
@@ -201,7 +202,8 @@ pub struct PaginationParams {
 ///
 /// This trait will maintain all logic that relate with the `VC (Verifiable Credential)` and also
 /// `VP (Verifiable Presentation)`
-pub trait VerifiableCredentialUsecaseBuilder: AccountUsecaseEntryPoint {
+#[async_trait]
+pub trait VerifiableCredentialUsecaseBuilder: AccountUsecaseImplementer {
     /// `vc_generate` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
     /// our implementer of [`VerifiableRepoBuilder`]
@@ -209,7 +211,7 @@ pub trait VerifiableCredentialUsecaseBuilder: AccountUsecaseEntryPoint {
     /// The `credential` is an object of [`Value`], it can be anything that able to convert to `serde_json::value::Value`
     /// The `proof_params` is an optional parameter, if an user want to generate a `VC` with its [`Proof`], it must
     /// be set, but if not, just left it `None`
-    fn vc_generate(
+    async fn vc_generate(
         &self,
         password: String,
         did_issuer: String,
@@ -225,11 +227,11 @@ pub trait VerifiableCredentialUsecaseBuilder: AccountUsecaseEntryPoint {
     ///
     /// The `VC` that need to send to the `Holder` should be loaded from our persistent storage
     /// based on given `id` which is the id of [`Credential`]
-    fn vc_send_to_holder(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError>;
+    async fn vc_send_to_holder(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError>;
 
     /// `vc_receive_by_holder` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
     /// to the persistent storage through `CredentialHolder`
-    fn vc_receive_by_holder(
+    async fn vc_receive_by_holder(
         &self,
         request_id: String,
         issuer_addr: String,
@@ -240,15 +242,16 @@ pub trait VerifiableCredentialUsecaseBuilder: AccountUsecaseEntryPoint {
     ///
     /// This method doesn't contain any logic, actually this method is just a simple proxy
     /// to the repository method, [`VerifiableRepoBuilder::list_by_did`]
-    fn vc_lists(
+    async fn vc_lists(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Credential>, VerifiableError>;
 }
 
-pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseEntryPoint {
-    fn vp_generate(
+#[async_trait]
+pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseImplementer {
+    async fn vp_generate(
         &self,
         password: String,
         did_issuer: String,
@@ -256,29 +259,34 @@ pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseEntryPoint {
         proof_params: Option<ProofParams>,
     ) -> Result<Presentation, VerifiableError>;
 
-    fn vp_send_to_verifier(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError>;
-    
-    fn vp_lists(
+    async fn vp_send_to_verifier(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError>;
+
+    async fn vp_lists(
         &self,
         id: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Presentation>, VerifiableError>;
 }
 
+#[async_trait]
 pub trait VerifiableRepoBuilder {
-    fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
-    fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
-    fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
-    fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
-    fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
+    async fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
+    async fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
+    async fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
+    async fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
+    async fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
 
-    fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
-    fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
-    fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-    fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
-    fn list_vp_by_id(&self, ids: String, pagination: Option<PaginationParams>) -> Result<Vec<Presentation>, VerifiableError>;
+    async fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
+    async fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
+    async fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
+    async fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+    async fn list_vp_by_id(
+        &self,
+        ids: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Presentation>, VerifiableError>;
 
-    fn list_vc_by_did(
+    async fn list_vc_by_did(
         &self,
         did: String,
         pagination: Option<PaginationParams>,

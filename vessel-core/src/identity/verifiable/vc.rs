@@ -2,6 +2,7 @@ use multiaddr::Multiaddr;
 
 use rst_common::standard::serde_json::Value;
 use rst_common::standard::uuid::Uuid;
+use rst_common::standard::async_trait::async_trait;
 
 use prople_crypto::eddsa::keypair::KeyPair;
 
@@ -13,7 +14,7 @@ use super::types::{
     VerifiableCredentialUsecaseBuilder, VerifiableError, VerifiableRPCBuilder,
     VerifiableRepoBuilder,
 };
-use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseEntryPoint};
+use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseImplementer};
 
 pub struct CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
@@ -37,7 +38,7 @@ where
     }
 }
 
-impl<TRPCClient, TRepo, TAccount> AccountUsecaseEntryPoint
+impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer
     for CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
@@ -51,14 +52,15 @@ where
     }
 }
 
+#[async_trait]
 impl<TRPCClient, TRepo, TAccount> VerifiableCredentialUsecaseBuilder
     for CredentialUsecase<TRPCClient, TRepo, TAccount>
 where
-    TRPCClient: VerifiableRPCBuilder,
-    TRepo: VerifiableRepoBuilder,
-    TAccount: AccountUsecaseBuilder + Clone,
+    TRPCClient: VerifiableRPCBuilder + Sync,
+    TRepo: VerifiableRepoBuilder + Sync,
+    TAccount: AccountUsecaseBuilder + Clone + Sync + Send,
 {
-    fn vc_generate(
+    async fn vc_generate(
         &self,
         password: String,
         did_issuer: String,
@@ -79,7 +81,7 @@ where
 
         let account = self
             .account()
-            .generate_did(password.clone())
+            .generate_did(password.clone()).await
             .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
 
         let account_did = account.clone().did;
@@ -146,21 +148,21 @@ where
         );
         let _ = self
             .repo
-            .save_credential(cred.clone())
+            .save_credential(cred.clone()).await
             .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
 
         Ok(cred)
     }
 
-    fn vc_lists(
+    async fn vc_lists(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Credential>, VerifiableError> {
-        self.repo.list_vc_by_did(did, pagination)
+        self.repo.list_vc_by_did(did, pagination).await
     }
 
-    fn vc_receive_by_holder(
+    async fn vc_receive_by_holder(
         &self,
         request_id: String,
         issuer_addr: String,
@@ -179,17 +181,17 @@ where
         }
 
         let cred_holder = CredentialHolder::new(request_id, issuer_addr, vc)?;
-        self.repo.save_credential_holder(cred_holder)
+        self.repo.save_credential_holder(cred_holder).await
     }
 
-    fn vc_send_to_holder(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError> {
+    async fn vc_send_to_holder(&self, id: String, receiver: Multiaddr) -> Result<(), VerifiableError> {
         if id.is_empty() {
             return Err(VerifiableError::ValidationError(
                 "id was missing".to_string(),
             ));
         }
 
-        let cred = self.repo.get_by_id(id)?;
+        let cred = self.repo.get_by_id(id).await?;
         self.rpc.vc_send_to_holder(receiver, cred.vc)
     }
 }
@@ -203,6 +205,8 @@ mod tests {
     use rst_common::standard::chrono::Utc;
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;
+    use rst_common::standard::async_trait::async_trait;
+    use rst_common::with_tokio::tokio;
 
     use multiaddr::{multiaddr, Multiaddr};
 
@@ -213,24 +217,26 @@ mod tests {
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use prople_did_core::verifiable::objects::VP;
 
-    use crate::identity::account::types::{Account as AccountIdentity, AccountError};
+    use crate::identity::account::types::AccountError;
+    use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::types::Presentation;
 
     mock!(
         FakeRepo{}
 
+        #[async_trait]
         impl VerifiableRepoBuilder for FakeRepo {
-            fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
-            fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
-            fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
-            fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
-            fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
-            fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
-            fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
-            fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
-            fn list_vc_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
-            fn list_vp_by_id(&self, ids: String, pagination: Option<PaginationParams>) -> Result<Vec<Presentation>, VerifiableError>;
-            fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
+            async fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
+            async fn save_presentation(&self, data: Presentation) -> Result<(), VerifiableError>;
+            async fn save_credential_holder(&self, data: CredentialHolder) -> Result<(), VerifiableError>;
+            async fn remove_by_id(&self, id: String) -> Result<(), VerifiableError>;
+            async fn remove_by_did(&self, did: String) -> Result<(), VerifiableError>;
+            async fn get_by_did(&self, did: String) -> Result<Credential, VerifiableError>;
+            async fn get_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
+            async fn list_vc_by_ids(&self, ids: Vec<String>) -> Result<Vec<Credential>, VerifiableError>;
+            async fn list_vc_by_did(&self, did: String, pagination: Option<PaginationParams>) -> Result<Vec<Credential>, VerifiableError>;
+            async fn list_vp_by_id(&self, ids: String, pagination: Option<PaginationParams>) -> Result<Vec<Presentation>, VerifiableError>;
+            async fn get_vp_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
         }
     );
 
@@ -251,19 +257,20 @@ mod tests {
             fn clone(&self) -> Self;
         }
 
+        #[async_trait]
         impl AccountUsecaseBuilder for FakeAccountUsecase {
 
-            fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
-            fn build_did_uri(
+            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
+            async fn build_did_uri(
                 &self,
                 did: String,
                 password: String,
                 params: Option<Params>,
             ) -> Result<String, AccountError>;
-            fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError>;
-            fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError>;
-            fn remove_did(&self, did: String) -> Result<(), AccountError>;
-            fn get_account_did(&self, did: String) -> Result<AccountIdentity, AccountError>;
+            async fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError>;
+            async fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError>;
+            async fn remove_did(&self, did: String) -> Result<(), AccountError>;
+            async fn get_account_did(&self, did: String) -> Result<AccountIdentity, AccountError>;
         }
     );
 
@@ -289,8 +296,8 @@ mod tests {
         DID::new()
     }
 
-    #[test]
-    fn test_generate_success_without_params() {
+    #[tokio::test]
+    async fn test_generate_success_without_params() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -354,7 +361,7 @@ mod tests {
             did_issuer_value.clone(),
             cred_value.clone(),
             None,
-        );
+        ).await;
         assert!(!vc.is_err());
 
         let credential = vc.unwrap();
@@ -371,8 +378,8 @@ mod tests {
         assert_eq!(vc_cred, cred_value)
     }
 
-    #[test]
-    fn test_generate_success_with_params() {
+    #[tokio::test]
+    async fn test_generate_success_with_params() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -446,7 +453,7 @@ mod tests {
             did_issuer_value.clone(),
             cred_value.clone(),
             Some(proof_params),
-        );
+        ).await;
         assert!(!vc.is_err());
 
         let credential = vc.unwrap();
@@ -509,8 +516,8 @@ mod tests {
         assert!(!verified_invalid.unwrap());
     }
 
-    #[test]
-    fn test_generate_validation_error() {
+    #[tokio::test]
+    async fn test_generate_validation_error() {
         let repo = MockFakeRepo::new();
         let account = MockFakeAccountUsecase::new();
         let rpc = MockFakeRPCClient::new();
@@ -527,7 +534,7 @@ mod tests {
             "issuer".to_string(),
             cred_value.clone(),
             None,
-        );
+        ).await;
         assert!(generate_pass.is_err());
 
         let generate_pass_err = generate_pass.unwrap_err();
@@ -541,7 +548,7 @@ mod tests {
         }
 
         let generate_issuer =
-            uc.vc_generate("password".to_string(), "".to_string(), cred_value, None);
+            uc.vc_generate("password".to_string(), "".to_string(), cred_value, None).await;
         assert!(generate_issuer.is_err());
 
         let generate_issuer_err = generate_issuer.unwrap_err();
@@ -555,8 +562,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_generate_error_generate_did() {
+    #[tokio::test]
+    async fn test_generate_error_generate_did() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -589,12 +596,12 @@ mod tests {
             did_issuer_value.clone(),
             cred_value.clone(),
             None,
-        );
+        ).await;
         assert!(vc.is_err());
     }
 
-    #[test]
-    fn test_generate_error_repo() {
+    #[tokio::test]
+    async fn test_generate_error_repo() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -654,13 +661,13 @@ mod tests {
             did_issuer_value.clone(),
             cred_value.clone(),
             None,
-        );
+        ).await;
         assert!(vc.is_err());
         assert!(matches!(vc.unwrap_err(), VerifiableError::RepoError(_)))
     }
 
-    #[test]
-    fn test_vc_send_success() {
+    #[tokio::test]
+    async fn test_vc_send_success() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -705,19 +712,19 @@ mod tests {
 
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr).await;
         assert!(!send_output.is_err())
     }
 
-    #[test]
-    fn test_vc_send_validation_error() {
+    #[tokio::test]
+    async fn test_vc_send_validation_error() {
         let repo = MockFakeRepo::new();
         let rpc = MockFakeRPCClient::new();
         let account = MockFakeAccountUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account);
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let send_output = uc.vc_send_to_holder("".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("".to_string(), addr).await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -731,8 +738,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_vc_send_error_repo() {
+    #[tokio::test]
+    async fn test_vc_send_error_repo() {
         let mut repo = MockFakeRepo::new();
         repo.expect_get_by_id()
             .with(eq("cred-id".to_string()))
@@ -743,7 +750,7 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr).await;
         assert!(send_output.is_err());
         assert!(matches!(
             send_output.unwrap_err(),
@@ -751,8 +758,8 @@ mod tests {
         ))
     }
 
-    #[test]
-    fn test_vc_send_error_rpc() {
+    #[tokio::test]
+    async fn test_vc_send_error_rpc() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -796,7 +803,7 @@ mod tests {
 
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr);
+        let send_output = uc.vc_send_to_holder("cred-id".to_string(), addr).await;
         assert!(send_output.is_err());
         assert!(matches!(
             send_output.unwrap_err(),
@@ -804,8 +811,8 @@ mod tests {
         ))
     }
 
-    #[test]
-    fn test_receive_by_holder() {
+    #[tokio::test]
+    async fn test_receive_by_holder() {
         let mut repo = MockFakeRepo::new();
         repo.expect_save_credential_holder().returning(|_| Ok(()));
 
@@ -820,12 +827,12 @@ mod tests {
 
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
 
-        let receive = uc.vc_receive_by_holder("request-id-1".to_string(), addr.to_string(), vc);
+        let receive = uc.vc_receive_by_holder("request-id-1".to_string(), addr.to_string(), vc).await;
         assert!(!receive.is_err());
     }
 
-    #[test]
-    fn test_receive_by_holder_validation_error() {
+    #[tokio::test]
+    async fn test_receive_by_holder_validation_error() {
         let repo = MockFakeRepo::new();
         let rpc = MockFakeRPCClient::new();
         let account = MockFakeAccountUsecase::new();
@@ -836,7 +843,7 @@ mod tests {
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
 
         let receive_request_id =
-            uc.vc_receive_by_holder("".to_string(), "issuer-addr".to_string(), vc.clone());
+            uc.vc_receive_by_holder("".to_string(), "issuer-addr".to_string(), vc.clone()).await;
         assert!(receive_request_id.is_err());
 
         let receive_err_request_id = receive_request_id.unwrap_err();
@@ -850,7 +857,7 @@ mod tests {
         }
 
         let receive_issuer_addr =
-            uc.vc_receive_by_holder("request_id".to_string(), "".to_string(), vc);
+            uc.vc_receive_by_holder("request_id".to_string(), "".to_string(), vc).await;
         assert!(receive_issuer_addr.is_err());
 
         let receive_err_issuer_addr = receive_issuer_addr.unwrap_err();

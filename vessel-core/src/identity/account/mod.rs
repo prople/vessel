@@ -8,3 +8,9 @@
 //! - Remove / delete `DID`
 pub mod types;
 pub mod usecase;
+
+mod uri;
+pub use uri::URI;
+
+mod account;
+pub use account::Account;
