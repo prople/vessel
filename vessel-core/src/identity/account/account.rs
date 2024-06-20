@@ -11,7 +11,7 @@ use prople_did_core::doc::types::{Doc, ToDoc};
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
 
-use super::types::AccountError;
+use super::types::{AccountEntityAccessor, AccountError};
 
 /// `Account` is main entity data structure
 ///
@@ -80,6 +80,35 @@ impl Account {
     }
 }
 
+impl AccountEntityAccessor for Account {
+    fn get_id(&self) -> String {
+        self.id.to_owned()
+    }
+
+    fn get_did(&self) -> String {
+        self.did.to_owned()
+    }
+
+    fn get_doc(&self) -> Doc {
+        self.doc.to_owned()
+    }
+
+    fn get_doc_private_keys(&self) -> IdentityPrivateKeyPairs {
+        self.doc_private_keys.to_owned()
+    }
+
+    fn get_keysecure(&self) -> KeySecure {
+        self.keysecure.to_owned()
+    }
+
+    fn get_created_at(&self) -> DateTime<Utc> {
+        self.created_at.to_owned()
+    }
+
+    fn get_updated_at(&self) -> DateTime<Utc> {
+        self.updated_at.to_owned()
+    }
+}
 #[cfg(test)]
 mod tests {
     use super::*;

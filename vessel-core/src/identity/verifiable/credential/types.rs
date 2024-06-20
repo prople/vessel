@@ -5,7 +5,9 @@ use rst_common::standard::serde_json::value::Value;
 
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::account::types::AccountUsecaseImplementer;
+use crate::identity::account::types::{
+    AccountEntityAccessor, UsecaseImplementer as AccountUsecaseImplementer,
+};
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
@@ -20,7 +22,10 @@ use super::Holder;
 /// This trait will maintain all logic that relate with the `VC (Verifiable Credential)` and also
 /// `VP (Verifiable Presentation)`
 #[async_trait]
-pub trait UsecaseBuilder: AccountUsecaseImplementer {
+pub trait UsecaseBuilder<TAccountEntity>: AccountUsecaseImplementer
+where
+    TAccountEntity: AccountEntityAccessor,
+{
     /// `generate_credential` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
     /// our implementer of [`VerifiableRepoBuilder`]

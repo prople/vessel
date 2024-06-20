@@ -14,7 +14,7 @@ use prople_did_core::verifiable::objects::{VC, VP};
 
 use super::proof::types::Params as ProofParams;
 use super::Credential;
-use crate::identity::account::types::AccountUsecaseImplementer;
+use crate::identity::account::types::UsecaseImplementer as AccountUsecaseImplementer;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 

@@ -11,7 +11,7 @@ use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::account::types::AccountUsecaseBuilder;
+use crate::identity::account::types::{AccountEntityAccessor, UsecaseBuilder};
 
 use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
@@ -58,8 +58,8 @@ impl Credential {
         }
     }
 
-    pub async fn generate(
-        account_builder: impl AccountUsecaseBuilder,
+    pub async fn generate<TEntity: AccountEntityAccessor + Clone>(
+        account_builder: impl UsecaseBuilder<TEntity>,
         password: String,
         did_issuer: String,
         claims: Value,
@@ -82,11 +82,11 @@ impl Credential {
             .await
             .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
 
-        let account_did = account.clone().did;
-        let account_keysecure = account.clone().keysecure;
-        let account_doc_private_key_pairs = account.doc_private_keys;
+        let account_did = account.clone().get_did();
+        let account_keysecure = account.clone().get_keysecure();
+        let account_doc_private_key_pairs = account.get_doc_private_keys();
 
-        let mut vc = VC::new(account.did.clone(), did_issuer.clone());
+        let mut vc = VC::new(account.get_did().clone(), did_issuer.clone());
         vc.add_context(CONTEXT_VC.to_string())
             .add_context(CONTEXT_VC_V2.to_string())
             .add_type("VerifiableCredential".to_string())
@@ -136,7 +136,7 @@ mod tests {
     use prople_did_core::verifiable::objects::ProofValue;
 
     use crate::identity::account::types::AccountError;
-    use crate::identity::account::types::AccountUsecaseBuilder;
+    use crate::identity::account::types::UsecaseBuilder;
     use crate::identity::account::Account as AccountIdentity;
 
     mock!(
@@ -147,7 +147,7 @@ mod tests {
         }
 
         #[async_trait]
-        impl AccountUsecaseBuilder for FakeAccountUsecase {
+        impl UsecaseBuilder<AccountIdentity> for FakeAccountUsecase {
 
             async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(

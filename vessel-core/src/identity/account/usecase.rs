@@ -5,7 +5,7 @@ use prople_did_core::doc::types::Doc;
 use prople_did_core::hashlink::verify_from_json;
 
 use super::types::{
-    AccountError, AccountRPCClientBuilder, AccountRepositoryBuilder, AccountUsecaseBuilder,
+    AccountEntityAccessor, AccountError, RPCClientBuilder, RepositoryBuilder, UsecaseBuilder,
 };
 
 use super::Account;
@@ -16,8 +16,8 @@ use super::URI;
 /// This object depends on the implementation of [`AccountRepositoryBuilder`]
 pub struct Usecase<TRepo, TRPCClient>
 where
-    TRepo: AccountRepositoryBuilder + Sync,
-    TRPCClient: AccountRPCClientBuilder,
+    TRepo: RepositoryBuilder + Sync,
+    TRPCClient: RPCClientBuilder,
 {
     repo: TRepo,
     rpc: TRPCClient,
@@ -25,8 +25,8 @@ where
 
 impl<TRepo, TRPCClient> Usecase<TRepo, TRPCClient>
 where
-    TRepo: AccountRepositoryBuilder + Sync,
-    TRPCClient: AccountRPCClientBuilder,
+    TRepo: RepositoryBuilder + Sync,
+    TRPCClient: RPCClientBuilder,
 {
     pub fn new(repo: TRepo, rpc: TRPCClient) -> Self {
         Self { repo, rpc }
@@ -34,10 +34,10 @@ where
 }
 
 #[async_trait]
-impl<TRepo, TRPCClient> AccountUsecaseBuilder for Usecase<TRepo, TRPCClient>
+impl<TRepo, TRPCClient> UsecaseBuilder<Account> for Usecase<TRepo, TRPCClient>
 where
-    TRepo: AccountRepositoryBuilder + Sync,
-    TRPCClient: AccountRPCClientBuilder + Sync,
+    TRepo: RepositoryBuilder<EntityAccessor = Account> + Sync,
+    TRPCClient: RPCClientBuilder + Sync,
 {
     async fn generate_did(&self, password: String) -> Result<Account, AccountError> {
         let account = Account::generate(password)?;
@@ -76,7 +76,7 @@ where
 
     async fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError> {
         let account = self.repo.get_account_by_did(did).await?;
-        Ok(account.doc)
+        Ok(account.get_doc())
     }
 
     async fn remove_did(&self, did: String) -> Result<(), AccountError> {
@@ -103,11 +103,14 @@ mod tests {
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use prople_did_core::types::ToJSON;
 
+    use super::Account;
+
     mock!(
         FakeRepo{}
 
         #[async_trait]
-        impl AccountRepositoryBuilder for FakeRepo {
+        impl RepositoryBuilder for FakeRepo {
+            type EntityAccessor = Account; 
             async fn save_account(&self, account: &Account) -> Result<(), AccountError>;
             async fn remove_account_by_did(&self, did: String) -> Result<(), AccountError>;
             async fn get_account_by_did(&self, did: String) -> Result<Account, AccountError>;
@@ -118,14 +121,14 @@ mod tests {
         FakeRPCClient{}
 
         #[async_trait]
-        impl AccountRPCClientBuilder for FakeRPCClient {
+        impl RPCClientBuilder for FakeRPCClient {
             async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
         }
     );
 
     fn generate_usecase<
-        TRepo: AccountRepositoryBuilder + Sync,
-        TRPCClient: AccountRPCClientBuilder + Sync,
+        TRepo: RepositoryBuilder + Sync,
+        TRPCClient: RPCClientBuilder + Sync,
     >(
         repo: TRepo,
         rpc: TRPCClient,

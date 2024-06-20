@@ -5,7 +5,12 @@ use rst_common::standard::serde_json::Value;
 
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::account::types::{AccountUsecaseBuilder, AccountUsecaseImplementer};
+use crate::identity::account::types::{
+    UsecaseBuilder as AccountUsecaseBuilder,
+    UsecaseImplementer as AccountUsecaseImplementer,
+};
+
+use crate::identity::account::Account;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
@@ -16,30 +21,33 @@ pub struct Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
     TRepo: RepoBuilder,
-    TAccount: AccountUsecaseBuilder + Clone,
+    TAccount: AccountUsecaseBuilder<Account> + Clone,
 {
     repo: TRepo,
     rpc: TRPCClient,
     account: TAccount,
 }
 
-impl<TRPCClient, TRepo, TAccount> Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount>
+    Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
     TRepo: RepoBuilder,
-    TAccount: AccountUsecaseBuilder + Clone,
+    TAccount: AccountUsecaseBuilder<Account> + Clone,
 {
     pub fn new(repo: TRepo, rpc: TRPCClient, account: TAccount) -> Self {
         Self { repo, rpc, account }
     }
 }
 
-impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer
+    for Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
     TRepo: RepoBuilder,
-    TAccount: AccountUsecaseBuilder + Clone,
+    TAccount: AccountUsecaseBuilder<Account> + Clone,
 {
+    type Accessor = Account;
     type Implementer = TAccount;
 
     fn account(&self) -> Self::Implementer {
@@ -48,11 +56,12 @@ where
 }
 
 #[async_trait]
-impl<TRPCClient, TRepo, TAccount> UsecaseBuilder for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> UsecaseBuilder<Account>
+    for Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder + Sync,
     TRepo: RepoBuilder + Sync,
-    TAccount: AccountUsecaseBuilder + Clone + Sync + Send,
+    TAccount: AccountUsecaseBuilder<Account> + Clone + Sync + Send,
 {
     async fn generate_credential(
         &self,
@@ -62,15 +71,20 @@ where
         proof_params: Option<ProofParams>,
     ) -> Result<Credential, VerifiableError> {
         if password.is_empty() {
-            return Err(VerifiableError::ValidationError("password was missing".to_string()));
+            return Err(VerifiableError::ValidationError(
+                "password was missing".to_string(),
+            ));
         }
 
         if did_issuer.is_empty() {
-            return Err(VerifiableError::ValidationError("did_issuer was missing".to_string()));
+            return Err(VerifiableError::ValidationError(
+                "did_issuer was missing".to_string(),
+            ));
         }
 
         let credential =
-            Credential::generate(self.account(), password, did_issuer, claims, proof_params).await?;
+            Credential::generate(self.account(), password, did_issuer, claims, proof_params)
+                .await?;
 
         let _ = self
             .repo
@@ -128,16 +142,16 @@ where
 }
 
 #[cfg(test)]
-mod tests { 
+mod tests {
     use super::*;
     use mockall::mock;
     use mockall::predicate::eq;
 
-    use rst_common::standard::uuid::Uuid;
     use rst_common::standard::async_trait::async_trait;
     use rst_common::standard::chrono::Utc;
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;
+    use rst_common::standard::uuid::Uuid;
     use rst_common::with_tokio::tokio;
 
     use multiaddr::{multiaddr, Multiaddr};
@@ -152,7 +166,7 @@ mod tests {
 
     use crate::identity::account::types::AccountError;
     use crate::identity::account::Account as AccountIdentity;
-    
+
     mock!(
         FakeRepo{}
 
@@ -177,7 +191,7 @@ mod tests {
             ) -> Result<Vec<Credential>, VerifiableError>;
         }
     );
-    
+
     mock!(
         FakeRPCClient{}
 
@@ -196,7 +210,7 @@ mod tests {
             ) -> Result<(), VerifiableError>;
         }
     );
-    
+
     mock!(
         FakeAccountUsecase{}
 
@@ -205,7 +219,7 @@ mod tests {
         }
 
         #[async_trait]
-        impl AccountUsecaseBuilder for FakeAccountUsecase {
+        impl AccountUsecaseBuilder<AccountIdentity> for FakeAccountUsecase {
             async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
@@ -219,7 +233,7 @@ mod tests {
             async fn get_account_did(&self, did: String) -> Result<AccountIdentity, AccountError>;
         }
     );
-    
+
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
     struct FakeCredential {
@@ -229,7 +243,7 @@ mod tests {
     fn generate_usecase<
         TRepo: RepoBuilder,
         TRPCClient: RPCBuilder,
-        TAccount: AccountUsecaseBuilder + Clone,
+        TAccount: AccountUsecaseBuilder<Account> + Clone,
     >(
         repo: TRepo,
         rpc: TRPCClient,
@@ -241,7 +255,7 @@ mod tests {
     fn generate_did() -> DID {
         DID::new()
     }
-    
+
     #[tokio::test]
     async fn test_generate_success_without_params() {
         let did_issuer = generate_did();
@@ -325,7 +339,7 @@ mod tests {
         let vc_cred = credential.vc.credential_subject;
         assert_eq!(vc_cred, cred_value)
     }
-    
+
     #[tokio::test]
     async fn test_generate_success_with_params() {
         let did_issuer = generate_did();
@@ -465,7 +479,7 @@ mod tests {
         assert!(!verified_invalid.is_err());
         assert!(!verified_invalid.unwrap());
     }
-    
+
     #[tokio::test]
     async fn test_generate_validation_error() {
         let repo = MockFakeRepo::new();
@@ -554,7 +568,7 @@ mod tests {
             .await;
         assert!(vc.is_err());
     }
-    
+
     #[tokio::test]
     async fn test_generate_error_repo() {
         let did_issuer = generate_did();

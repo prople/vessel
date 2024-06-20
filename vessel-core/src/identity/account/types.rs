@@ -1,12 +1,14 @@
+use std::fmt::Debug;
+
 use multiaddr::Multiaddr;
 use rst_common::standard::async_trait::async_trait;
 
-use prople_did_core::did::query::Params;
+use prople_crypto::keysecure::KeySecure;
 use prople_did_core::doc::types::Doc;
+use prople_did_core::{did::query::Params, keys::IdentityPrivateKeyPairs};
 
+use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::with_errors::thiserror::{self, Error};
-
-use super::Account;
 
 /// `AccountError` provides all specific error types relate with entity account
 /// management
@@ -40,10 +42,27 @@ pub enum AccountError {
     DIDNotFound,
 }
 
+/// `AccountEntityAccessor` it's a special trait used to access [`Account`]
+/// property fields. This entity  will be useful from the outside of this crate
+/// to access those fields because we need to protect the properties from direct
+/// access or manipulation from outside
+pub trait AccountEntityAccessor: Clone + Debug {
+    fn get_id(&self) -> String;
+    fn get_did(&self) -> String;
+    fn get_doc(&self) -> Doc;
+    fn get_doc_private_keys(&self) -> IdentityPrivateKeyPairs;
+    fn get_keysecure(&self) -> KeySecure;
+    fn get_created_at(&self) -> DateTime<Utc>;
+    fn get_updated_at(&self) -> DateTime<Utc>;
+}
+
 /// `AccountUsecaseBuilder` is a trait behavior that provides
 /// base application logic's handlers
 #[async_trait]
-pub trait AccountUsecaseBuilder {
+pub trait UsecaseBuilder<TEntityAccessor>
+where
+    TEntityAccessor: AccountEntityAccessor,
+{
     /// `generate_did` used to geenerate new `DID Account`
     ///
     /// This method will depends on two parameters:
@@ -53,7 +72,7 @@ pub trait AccountUsecaseBuilder {
     /// storage data structure. This strategy following `Ethereum KeyStore` mechanism.
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
-    async fn generate_did(&self, password: String) -> Result<Account, AccountError>;
+    async fn generate_did(&self, password: String) -> Result<TEntityAccessor, AccountError>;
 
     /// `build_did_uri` used to generate the `DID URI`, a specific URI syntax for the DID
     ///
@@ -80,13 +99,14 @@ pub trait AccountUsecaseBuilder {
     async fn remove_did(&self, did: String) -> Result<(), AccountError>;
 
     /// `get_account_did` used to load data [`Account`] from its persistent storage
-    async fn get_account_did(&self, did: String) -> Result<Account, AccountError>;
+    async fn get_account_did(&self, did: String) -> Result<TEntityAccessor, AccountError>;
 }
 
 /// `AccountUsecaseImplementer` it's a simple trait used as parent super trait by other
 /// traits that need to inherit from the [`AccountUsecaseBuilder`]
-pub trait AccountUsecaseImplementer {
-    type Implementer: AccountUsecaseBuilder;
+pub trait UsecaseImplementer {
+    type Accessor: AccountEntityAccessor;
+    type Implementer: UsecaseBuilder<Self::Accessor>;
 
     fn account(&self) -> Self::Implementer;
 }
@@ -98,15 +118,18 @@ pub trait AccountUsecaseImplementer {
 /// persistent storage. User should be able to choose their selected
 /// persistent storage or database such as SQL or NoSQL
 #[async_trait]
-pub trait AccountRepositoryBuilder {
-    async fn save_account(&self, account: &Account) -> Result<(), AccountError>;
+pub trait RepositoryBuilder
+{
+    type EntityAccessor: AccountEntityAccessor;
+
+    async fn save_account(&self, account: &Self::EntityAccessor) -> Result<(), AccountError>;
     async fn remove_account_by_did(&self, did: String) -> Result<(), AccountError>;
-    async fn get_account_by_did(&self, did: String) -> Result<Account, AccountError>;
+    async fn get_account_by_did(&self, did: String) -> Result<Self::EntityAccessor, AccountError>;
 }
 
 /// `AccountRPCClientBuilder` is a trait behavior used as `JSON-RPC` client builder
 /// to calling other `Vessel` agents.
 #[async_trait]
-pub trait AccountRPCClientBuilder {
+pub trait RPCClientBuilder {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
 }

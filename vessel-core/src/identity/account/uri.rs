@@ -2,8 +2,7 @@ use multiaddr::Multiaddr;
 
 use prople_did_core::did::{query::Params, DID};
 
-use super::types::AccountError;
-use super::Account;
+use super::types::{AccountEntityAccessor, AccountError};
 
 /// `URI` is a domain service that build specifically
 /// for the `DID URI` management, it should be used to [`URI::build`] and [`URI::parse`]
@@ -12,11 +11,11 @@ pub struct URI;
 impl URI {
     /// `build` used to build the `DID URI` based on given [`Account`] and query params
     pub fn build(
-        account: Account,
+        account: impl AccountEntityAccessor,
         password: String,
         params: Option<Params>,
     ) -> Result<String, AccountError> {
-        let did = DID::from_keysecure(password, account.keysecure.to_owned())
+        let did = DID::from_keysecure(password, account.get_keysecure())
             .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
 
         did.build_uri(params)
@@ -52,6 +51,8 @@ mod tests {
 
     use multiaddr::multiaddr;
     use prople_did_core::hashlink::generate_from_json;
+
+    use crate::identity::account::Account;
 
     #[test]
     fn test_build_uri() {
