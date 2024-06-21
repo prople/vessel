@@ -7,8 +7,8 @@ use rst_common::standard::uuid::Uuid;
 
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::verifiable::types::VerifiableError;
 use super::types::HolderEntityAccessor;
+use crate::identity::verifiable::types::VerifiableError;
 
 /// `CredentialHolder` is an entity used by a `Holder` to save incoming [`VC`] that sent
 /// from `Issuer`

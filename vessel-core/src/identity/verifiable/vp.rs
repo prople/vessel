@@ -6,10 +6,10 @@ use prople_crypto::eddsa::keypair::KeyPair;
 use prople_did_core::types::CONTEXT_VC_V2;
 use prople_did_core::verifiable::objects::{Proof, ProofValue, VP};
 
-use crate::identity::account::Account;
 use crate::identity::account::types::{
     UsecaseBuilder as AccountUsecaseBuilder, UsecaseImplementer as AccountUsecaseImplementer,
 };
+use crate::identity::account::Account;
 
 use super::types::{
     Presentation, VerifiableError, VerifiablePresentationUsecaseBuilder, VerifiableRPCBuilder,

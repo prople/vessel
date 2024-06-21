@@ -6,8 +6,7 @@ use rst_common::standard::serde_json::Value;
 use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::account::types::{
-    UsecaseBuilder as AccountUsecaseBuilder,
-    UsecaseImplementer as AccountUsecaseImplementer,
+    UsecaseBuilder as AccountUsecaseBuilder, UsecaseImplementer as AccountUsecaseImplementer,
 };
 
 use crate::identity::account::Account;
@@ -28,8 +27,7 @@ where
     account: TAccount,
 }
 
-impl<TRPCClient, TRepo, TAccount>
-    Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
     TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
@@ -40,8 +38,7 @@ where
     }
 }
 
-impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer
-    for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer for Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
     TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,

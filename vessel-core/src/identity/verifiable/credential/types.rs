@@ -5,8 +5,8 @@ use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde_json::value::Value;
 
 use prople_crypto::keysecure::KeySecure;
-use prople_did_core::verifiable::objects::VC;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
+use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::account::types::{
     AccountEntityAccessor, UsecaseImplementer as AccountUsecaseImplementer,
@@ -20,7 +20,7 @@ pub trait CredentialEntityAccessor {
     fn get_id(&self) -> String;
     fn get_did(&self) -> String;
     fn get_did_vc(&self) -> String;
-    fn get_did_vc_doc_private_keys(&self) -> IdentityPrivateKeyPairs; 
+    fn get_did_vc_doc_private_keys(&self) -> IdentityPrivateKeyPairs;
     fn get_vc(&self) -> VC;
     fn get_keysecure(&self) -> KeySecure;
     fn get_created_at(&self) -> DateTime<Utc>;
@@ -49,7 +49,7 @@ pub trait HolderEntityAccessor {
 pub trait UsecaseBuilder<TAccountEntity, TCredentialEntity>: AccountUsecaseImplementer
 where
     TAccountEntity: AccountEntityAccessor,
-    TCredentialEntity: CredentialEntityAccessor
+    TCredentialEntity: CredentialEntityAccessor,
 {
     /// `generate_credential` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
@@ -105,12 +105,21 @@ pub trait RepoBuilder {
     type CredentialEntityAccessor: CredentialEntityAccessor;
     type HolderEntityAccessor: HolderEntityAccessor;
 
-    async fn save_credential(&self, data: &Self::CredentialEntityAccessor) -> Result<(), VerifiableError>;
-    async fn save_credential_holder(&self, data: &Self::HolderEntityAccessor) -> Result<(), VerifiableError>;
+    async fn save_credential(
+        &self,
+        data: &Self::CredentialEntityAccessor,
+    ) -> Result<(), VerifiableError>;
+    async fn save_credential_holder(
+        &self,
+        data: &Self::HolderEntityAccessor,
+    ) -> Result<(), VerifiableError>;
     async fn remove_credential_by_id(&self, id: String) -> Result<(), VerifiableError>;
     async fn remove_credential_by_did(&self, did: String) -> Result<(), VerifiableError>;
 
-    async fn get_credential_by_id(&self, id: String) -> Result<Self::CredentialEntityAccessor, VerifiableError>;
+    async fn get_credential_by_id(
+        &self,
+        id: String,
+    ) -> Result<Self::CredentialEntityAccessor, VerifiableError>;
 
     async fn list_credentials_by_ids(
         &self,

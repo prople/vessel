@@ -110,7 +110,7 @@ mod tests {
 
         #[async_trait]
         impl RepositoryBuilder for FakeRepo {
-            type EntityAccessor = Account; 
+            type EntityAccessor = Account;
             async fn save_account(&self, account: &Account) -> Result<(), AccountError>;
             async fn remove_account_by_did(&self, did: String) -> Result<(), AccountError>;
             async fn get_account_by_did(&self, did: String) -> Result<Account, AccountError>;
@@ -126,10 +126,7 @@ mod tests {
         }
     );
 
-    fn generate_usecase<
-        TRepo: RepositoryBuilder + Sync,
-        TRPCClient: RPCClientBuilder + Sync,
-    >(
+    fn generate_usecase<TRepo: RepositoryBuilder + Sync, TRPCClient: RPCClientBuilder + Sync>(
         repo: TRepo,
         rpc: TRPCClient,
     ) -> Usecase<TRepo, TRPCClient> {

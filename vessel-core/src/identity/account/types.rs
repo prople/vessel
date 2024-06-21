@@ -118,8 +118,7 @@ pub trait UsecaseImplementer {
 /// persistent storage. User should be able to choose their selected
 /// persistent storage or database such as SQL or NoSQL
 #[async_trait]
-pub trait RepositoryBuilder
-{
+pub trait RepositoryBuilder {
     type EntityAccessor: AccountEntityAccessor;
 
     async fn save_account(&self, account: &Self::EntityAccessor) -> Result<(), AccountError>;
