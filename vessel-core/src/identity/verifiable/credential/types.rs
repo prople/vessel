@@ -1,9 +1,12 @@
 use multiaddr::Multiaddr;
 
 use rst_common::standard::async_trait::async_trait;
+use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde_json::value::Value;
 
+use prople_crypto::keysecure::KeySecure;
 use prople_did_core::verifiable::objects::VC;
+use prople_did_core::keys::IdentityPrivateKeyPairs;
 
 use crate::identity::account::types::{
     AccountEntityAccessor, UsecaseImplementer as AccountUsecaseImplementer,
@@ -11,8 +14,29 @@ use crate::identity::account::types::{
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
-use super::Credential;
-use super::Holder;
+/// `CredentialEntityAccessor` it's an interface used as a getter objects
+/// for all `Credential` property fields
+pub trait CredentialEntityAccessor {
+    fn get_id(&self) -> String;
+    fn get_did(&self) -> String;
+    fn get_did_vc(&self) -> String;
+    fn get_did_vc_doc_private_keys(&self) -> IdentityPrivateKeyPairs; 
+    fn get_vc(&self) -> VC;
+    fn get_keysecure(&self) -> KeySecure;
+    fn get_created_at(&self) -> DateTime<Utc>;
+    fn get_updated_at(&self) -> DateTime<Utc>;
+}
+
+/// `HolderEntityAccessor`  it's an interface used as a getter object for all `Holder` property
+/// fields
+pub trait HolderEntityAccessor {
+    fn get_id(&self) -> String;
+    fn get_vc(&self) -> VC;
+    fn get_request_id(&self) -> String;
+    fn get_issuer_addr(&self) -> Multiaddr;
+    fn get_created_at(&self) -> DateTime<Utc>;
+    fn get_updated_at(&self) -> DateTime<Utc>;
+}
 
 /// `CredentialUsecaseBuilder` is a main trait to build the usecase business logic
 /// for the `Verifiable` domain. This trait will inherit trait behaviors from [`AccountUsecaseEntryPoint`]
@@ -22,9 +46,10 @@ use super::Holder;
 /// This trait will maintain all logic that relate with the `VC (Verifiable Credential)` and also
 /// `VP (Verifiable Presentation)`
 #[async_trait]
-pub trait UsecaseBuilder<TAccountEntity>: AccountUsecaseImplementer
+pub trait UsecaseBuilder<TAccountEntity, TCredentialEntity>: AccountUsecaseImplementer
 where
     TAccountEntity: AccountEntityAccessor,
+    TCredentialEntity: CredentialEntityAccessor
 {
     /// `generate_credential` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
@@ -39,7 +64,7 @@ where
         did_issuer: String,
         credential: Value,
         proof_params: Option<ProofParams>,
-    ) -> Result<Credential, VerifiableError>;
+    ) -> Result<TCredentialEntity, VerifiableError>;
 
     /// `send_credential_to_holder` used to send a `VC` to some `Holder`, if there is no error it means the `VC`
     /// already received successfully.
@@ -72,28 +97,31 @@ where
         &self,
         did: String,
         pagination: Option<PaginationParams>,
-    ) -> Result<Vec<Credential>, VerifiableError>;
+    ) -> Result<Vec<TCredentialEntity>, VerifiableError>;
 }
 
 #[async_trait]
 pub trait RepoBuilder {
-    async fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
-    async fn save_credential_holder(&self, data: Holder) -> Result<(), VerifiableError>;
+    type CredentialEntityAccessor: CredentialEntityAccessor;
+    type HolderEntityAccessor: HolderEntityAccessor;
+
+    async fn save_credential(&self, data: &Self::CredentialEntityAccessor) -> Result<(), VerifiableError>;
+    async fn save_credential_holder(&self, data: &Self::HolderEntityAccessor) -> Result<(), VerifiableError>;
     async fn remove_credential_by_id(&self, id: String) -> Result<(), VerifiableError>;
     async fn remove_credential_by_did(&self, did: String) -> Result<(), VerifiableError>;
 
-    async fn get_credential_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
+    async fn get_credential_by_id(&self, id: String) -> Result<Self::CredentialEntityAccessor, VerifiableError>;
 
     async fn list_credentials_by_ids(
         &self,
         ids: Vec<String>,
-    ) -> Result<Vec<Credential>, VerifiableError>;
+    ) -> Result<Vec<Self::CredentialEntityAccessor>, VerifiableError>;
 
     async fn list_credentials_by_did(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
-    ) -> Result<Vec<Credential>, VerifiableError>;
+    ) -> Result<Vec<Self::CredentialEntityAccessor>, VerifiableError>;
 }
 
 #[async_trait]

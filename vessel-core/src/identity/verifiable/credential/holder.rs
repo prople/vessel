@@ -8,28 +8,29 @@ use rst_common::standard::uuid::Uuid;
 use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::verifiable::types::VerifiableError;
+use super::types::HolderEntityAccessor;
 
 /// `CredentialHolder` is an entity used by a `Holder` to save incoming [`VC`] that sent
 /// from `Issuer`
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(crate = "self::serde")]
 pub struct Holder {
-    pub id: String,
-    pub vc: VC,
+    pub(crate) id: String,
+    pub(crate) vc: VC,
 
     #[serde(rename = "requestID")]
-    pub request_id: String,
+    pub(crate) request_id: String,
 
     #[serde(rename = "issuerAddr")]
-    pub issuer_addr: Multiaddr,
+    pub(crate) issuer_addr: Multiaddr,
 
     #[serde(with = "ts_seconds")]
     #[serde(rename = "createdAt")]
-    pub created_at: DateTime<Utc>,
+    pub(crate) created_at: DateTime<Utc>,
 
     #[serde(with = "ts_seconds")]
     #[serde(rename = "updatedAt")]
-    pub updated_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
 }
 
 impl Holder {
@@ -47,5 +48,31 @@ impl Holder {
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })
+    }
+}
+
+impl HolderEntityAccessor for Holder {
+    fn get_id(&self) -> String {
+        self.id.to_owned()
+    }
+
+    fn get_vc(&self) -> VC {
+        self.vc.to_owned()
+    }
+
+    fn get_issuer_addr(&self) -> Multiaddr {
+        self.issuer_addr.to_owned()
+    }
+
+    fn get_request_id(&self) -> String {
+        self.request_id.to_owned()
+    }
+
+    fn get_created_at(&self) -> DateTime<Utc> {
+        self.created_at.to_owned()
+    }
+
+    fn get_updated_at(&self) -> DateTime<Utc> {
+        self.updated_at.to_owned()
     }
 }

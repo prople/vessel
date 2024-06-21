@@ -20,7 +20,7 @@ use super::{Credential, Holder};
 pub struct Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
-    TRepo: RepoBuilder,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
     TAccount: AccountUsecaseBuilder<Account> + Clone,
 {
     repo: TRepo,
@@ -32,7 +32,7 @@ impl<TRPCClient, TRepo, TAccount>
     Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
-    TRepo: RepoBuilder,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
     TAccount: AccountUsecaseBuilder<Account> + Clone,
 {
     pub fn new(repo: TRepo, rpc: TRPCClient, account: TAccount) -> Self {
@@ -44,7 +44,7 @@ impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer
     for Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder,
-    TRepo: RepoBuilder,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
     TAccount: AccountUsecaseBuilder<Account> + Clone,
 {
     type Accessor = Account;
@@ -56,11 +56,11 @@ where
 }
 
 #[async_trait]
-impl<TRPCClient, TRepo, TAccount> UsecaseBuilder<Account>
+impl<TRPCClient, TRepo, TAccount> UsecaseBuilder<Account, Credential>
     for Usecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: RPCBuilder + Sync,
-    TRepo: RepoBuilder + Sync,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
     TAccount: AccountUsecaseBuilder<Account> + Clone + Sync + Send,
 {
     async fn generate_credential(
@@ -88,7 +88,7 @@ where
 
         let _ = self
             .repo
-            .save_credential(credential.clone())
+            .save_credential(&credential.clone())
             .await
             .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
 
@@ -122,7 +122,7 @@ where
         }
 
         let cred_holder = Holder::new(request_id, issuer_addr, vc)?;
-        self.repo.save_credential_holder(cred_holder).await
+        self.repo.save_credential_holder(&cred_holder).await
     }
 
     async fn send_credential_to_holder(
@@ -172,8 +172,11 @@ mod tests {
 
         #[async_trait]
         impl RepoBuilder for FakeRepo {
-            async fn save_credential(&self, data: Credential) -> Result<(), VerifiableError>;
-            async fn save_credential_holder(&self, data: Holder) -> Result<(), VerifiableError>;
+            type CredentialEntityAccessor = Credential;
+            type HolderEntityAccessor = Holder;
+
+            async fn save_credential(&self, data: &Credential) -> Result<(), VerifiableError>;
+            async fn save_credential_holder(&self, data: &Holder) -> Result<(), VerifiableError>;
             async fn remove_credential_by_id(&self, id: String) -> Result<(), VerifiableError>;
             async fn remove_credential_by_did(&self, did: String) -> Result<(), VerifiableError>;
 
@@ -241,7 +244,7 @@ mod tests {
     }
 
     fn generate_usecase<
-        TRepo: RepoBuilder,
+        TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
         TRPCClient: RPCBuilder,
         TAccount: AccountUsecaseBuilder<Account> + Clone,
     >(

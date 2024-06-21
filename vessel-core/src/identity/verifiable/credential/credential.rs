@@ -17,25 +17,27 @@ use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
+use super::types::CredentialEntityAccessor;
+
 /// `Credential` is a main entity used to save to internal persistent storage
 /// This data must contain a [`VC`] and [`KeySecure`]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(crate = "self::serde")]
 pub struct Credential {
-    pub id: String,
-    pub did: String,
-    pub did_vc: String,
-    pub did_vc_doc_private_keys: IdentityPrivateKeyPairs,
-    pub vc: VC,
-    pub keysecure: KeySecure,
+    pub(crate) id: String,
+    pub(crate) did: String,
+    pub(crate) did_vc: String,
+    pub(crate) did_vc_doc_private_keys: IdentityPrivateKeyPairs,
+    pub(crate) vc: VC,
+    pub(crate) keysecure: KeySecure,
 
     #[serde(with = "ts_seconds")]
     #[serde(rename = "createdAt")]
-    pub created_at: DateTime<Utc>,
+    pub(crate) created_at: DateTime<Utc>,
 
     #[serde(with = "ts_seconds")]
     #[serde(rename = "updatedAt")]
-    pub updated_at: DateTime<Utc>,
+    pub(crate) updated_at: DateTime<Utc>,
 }
 
 impl Credential {
@@ -112,6 +114,40 @@ impl Credential {
         );
 
         Ok(cred)
+    }
+}
+
+impl CredentialEntityAccessor for Credential {
+    fn get_id(&self) -> String {
+        self.id.to_owned()
+    }
+
+    fn get_did(&self) -> String {
+        self.did.to_owned()
+    }
+
+    fn get_did_vc(&self) -> String {
+        self.did_vc.to_owned()
+    }
+
+    fn get_vc(&self) -> VC {
+        self.vc.to_owned()
+    }
+
+    fn get_keysecure(&self) -> KeySecure {
+        self.keysecure.to_owned()
+    }
+
+    fn get_did_vc_doc_private_keys(&self) -> IdentityPrivateKeyPairs {
+        self.did_vc_doc_private_keys.to_owned()
+    }
+
+    fn get_created_at(&self) -> DateTime<Utc> {
+        self.created_at.to_owned()
+    }
+
+    fn get_updated_at(&self) -> DateTime<Utc> {
+        self.updated_at.to_owned()
     }
 }
 
