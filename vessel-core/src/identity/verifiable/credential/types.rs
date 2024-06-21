@@ -8,9 +8,7 @@ use prople_crypto::keysecure::KeySecure;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::account::types::{
-    AccountEntityAccessor, UsecaseImplementer as AccountUsecaseImplementer,
-};
+use crate::identity::account::types::{AccountAPI, AccountEntityAccessor};
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
@@ -38,19 +36,10 @@ pub trait HolderEntityAccessor {
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
 
-/// `CredentialUsecaseBuilder` is a main trait to build the usecase business logic
-/// for the `Verifiable` domain. This trait will inherit trait behaviors from [`AccountUsecaseEntryPoint`]
-/// this mean, the implementer need to define the `Implementer` type and define how to
-/// get the `AccountUsecase` object
-///
-/// This trait will maintain all logic that relate with the `VC (Verifiable Credential)` and also
-/// `VP (Verifiable Presentation)`
 #[async_trait]
-pub trait UsecaseBuilder<TAccountEntity, TCredentialEntity>: AccountUsecaseImplementer
-where
-    TAccountEntity: AccountEntityAccessor,
-    TCredentialEntity: CredentialEntityAccessor,
-{
+pub trait CredentialAPI {
+    type EntityAccessor: CredentialEntityAccessor;
+
     /// `generate_credential` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
     /// our implementer of [`VerifiableRepoBuilder`]
@@ -64,7 +53,7 @@ where
         did_issuer: String,
         credential: Value,
         proof_params: Option<ProofParams>,
-    ) -> Result<TCredentialEntity, VerifiableError>;
+    ) -> Result<Self::EntityAccessor, VerifiableError>;
 
     /// `send_credential_to_holder` used to send a `VC` to some `Holder`, if there is no error it means the `VC`
     /// already received successfully.
@@ -97,7 +86,7 @@ where
         &self,
         did: String,
         pagination: Option<PaginationParams>,
-    ) -> Result<Vec<TCredentialEntity>, VerifiableError>;
+    ) -> Result<Vec<Self::EntityAccessor>, VerifiableError>;
 }
 
 #[async_trait]
@@ -146,4 +135,33 @@ pub trait RPCBuilder {
         addr: Multiaddr,
         vc: VC,
     ) -> Result<(), VerifiableError>;
+}
+
+/// `CredentialUsecaseBuilder` is a main trait to build the usecase business logic
+/// for the `Verifiable` domain. This trait will inherit trait behaviors from [`AccountUsecaseEntryPoint`]
+/// this mean, the implementer need to define the `Implementer` type and define how to
+/// get the `AccountUsecase` object
+///
+/// This trait will maintain all logic that relate with the `VC (Verifiable Credential)` and also
+/// `VP (Verifiable Presentation)`
+#[async_trait]
+pub trait UsecaseBuilder<TAccountEntity, TCredentialEntity, THolderEntity>:
+    CredentialAPI<EntityAccessor = TCredentialEntity>
+where
+    TAccountEntity: AccountEntityAccessor,
+    TCredentialEntity: CredentialEntityAccessor,
+    THolderEntity: HolderEntityAccessor,
+{
+    type AccountAPIImplementer: AccountAPI;
+    type RepoImplementer: RepoBuilder<
+            CredentialEntityAccessor = TCredentialEntity,
+            HolderEntityAccessor = THolderEntity,
+        > + Clone
+        + Sync
+        + Send;
+    type RPCImplementer: RPCBuilder + Clone + Sync + Send;
+
+    fn account(&self) -> Self::AccountAPIImplementer;
+    fn repo(&self) -> Self::RepoImplementer;
+    fn rpc(&self) -> Self::RPCImplementer;
 }

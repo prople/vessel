@@ -6,10 +6,7 @@ use prople_crypto::eddsa::keypair::KeyPair;
 use prople_did_core::types::CONTEXT_VC_V2;
 use prople_did_core::verifiable::objects::{Proof, ProofValue, VP};
 
-use crate::identity::account::types::{
-    UsecaseBuilder as AccountUsecaseBuilder, UsecaseImplementer as AccountUsecaseImplementer,
-};
-use crate::identity::account::Account;
+use crate::identity::account::{types::AccountAPI, Account};
 
 use super::types::{
     Presentation, VerifiableError, VerifiablePresentationUsecaseBuilder, VerifiableRPCBuilder,
@@ -22,7 +19,7 @@ pub struct PresentationUsecase<TRPCClient, TRepo, TAccount>
 where
     TRPCClient: VerifiableRPCBuilder,
     TRepo: VerifiableRepoBuilder,
-    TAccount: AccountUsecaseBuilder<Account> + Clone,
+    TAccount: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
     repo: TRepo,
     rpc: TRPCClient,
@@ -33,25 +30,10 @@ impl<TRPCClient, TRepo, TAccount> PresentationUsecase<TRPCClient, TRepo, TAccoun
 where
     TRPCClient: VerifiableRPCBuilder,
     TRepo: VerifiableRepoBuilder,
-    TAccount: AccountUsecaseBuilder<Account> + Clone,
+    TAccount: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
     pub fn new(repo: TRepo, rpc: TRPCClient, account: TAccount) -> Self {
         Self { repo, rpc, account }
-    }
-}
-
-impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer
-    for PresentationUsecase<TRPCClient, TRepo, TAccount>
-where
-    TRPCClient: VerifiableRPCBuilder,
-    TRepo: VerifiableRepoBuilder,
-    TAccount: AccountUsecaseBuilder<Account> + Clone,
-{
-    type Accessor = Account;
-    type Implementer = TAccount;
-
-    fn account(&self) -> Self::Implementer {
-        self.account.clone()
     }
 }
 
@@ -61,8 +43,14 @@ impl<TRPCClient, TRepo, TAccount> VerifiablePresentationUsecaseBuilder
 where
     TRPCClient: VerifiableRPCBuilder + Sync,
     TRepo: VerifiableRepoBuilder + Sync,
-    TAccount: AccountUsecaseBuilder<Account> + Clone + Sync + Send,
+    TAccount: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
+    type AccountAPIImplementer = TAccount;
+
+    fn account(&self) -> Self::AccountAPIImplementer {
+        self.account.clone()
+    }
+
     async fn vp_generate(
         &self,
         password: String,
@@ -239,7 +227,9 @@ mod tests {
         }
 
         #[async_trait]
-        impl AccountUsecaseBuilder<Account> for FakeAccountUsecase {
+        impl AccountAPI for FakeAccountUsecase {
+            type EntityAccessor = Account;
+
             async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
@@ -263,7 +253,7 @@ mod tests {
     fn generate_usecase<
         TRepo: VerifiableRepoBuilder,
         TRPCClient: VerifiableRPCBuilder,
-        TAccount: AccountUsecaseBuilder<Account> + Clone,
+        TAccount: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     >(
         repo: TRepo,
         rpc: TRPCClient,

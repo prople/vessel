@@ -12,9 +12,10 @@ use rst_common::standard::serde::{self, Deserialize, Serialize};
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::{VC, VP};
 
+use crate::identity::account::types::AccountAPI;
+
 use super::proof::types::Params as ProofParams;
 use super::Credential;
-use crate::identity::account::types::UsecaseImplementer as AccountUsecaseImplementer;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
@@ -94,7 +95,11 @@ pub struct PaginationParams {
 }
 
 #[async_trait]
-pub trait VerifiablePresentationUsecaseBuilder: AccountUsecaseImplementer {
+pub trait VerifiablePresentationUsecaseBuilder {
+    type AccountAPIImplementer: AccountAPI;
+
+    fn account(&self) -> Self::AccountAPIImplementer;
+
     async fn vp_generate(
         &self,
         password: String,

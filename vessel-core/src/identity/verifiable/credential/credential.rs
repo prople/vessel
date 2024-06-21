@@ -11,7 +11,7 @@ use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::account::types::{AccountEntityAccessor, UsecaseBuilder};
+use crate::identity::account::types::{AccountAPI, AccountEntityAccessor};
 
 use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
@@ -60,8 +60,8 @@ impl Credential {
         }
     }
 
-    pub async fn generate<TEntity: AccountEntityAccessor + Clone>(
-        account_builder: impl UsecaseBuilder<TEntity>,
+    pub async fn generate(
+        account_builder: impl AccountAPI,
         password: String,
         did_issuer: String,
         claims: Value,
@@ -172,7 +172,6 @@ mod tests {
     use prople_did_core::verifiable::objects::ProofValue;
 
     use crate::identity::account::types::AccountError;
-    use crate::identity::account::types::UsecaseBuilder;
     use crate::identity::account::Account as AccountIdentity;
 
     mock!(
@@ -183,7 +182,8 @@ mod tests {
         }
 
         #[async_trait]
-        impl UsecaseBuilder<AccountIdentity> for FakeAccountUsecase {
+        impl AccountAPI for FakeAccountUsecase {
+            type EntityAccessor = AccountIdentity;
 
             async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(

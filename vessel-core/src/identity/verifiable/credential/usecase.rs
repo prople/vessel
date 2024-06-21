@@ -5,61 +5,70 @@ use rst_common::standard::serde_json::Value;
 
 use prople_did_core::verifiable::objects::VC;
 
-use crate::identity::account::types::{
-    UsecaseBuilder as AccountUsecaseBuilder, UsecaseImplementer as AccountUsecaseImplementer,
-};
-
+use crate::identity::account::types::AccountAPI;
 use crate::identity::account::Account;
+
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
-use super::types::{RPCBuilder, RepoBuilder, UsecaseBuilder};
+use super::types::{CredentialAPI, RPCBuilder, RepoBuilder, UsecaseBuilder};
 use super::{Credential, Holder};
 
-pub struct Usecase<TRPCClient, TRepo, TAccount>
+pub struct Usecase<TRPCClient, TRepo, TAccountAPI>
 where
-    TRPCClient: RPCBuilder,
-    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
-    TAccount: AccountUsecaseBuilder<Account> + Clone,
+    TRPCClient: RPCBuilder + Clone + Sync + Send,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Clone + Sync + Send,
+    TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
     repo: TRepo,
     rpc: TRPCClient,
-    account: TAccount,
+    account: TAccountAPI,
 }
 
-impl<TRPCClient, TRepo, TAccount> Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccountAPI> Usecase<TRPCClient, TRepo, TAccountAPI>
 where
-    TRPCClient: RPCBuilder,
-    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
-    TAccount: AccountUsecaseBuilder<Account> + Clone,
+    TRPCClient: RPCBuilder + Clone + Sync + Send,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Clone + Sync + Send,
+    TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
-    pub fn new(repo: TRepo, rpc: TRPCClient, account: TAccount) -> Self {
+    pub fn new(repo: TRepo, rpc: TRPCClient, account: TAccountAPI) -> Self {
         Self { repo, rpc, account }
     }
 }
 
-impl<TRPCClient, TRepo, TAccount> AccountUsecaseImplementer for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccountAPI> UsecaseBuilder<Account, Credential, Holder> for Usecase<TRPCClient, TRepo, TAccountAPI>
 where
-    TRPCClient: RPCBuilder,
-    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
-    TAccount: AccountUsecaseBuilder<Account> + Clone,
+    TRPCClient: RPCBuilder + Clone + Sync + Send,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Clone + Sync + Send,
+    TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
-    type Accessor = Account;
-    type Implementer = TAccount;
-
-    fn account(&self) -> Self::Implementer {
+    type AccountAPIImplementer = TAccountAPI;
+    type RPCImplementer = TRPCClient;
+    type RepoImplementer = TRepo;
+    
+    fn account(&self) -> Self::AccountAPIImplementer {
         self.account.clone()
+    }
+
+    fn repo(&self) -> Self::RepoImplementer {
+        self.repo.clone()
+    }
+
+    fn rpc(&self) -> Self::RPCImplementer {
+        self.rpc.clone()
     }
 }
 
+
 #[async_trait]
-impl<TRPCClient, TRepo, TAccount> UsecaseBuilder<Account, Credential>
-    for Usecase<TRPCClient, TRepo, TAccount>
+impl<TRPCClient, TRepo, TAccountAPI> CredentialAPI for Usecase<TRPCClient, TRepo, TAccountAPI> 
 where
-    TRPCClient: RPCBuilder + Sync,
-    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
-    TAccount: AccountUsecaseBuilder<Account> + Clone + Sync + Send,
+    TRPCClient: RPCBuilder + Clone + Sync + Send,
+    TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Clone + Sync + Send,
+    TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
+    type EntityAccessor = Credential;
+
     async fn generate_credential(
         &self,
         password: String,
@@ -84,7 +93,7 @@ where
                 .await?;
 
         let _ = self
-            .repo
+            .repo()
             .save_credential(&credential.clone())
             .await
             .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
@@ -97,7 +106,7 @@ where
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Credential>, VerifiableError> {
-        self.repo.list_credentials_by_did(did, pagination).await
+        self.repo().list_credentials_by_did(did, pagination).await
     }
 
     async fn receive_credential_by_holder(
@@ -119,7 +128,7 @@ where
         }
 
         let cred_holder = Holder::new(request_id, issuer_addr, vc)?;
-        self.repo.save_credential_holder(&cred_holder).await
+        self.repo().save_credential_holder(&cred_holder).await
     }
 
     async fn send_credential_to_holder(
@@ -133,8 +142,8 @@ where
             ));
         }
 
-        let cred = self.repo.get_credential_by_id(id).await?;
-        self.rpc.send_credential_to_holder(receiver, cred.vc).await
+        let cred = self.repo().get_credential_by_id(id).await?;
+        self.rpc().send_credential_to_holder(receiver, cred.vc).await
     }
 }
 
@@ -167,6 +176,10 @@ mod tests {
     mock!(
         FakeRepo{}
 
+        impl Clone for FakeRepo {
+            fn clone(&self) -> Self;
+        }
+
         #[async_trait]
         impl RepoBuilder for FakeRepo {
             type CredentialEntityAccessor = Credential;
@@ -195,6 +208,10 @@ mod tests {
     mock!(
         FakeRPCClient{}
 
+        impl Clone for FakeRPCClient {
+            fn clone(&self) -> Self;
+        }
+
         #[async_trait]
         impl RPCBuilder for FakeRPCClient {
             async fn send_credential_to_holder(
@@ -219,7 +236,9 @@ mod tests {
         }
 
         #[async_trait]
-        impl AccountUsecaseBuilder<AccountIdentity> for FakeAccountUsecase {
+        impl AccountAPI for FakeAccountUsecase {
+            type EntityAccessor = AccountIdentity;
+
             async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
@@ -241,9 +260,9 @@ mod tests {
     }
 
     fn generate_usecase<
-        TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync,
-        TRPCClient: RPCBuilder,
-        TAccount: AccountUsecaseBuilder<Account> + Clone,
+        TRepo: RepoBuilder<CredentialEntityAccessor = Credential, HolderEntityAccessor = Holder> + Clone + Sync + Send,
+        TRPCClient: RPCBuilder + Clone + Sync + Send,
+        TAccount: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     >(
         repo: TRepo,
         rpc: TRPCClient,
@@ -265,7 +284,12 @@ mod tests {
         let did_vc_cloned = did_vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_credential().returning(|_| Ok(()));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_credential().returning(|_| Ok(()));
+
+            expected
+        });
 
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(move || {
@@ -349,7 +373,12 @@ mod tests {
         let did_vc_cloned = did_vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_credential().returning(|_| Ok(()));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_credential().returning(|_| Ok(()));
+
+            expected
+        });
 
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(move || {
@@ -578,8 +607,13 @@ mod tests {
         let did_vc_cloned = did_vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_credential()
-            .returning(|_| Err(VerifiableError::RepoError("repo error".to_string())));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_credential()
+                .returning(|_| Err(VerifiableError::RepoError("repo error".to_string())));
+
+            expected
+        });
 
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(move || {
@@ -649,37 +683,48 @@ mod tests {
         let vc_cloned = vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_get_credential_by_id()
-            .with(eq("cred-id".to_string()))
-            .return_once(move |_| {
-                Ok(Credential {
-                    id: "cred-id".to_string(),
-                    did: did_issuer_value,
-                    did_vc: did_vc.to_owned().identity().unwrap().value(),
-                    did_vc_doc_private_keys: did_vc
-                        .to_owned()
-                        .identity()
-                        .unwrap()
-                        .build_private_keys("password".to_string())
-                        .unwrap(),
-                    vc: vc_cloned,
-                    keysecure: did_vc_cloned
-                        .account()
-                        .privkey()
-                        .to_keysecure("password".to_string())
-                        .unwrap(),
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
-                })
-            });
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_get_credential_by_id()
+                .with(eq("cred-id".to_string()))
+                .return_once(move |_| {
+                    Ok(Credential {
+                        id: "cred-id".to_string(),
+                        did: did_issuer_value,
+                        did_vc: did_vc.to_owned().identity().unwrap().value(),
+                        did_vc_doc_private_keys: did_vc
+                            .to_owned()
+                            .identity()
+                            .unwrap()
+                            .build_private_keys("password".to_string())
+                            .unwrap(),
+                        vc: vc_cloned,
+                        keysecure: did_vc_cloned
+                            .account()
+                            .privkey()
+                            .to_keysecure("password".to_string())
+                            .unwrap(),
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    })
+                });
+
+            expected
+        });
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let addr_cloned = addr.clone();
 
         let mut rpc = MockFakeRPCClient::new();
-        rpc.expect_send_credential_to_holder()
-            .with(eq(addr.clone()), eq(vc))
-            .times(1)
-            .returning(|_, _| Ok(()));
+        rpc.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRPCClient::new();
+            expected.expect_send_credential_to_holder()
+                .with(eq(addr_cloned.clone()), eq(vc))
+                .times(1)
+                .returning(|_, _| Ok(()));
+
+            expected
+        });
 
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
@@ -714,9 +759,14 @@ mod tests {
     #[tokio::test]
     async fn test_vc_send_error_repo() {
         let mut repo = MockFakeRepo::new();
-        repo.expect_get_credential_by_id()
-            .with(eq("cred-id".to_string()))
-            .return_once(move |_| Err(VerifiableError::RepoError("error repo".to_string())));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_get_credential_by_id()
+                .with(eq("cred-id".to_string()))
+                .return_once(move |_| Err(VerifiableError::RepoError("error repo".to_string())));
+
+            expected
+        });
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let rpc = MockFakeRPCClient::new();
@@ -745,36 +795,48 @@ mod tests {
         let vc_cloned = vc.clone();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_get_credential_by_id()
-            .with(eq("cred-id".to_string()))
-            .return_once(move |_| {
-                Ok(Credential {
-                    id: "cred-id".to_string(),
-                    did: did_issuer_value,
-                    did_vc: did_vc.to_owned().identity().unwrap().value(),
-                    did_vc_doc_private_keys: did_vc
-                        .to_owned()
-                        .identity()
-                        .unwrap()
-                        .build_private_keys("password".to_string())
-                        .unwrap(),
-                    vc: vc_cloned,
-                    keysecure: did_vc_cloned
-                        .account()
-                        .privkey()
-                        .to_keysecure("password".to_string())
-                        .unwrap(),
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
-                })
-            });
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_get_credential_by_id()
+                .with(eq("cred-id".to_string()))
+                .return_once(move |_| {
+                    Ok(Credential {
+                        id: "cred-id".to_string(),
+                        did: did_issuer_value,
+                        did_vc: did_vc.to_owned().identity().unwrap().value(),
+                        did_vc_doc_private_keys: did_vc
+                            .to_owned()
+                            .identity()
+                            .unwrap()
+                            .build_private_keys("password".to_string())
+                            .unwrap(),
+                        vc: vc_cloned,
+                        keysecure: did_vc_cloned
+                            .account()
+                            .privkey()
+                            .to_keysecure("password".to_string())
+                            .unwrap(),
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    })
+                });
+
+            expected
+        });
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let addr_cloned = addr.clone();
+
         let mut rpc = MockFakeRPCClient::new();
-        rpc.expect_send_credential_to_holder()
-            .with(eq(addr.clone()), eq(vc))
-            .times(1)
-            .returning(|_, _| Err(VerifiableError::VCSendError("send error".to_string())));
+        rpc.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRPCClient::new();
+            expected.expect_send_credential_to_holder()
+                .with(eq(addr_cloned.clone()), eq(vc))
+                .times(1)
+                .returning(|_, _| Err(VerifiableError::VCSendError("send error".to_string())));
+
+            expected
+        });
 
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
@@ -791,7 +853,12 @@ mod tests {
     #[tokio::test]
     async fn test_receive_by_holder() {
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_credential_holder().returning(|_| Ok(()));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_credential_holder().returning(|_| Ok(()));
+
+            expected
+        });
 
         let rpc = MockFakeRPCClient::new();
         let account = MockFakeAccountUsecase::new();

@@ -5,7 +5,8 @@ use prople_did_core::doc::types::Doc;
 use prople_did_core::hashlink::verify_from_json;
 
 use super::types::{
-    AccountEntityAccessor, AccountError, RPCClientBuilder, RepositoryBuilder, UsecaseBuilder,
+    AccountAPI, AccountEntityAccessor, AccountError, RPCClientBuilder, RepositoryBuilder,
+    UsecaseBuilder,
 };
 
 use super::Account;
@@ -16,8 +17,8 @@ use super::URI;
 /// This object depends on the implementation of [`AccountRepositoryBuilder`]
 pub struct Usecase<TRepo, TRPCClient>
 where
-    TRepo: RepositoryBuilder + Sync,
-    TRPCClient: RPCClientBuilder,
+    TRepo: RepositoryBuilder<EntityAccessor = Account> + Clone + Sync + Send,
+    TRPCClient: RPCClientBuilder + Clone + Sync + Send,
 {
     repo: TRepo,
     rpc: TRPCClient,
@@ -25,8 +26,8 @@ where
 
 impl<TRepo, TRPCClient> Usecase<TRepo, TRPCClient>
 where
-    TRepo: RepositoryBuilder + Sync,
-    TRPCClient: RPCClientBuilder,
+    TRepo: RepositoryBuilder<EntityAccessor = Account> + Clone + Sync + Send,
+    TRPCClient: RPCClientBuilder + Clone + Sync + Send,
 {
     pub fn new(repo: TRepo, rpc: TRPCClient) -> Self {
         Self { repo, rpc }
@@ -36,13 +37,33 @@ where
 #[async_trait]
 impl<TRepo, TRPCClient> UsecaseBuilder<Account> for Usecase<TRepo, TRPCClient>
 where
-    TRepo: RepositoryBuilder<EntityAccessor = Account> + Sync,
-    TRPCClient: RPCClientBuilder + Sync,
+    TRepo: RepositoryBuilder<EntityAccessor = Account> + Clone + Sync + Send,
+    TRPCClient: RPCClientBuilder + Clone + Sync + Send,
 {
+    type RepoImplementer = TRepo;
+    type RPCImplementer = TRPCClient;
+
+    fn repo(&self) -> Self::RepoImplementer {
+        self.repo.clone()
+    }
+
+    fn rpc(&self) -> Self::RPCImplementer {
+        self.rpc.clone()
+    }
+}
+
+#[async_trait]
+impl<TRepo, TRPCClient> AccountAPI for Usecase<TRepo, TRPCClient>
+where
+    TRepo: RepositoryBuilder<EntityAccessor = Account> + Clone + Sync + Send,
+    TRPCClient: RPCClientBuilder + Clone + Sync + Send,
+{
+    type EntityAccessor = Account;
+
     async fn generate_did(&self, password: String) -> Result<Account, AccountError> {
         let account = Account::generate(password)?;
         let _ = self
-            .repo
+            .repo()
             .save_account(&account)
             .await
             .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
@@ -57,7 +78,7 @@ where
         params: Option<Params>,
     ) -> Result<String, AccountError> {
         let account = self
-            .repo
+            .repo()
             .get_account_by_did(did)
             .await
             .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
@@ -67,7 +88,7 @@ where
 
     async fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError> {
         let (uri_addr, uri_params, uri_did) = URI::parse(uri)?;
-        let doc = self.rpc.resolve_did_doc(uri_addr, uri_did).await?;
+        let doc = self.rpc().resolve_did_doc(uri_addr, uri_did).await?;
         verify_from_json(doc.clone(), uri_params.hl.unwrap())
             .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
 
@@ -75,16 +96,16 @@ where
     }
 
     async fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError> {
-        let account = self.repo.get_account_by_did(did).await?;
+        let account = self.repo().get_account_by_did(did).await?;
         Ok(account.get_doc())
     }
 
     async fn remove_did(&self, did: String) -> Result<(), AccountError> {
-        self.repo.remove_account_by_did(did).await
+        self.repo().remove_account_by_did(did).await
     }
 
     async fn get_account_did(&self, did: String) -> Result<Account, AccountError> {
-        self.repo.get_account_by_did(did).await
+        self.repo().get_account_by_did(did).await
     }
 }
 
@@ -108,6 +129,10 @@ mod tests {
     mock!(
         FakeRepo{}
 
+        impl Clone for FakeRepo {
+            fn clone(&self) -> Self;
+        }
+
         #[async_trait]
         impl RepositoryBuilder for FakeRepo {
             type EntityAccessor = Account;
@@ -120,13 +145,20 @@ mod tests {
     mock!(
         FakeRPCClient{}
 
+        impl Clone for FakeRPCClient {
+            fn clone(&self) -> Self;
+        }
+
         #[async_trait]
         impl RPCClientBuilder for FakeRPCClient {
             async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
         }
     );
 
-    fn generate_usecase<TRepo: RepositoryBuilder + Sync, TRPCClient: RPCClientBuilder + Sync>(
+    fn generate_usecase<
+        TRepo: RepositoryBuilder<EntityAccessor = Account> + Clone + Sync + Send,
+        TRPCClient: RPCClientBuilder + Clone + Sync + Send,
+    >(
         repo: TRepo,
         rpc: TRPCClient,
     ) -> Usecase<TRepo, TRPCClient> {
@@ -136,7 +168,12 @@ mod tests {
     #[tokio::test]
     async fn test_storage_repo_success() {
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_account().returning(|_| Ok(()));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_account().returning(|_| Ok(()));
+
+            expected
+        });
 
         let rpc = MockFakeRPCClient::new();
 
@@ -154,10 +191,15 @@ mod tests {
     #[tokio::test]
     async fn test_storage_repo_failed() {
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_account().returning(|_| {
-            Err(AccountError::GenerateIdentityError(
-                "error fake repo".to_string(),
-            ))
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_account().returning(|_| {
+                Err(AccountError::GenerateIdentityError(
+                    "error fake repo".to_string(),
+                ))
+            });
+
+            expected
         });
 
         let rpc = MockFakeRPCClient::new();
@@ -182,21 +224,26 @@ mod tests {
             identity.build_private_keys("password".to_string()).unwrap();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_account().returning(|_| Ok(()));
-        repo.expect_get_account_by_did().returning(move |_| {
-            let keysecure = did
-                .account()
-                .privkey()
-                .to_keysecure("password".to_string())
-                .unwrap();
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_account().returning(|_| Ok(()));
+            expected.expect_get_account_by_did().returning(move |_| {
+                let keysecure = did
+                    .account()
+                    .privkey()
+                    .to_keysecure("password".to_string())
+                    .unwrap();
 
-            let account = Account::new(
-                identity_value.clone(),
-                identity_doc.clone(),
-                identity_doc_private_keys.clone(),
-                keysecure,
-            );
-            Ok(account)
+                let account = Account::new(
+                    identity_value.clone(),
+                    identity_doc.clone(),
+                    identity_doc_private_keys.clone(),
+                    keysecure,
+                );
+                Ok(account)
+            });
+
+            expected
         });
 
         let rpc = MockFakeRPCClient::new();
@@ -219,20 +266,25 @@ mod tests {
             identity.build_private_keys("password".to_string()).unwrap();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_account().returning(|_| Ok(()));
-        repo.expect_get_account_by_did().returning(move |_| {
-            let keysecure = did
-                .account()
-                .privkey()
-                .to_keysecure("password".to_string())
-                .unwrap();
-            let account = Account::new(
-                identity_value.clone(),
-                identity_doc.clone(),
-                identity_doc_private_keys.clone(),
-                keysecure,
-            );
-            Ok(account)
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_account().returning(|_| Ok(()));
+            expected.expect_get_account_by_did().returning(move |_| {
+                let keysecure = did
+                    .account()
+                    .privkey()
+                    .to_keysecure("password".to_string())
+                    .unwrap();
+                let account = Account::new(
+                    identity_value.clone(),
+                    identity_doc.clone(),
+                    identity_doc_private_keys.clone(),
+                    keysecure,
+                );
+                Ok(account)
+            });
+
+            expected
         });
 
         let rpc = MockFakeRPCClient::new();
@@ -269,6 +321,7 @@ mod tests {
     #[tokio::test]
     async fn test_resolve_did_uri_success() {
         let did = DID::new();
+        let did_cloned = did.clone();
         let identity = did.identity().unwrap();
 
         let identity_repo_clone = identity.clone();
@@ -282,32 +335,46 @@ mod tests {
         let identity_clone_doc = identity.clone().to_doc();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_account().times(1).returning(|_| Ok(()));
-        repo.expect_get_account_by_did()
-            .times(1)
-            .returning(move |_| {
-                let keysecure = did
-                    .account()
-                    .privkey()
-                    .to_keysecure("password".to_string())
-                    .unwrap();
-                let account = Account::new(
-                    identity_repo_clone.clone().value(),
-                    identity_repo_clone_doc.clone(),
-                    identity_repo_clone_doc_private_keys.clone(),
-                    keysecure,
-                );
-                Ok(account)
-            });
+        repo.expect_clone().returning(move || {
+            let did = did_cloned.clone();
+            let identity_repo_clone = identity_repo_clone.clone(); 
+            let identity_repo_clone_doc = identity_repo_clone_doc.clone();
+            let identity_repo_clone_doc_private_keys = identity_repo_clone_doc_private_keys.clone();
+            
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_account().returning(|_| Ok(()));
+            expected.expect_get_account_by_did()
+                .returning(move |_| {
+                    let keysecure = did
+                        .account()
+                        .privkey()
+                        .to_keysecure("password".to_string())
+                        .unwrap();
+                    let account = Account::new(
+                        identity_repo_clone.clone().value(),
+                        identity_repo_clone_doc.clone(),
+                        identity_repo_clone_doc_private_keys.clone(),
+                        keysecure,
+                    );
+                    Ok(account)
+                });
+
+            expected
+        });
 
         let mut rpc = MockFakeRPCClient::new();
-        rpc.expect_resolve_did_doc()
-            .times(1)
-            .withf(move |addr: &Multiaddr, did: &String| {
-                let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
-                addr == &input_addr && did == &identity_clone.value()
-            })
-            .returning(move |_, _| Ok(identity_clone_doc.clone()));
+        rpc.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRPCClient::new();
+            expected.expect_resolve_did_doc()
+                .times(1)
+                .withf(move |addr: &Multiaddr, did: &String| {
+                    let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
+                    addr == &input_addr && did == &identity_clone.value()
+                })
+                .returning(move |_, _| Ok(identity_clone_doc.clone()));
+
+            expected
+        });
 
         let uc = generate_usecase(repo, rpc);
         let account = uc.generate_did("password".to_string()).await;
@@ -392,6 +459,8 @@ mod tests {
     #[tokio::test]
     async fn test_resolve_did_uri_failed_invalid_hl() {
         let did = DID::new();
+        let did_cloned = did.clone();
+
         let identity = did.identity().unwrap();
 
         let identity_repo_clone = identity.clone();
@@ -405,32 +474,47 @@ mod tests {
         let identity_clone_doc = identity.clone().to_doc();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_save_account().times(1).returning(|_| Ok(()));
-        repo.expect_get_account_by_did()
-            .times(1)
-            .returning(move |_| {
-                let keysecure = did
-                    .account()
-                    .privkey()
-                    .to_keysecure("password".to_string())
-                    .unwrap();
-                let account = Account::new(
-                    identity_repo_clone.clone().value(),
-                    identity_repo_clone_doc.clone(),
-                    identity_repo_clone_doc_private_keys.clone(),
-                    keysecure,
-                );
-                Ok(account)
-            });
+        repo.expect_clone().returning(move || {
+            let did = did_cloned.clone();
+            let identity_repo_clone = identity_repo_clone.clone(); 
+            let identity_repo_clone_doc = identity_repo_clone_doc.clone();
+            let identity_repo_clone_doc_private_keys = identity_repo_clone_doc_private_keys.clone();
+
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_account().returning(|_| Ok(()));
+            expected.expect_get_account_by_did()
+                .returning(move |_| {
+                    let keysecure = did
+                        .account()
+                        .privkey()
+                        .to_keysecure("password".to_string())
+                        .unwrap();
+     
+                    let account = Account::new(
+                        identity_repo_clone.clone().value(),
+                        identity_repo_clone_doc.clone(),
+                        identity_repo_clone_doc_private_keys.clone(),
+                        keysecure,
+                    );
+                    Ok(account)
+                });
+
+            expected
+        });
 
         let mut rpc = MockFakeRPCClient::new();
-        rpc.expect_resolve_did_doc()
-            .times(1)
-            .withf(move |addr: &Multiaddr, did: &String| {
-                let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
-                addr == &input_addr && did == &identity_clone.value()
-            })
-            .returning(move |_, _| Ok(identity_clone_doc.clone()));
+        rpc.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRPCClient::new();
+            expected.expect_resolve_did_doc()
+                .times(1)
+                .withf(move |addr: &Multiaddr, did: &String| {
+                    let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
+                    addr == &input_addr && did == &identity_clone.value()
+                })
+                .returning(move |_, _| Ok(identity_clone_doc.clone()));
+        
+            expected
+        });
 
         let uc = generate_usecase(repo, rpc);
         let account = uc.generate_did("password".to_string()).await;
@@ -473,24 +557,29 @@ mod tests {
             .unwrap();
 
         let mut repo = MockFakeRepo::new();
-        repo.expect_get_account_by_did()
-            .times(1)
-            .withf(|did: &String| did.eq(&"did:prople:test".to_string()))
-            .returning(move |_| {
-                let keysecure = did
-                    .account()
-                    .privkey()
-                    .to_keysecure("password".to_string())
-                    .unwrap();
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_get_account_by_did()
+                .times(1)
+                .withf(|did: &String| did.eq(&"did:prople:test".to_string()))
+                .returning(move |_| {
+                    let keysecure = did
+                        .account()
+                        .privkey()
+                        .to_keysecure("password".to_string())
+                        .unwrap();
 
-                let account = Account::new(
-                    identity_repo_clone.clone().value(),
-                    identity_repo_clone_doc.clone(),
-                    identity_repo_clone_doc_private_keys.clone(),
-                    keysecure,
-                );
-                Ok(account)
-            });
+                    let account = Account::new(
+                        identity_repo_clone.clone().value(),
+                        identity_repo_clone_doc.clone(),
+                        identity_repo_clone_doc_private_keys.clone(),
+                        keysecure,
+                    );
+                    Ok(account)
+                });
+
+            expected
+        });
 
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc);
@@ -505,10 +594,15 @@ mod tests {
     #[tokio::test]
     async fn test_resolve_did_doc_missing_did() {
         let mut repo = MockFakeRepo::new();
-        repo.expect_get_account_by_did()
-            .times(1)
-            .withf(|did: &String| did.eq(&"did:prople:test".to_string()))
-            .returning(move |_| Err(AccountError::DIDNotFound));
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_get_account_by_did()
+                .times(1)
+                .withf(|did: &String| did.eq(&"did:prople:test".to_string()))
+                .returning(move |_| Err(AccountError::DIDNotFound));
+
+            expected
+        });
 
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc);

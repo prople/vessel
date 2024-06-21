@@ -56,13 +56,10 @@ pub trait AccountEntityAccessor: Clone + Debug {
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
 
-/// `AccountUsecaseBuilder` is a trait behavior that provides
-/// base application logic's handlers
 #[async_trait]
-pub trait UsecaseBuilder<TEntityAccessor>
-where
-    TEntityAccessor: AccountEntityAccessor,
-{
+pub trait AccountAPI {
+    type EntityAccessor: AccountEntityAccessor;
+
     /// `generate_did` used to geenerate new `DID Account`
     ///
     /// This method will depends on two parameters:
@@ -72,7 +69,7 @@ where
     /// storage data structure. This strategy following `Ethereum KeyStore` mechanism.
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
-    async fn generate_did(&self, password: String) -> Result<TEntityAccessor, AccountError>;
+    async fn generate_did(&self, password: String) -> Result<Self::EntityAccessor, AccountError>;
 
     /// `build_did_uri` used to generate the `DID URI`, a specific URI syntax for the DID
     ///
@@ -99,16 +96,7 @@ where
     async fn remove_did(&self, did: String) -> Result<(), AccountError>;
 
     /// `get_account_did` used to load data [`Account`] from its persistent storage
-    async fn get_account_did(&self, did: String) -> Result<TEntityAccessor, AccountError>;
-}
-
-/// `AccountUsecaseImplementer` it's a simple trait used as parent super trait by other
-/// traits that need to inherit from the [`AccountUsecaseBuilder`]
-pub trait UsecaseImplementer {
-    type Accessor: AccountEntityAccessor;
-    type Implementer: UsecaseBuilder<Self::Accessor>;
-
-    fn account(&self) -> Self::Implementer;
+    async fn get_account_did(&self, did: String) -> Result<Self::EntityAccessor, AccountError>;
 }
 
 /// `AccountRepository` is a trait behavior that used as base
@@ -131,4 +119,17 @@ pub trait RepositoryBuilder {
 #[async_trait]
 pub trait RPCClientBuilder {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
+}
+
+/// `AccountUsecaseBuilder` is a trait behavior that provides
+/// base application logic's handlers
+pub trait UsecaseBuilder<TEntityAccessor>: AccountAPI<EntityAccessor = TEntityAccessor>
+where
+    TEntityAccessor: AccountEntityAccessor,
+{
+    type RepoImplementer: RepositoryBuilder<EntityAccessor = TEntityAccessor> + Clone + Sync + Send;
+    type RPCImplementer: RPCClientBuilder + Clone + Sync + Send;
+
+    fn repo(&self) -> Self::RepoImplementer;
+    fn rpc(&self) -> Self::RPCImplementer;
 }
