@@ -11,6 +11,7 @@ use super::types::{
 use super::Account;
 use super::URI;
 
+#[derive(Clone)]
 /// `Usecase` is base logic implementation for the [`AccountUsecaseBuilder`]
 ///
 /// This object depends on the implementation of [`AccountRepositoryBuilder`]

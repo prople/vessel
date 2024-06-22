@@ -57,7 +57,7 @@ pub trait AccountEntityAccessor: Clone + Debug {
 }
 
 #[async_trait]
-pub trait AccountAPI {
+pub trait AccountAPI: Clone {
     type EntityAccessor: AccountEntityAccessor;
 
     /// `generate_did` used to geenerate new `DID Account`
