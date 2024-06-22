@@ -1,7 +1,9 @@
 pub mod types;
-pub mod vp;
+pub mod proof;
 
 pub mod credential;
 pub use credential::{Credential, Holder};
 
-pub mod proof;
+pub mod presentation;
+pub use presentation::Presentation;
+

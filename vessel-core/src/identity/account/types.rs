@@ -106,7 +106,7 @@ pub trait AccountAPI {
 /// persistent storage. User should be able to choose their selected
 /// persistent storage or database such as SQL or NoSQL
 #[async_trait]
-pub trait RepositoryBuilder {
+pub trait RepoBuilder: Clone + Sync + Send {
     type EntityAccessor: AccountEntityAccessor;
 
     async fn save_account(&self, account: &Self::EntityAccessor) -> Result<(), AccountError>;
@@ -117,7 +117,7 @@ pub trait RepositoryBuilder {
 /// `AccountRPCClientBuilder` is a trait behavior used as `JSON-RPC` client builder
 /// to calling other `Vessel` agents.
 #[async_trait]
-pub trait RPCClientBuilder {
+pub trait RpcBuilder: Clone + Sync + Send {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
 }
 
@@ -127,8 +127,8 @@ pub trait UsecaseBuilder<TEntityAccessor>: AccountAPI<EntityAccessor = TEntityAc
 where
     TEntityAccessor: AccountEntityAccessor,
 {
-    type RepoImplementer: RepositoryBuilder<EntityAccessor = TEntityAccessor> + Clone + Sync + Send;
-    type RPCImplementer: RPCClientBuilder + Clone + Sync + Send;
+    type RepoImplementer: RepoBuilder<EntityAccessor = TEntityAccessor>;
+    type RPCImplementer: RpcBuilder;
 
     fn repo(&self) -> Self::RepoImplementer;
     fn rpc(&self) -> Self::RPCImplementer;

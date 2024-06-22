@@ -14,7 +14,7 @@ use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
 /// for all `Credential` property fields
-pub trait CredentialEntityAccessor {
+pub trait CredentialEntityAccessor: Clone {
     fn get_id(&self) -> String;
     fn get_did(&self) -> String;
     fn get_did_vc(&self) -> String;
@@ -27,7 +27,7 @@ pub trait CredentialEntityAccessor {
 
 /// `HolderEntityAccessor`  it's an interface used as a getter object for all `Holder` property
 /// fields
-pub trait HolderEntityAccessor {
+pub trait HolderEntityAccessor: Clone {
     fn get_id(&self) -> String;
     fn get_vc(&self) -> VC;
     fn get_request_id(&self) -> String;
@@ -37,7 +37,7 @@ pub trait HolderEntityAccessor {
 }
 
 #[async_trait]
-pub trait CredentialAPI {
+pub trait CredentialAPI: Clone {
     type EntityAccessor: CredentialEntityAccessor;
 
     /// `generate_credential` used to generate the `Verifiable Credential` and [`Credential`] object
@@ -78,19 +78,28 @@ pub trait CredentialAPI {
         vc: VC,
     ) -> Result<(), VerifiableError>;
 
-    /// `list_credentials` used to load a list of saved `VC` based on `DID` issuer
+    /// `list_credentials_by_did` used to load a list of saved `VC` based on `DID` issuer
     ///
     /// This method doesn't contain any logic, actually this method is just a simple proxy
     /// to the repository method, [`VerifiableRepoBuilder::list_by_did`]
-    async fn list_credentials(
+    async fn list_credentials_by_did(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::EntityAccessor>, VerifiableError>;
+
+    /// `list_credentials_by_ids` used to load a list of saved `VC` based on `DID` issuer
+    ///
+    /// This method doesn't contain any logic, actually this method is just a simple proxy
+    /// to the repository method, [`VerifiableRepoBuilder::list_by_did`]
+    async fn list_credentials_by_ids(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<Self::EntityAccessor>, VerifiableError>;
 }
 
 #[async_trait]
-pub trait RepoBuilder {
+pub trait RepoBuilder: Clone + Sync + Send {
     type CredentialEntityAccessor: CredentialEntityAccessor;
     type HolderEntityAccessor: HolderEntityAccessor;
 
@@ -123,7 +132,7 @@ pub trait RepoBuilder {
 }
 
 #[async_trait]
-pub trait RPCBuilder {
+pub trait RpcBuilder: Clone + Sync + Send {
     async fn send_credential_to_holder(
         &self,
         addr: Multiaddr,
@@ -154,12 +163,10 @@ where
 {
     type AccountAPIImplementer: AccountAPI;
     type RepoImplementer: RepoBuilder<
-            CredentialEntityAccessor = TCredentialEntity,
-            HolderEntityAccessor = THolderEntity,
-        > + Clone
-        + Sync
-        + Send;
-    type RPCImplementer: RPCBuilder + Clone + Sync + Send;
+        CredentialEntityAccessor = TCredentialEntity,
+        HolderEntityAccessor = THolderEntity,
+    >;
+    type RPCImplementer: RpcBuilder;
 
     fn account(&self) -> Self::AccountAPIImplementer;
     fn repo(&self) -> Self::RepoImplementer;
