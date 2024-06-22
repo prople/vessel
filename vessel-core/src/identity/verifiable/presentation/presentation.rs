@@ -14,7 +14,7 @@ use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
-use super::types::{PresentationEntityAccessor, VP_TYPE};
+use super::types::{PresentationEntityAccessor, PresentationError, VP_TYPE};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(crate = "self::serde")]
@@ -71,16 +71,16 @@ impl Presentation {
         account: impl AccountEntityAccessor,
         credentials: Vec<impl CredentialEntityAccessor>,
         proof_params: Option<ProofParams>,
-    ) -> Result<Presentation, VerifiableError> {
+    ) -> Result<Presentation, PresentationError> {
         if password.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "password was missing".to_string(),
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("password was missing".to_string()),
             ));
         }
 
         if did_issuer.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "did_issuer was missing".to_string(),
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("did_issuer was missing".to_string()),
             ));
         }
 
@@ -99,7 +99,8 @@ impl Presentation {
             password,
             account_doc_private_key_pairs.clone(),
             proof_params,
-        )?;
+        )
+        .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
         if let Some(proof) = proof_builder {
             vp.add_proof(proof);
@@ -164,7 +165,7 @@ mod tests {
     fn generate_did() -> DID {
         DID::new()
     }
-    
+
     fn generate_account(did_vc: DID) -> AccountIdentity {
         let mut did_vc_identity = did_vc.identity().unwrap();
         let did_vc_value_cloned = did_vc_identity.value();

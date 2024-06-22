@@ -5,8 +5,7 @@ use prople_did_core::doc::types::Doc;
 use prople_did_core::hashlink::verify_from_json;
 
 use super::types::{
-    AccountAPI, AccountEntityAccessor, AccountError, RpcBuilder, RepoBuilder,
-    UsecaseBuilder,
+    AccountAPI, AccountEntityAccessor, AccountError, RepoBuilder, RpcBuilder, UsecaseBuilder,
 };
 
 use super::Account;
@@ -155,10 +154,7 @@ mod tests {
         }
     );
 
-    fn generate_usecase<
-        TRepo: RepoBuilder<EntityAccessor = Account>,
-        TRPCClient: RpcBuilder,
-    >(
+    fn generate_usecase<TRepo: RepoBuilder<EntityAccessor = Account>, TRPCClient: RpcBuilder>(
         repo: TRepo,
         rpc: TRPCClient,
     ) -> Usecase<TRepo, TRPCClient> {

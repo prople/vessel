@@ -6,9 +6,7 @@ use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::ToJCS;
 use prople_did_core::verifiable::objects::{Proof, ProofValue};
 
-use crate::identity::verifiable::types::VerifiableError;
-
-use super::types::Params;
+use super::types::{Params, ProofError};
 
 pub struct Builder;
 
@@ -18,7 +16,7 @@ impl Builder {
         password: String,
         doc_private_keys: IdentityPrivateKeyPairs,
         params: Option<Params>,
-    ) -> Result<Option<Proof>, VerifiableError> {
+    ) -> Result<Option<Proof>, ProofError> {
         if params.is_none() {
             return Ok(None);
         }
@@ -30,20 +28,20 @@ impl Builder {
             .authentication
             .map(|val| {
                 val.decrypt_verification(account_doc_password.clone())
-                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+                    .map_err(|err| ProofError::BuildError(err.to_string()))
             })
-            .ok_or(VerifiableError::VCGenerateError(
+            .ok_or(ProofError::BuildError(
                 "PrivateKeyPairs is missing".to_string(),
             ))??;
 
         let account_doc_verification_pem = String::from_utf8(account_doc_verification_pem_bytes)
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+            .map_err(|err| ProofError::BuildError(err.to_string()))?;
 
         let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem)
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+            .map_err(|err| ProofError::BuildError(err.to_string()))?;
 
         let (_, sig) = ProofValue::transform(account_doc_keypair, unsecured)
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+            .map_err(|err| ProofError::BuildError(err.to_string()))?;
 
         let uid = Uuid::new_v4().to_string();
 
@@ -148,9 +146,9 @@ mod tests {
             .authentication
             .map(|val| {
                 val.decrypt_verification("password".to_string())
-                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+                    .map_err(|err| ProofError::BuildError(err.to_string()))
             })
-            .ok_or(VerifiableError::VCGenerateError(
+            .ok_or(ProofError::BuildError(
                 "PrivateKeyPairs is missing".to_string(),
             ));
         assert!(!account_doc_verification_pem_bytes.is_err());
@@ -159,11 +157,11 @@ mod tests {
             account_doc_verification_pem_bytes.unwrap().unwrap();
         let account_doc_verification_pem =
             String::from_utf8(account_doc_verification_pem_bytes_unwrap)
-                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+                .map_err(|err| ProofError::BuildError(err.to_string()));
         assert!(!account_doc_verification_pem.is_err());
 
         let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+            .map_err(|err| ProofError::BuildError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
         let verified = ProofValue::transform_verifier(

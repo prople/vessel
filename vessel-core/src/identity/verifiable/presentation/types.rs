@@ -2,6 +2,7 @@ use multiaddr::Multiaddr;
 
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
+use rst_common::with_errors::thiserror::{self, Error};
 
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::VP;
@@ -12,6 +13,15 @@ use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
+
+#[derive(Debug, Error, Clone)]
+pub enum PresentationError {
+    #[error("unable to generate vp: {0}")]
+    GenerateError(String),
+
+    #[error("common error")]
+    CommonError(#[from] VerifiableError),
+}
 
 /// `PresentationEntityAccessor` is a getter object used to access
 /// all `Presentation` property fields
@@ -33,28 +43,28 @@ pub trait PresentationAPI: Clone {
         did_issuer: String,
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
-    ) -> Result<Self::EntityAccessor, VerifiableError>;
+    ) -> Result<Self::EntityAccessor, PresentationError>;
 
     async fn send_to_verifier(
         &self,
         id: String,
         receiver: Multiaddr,
-    ) -> Result<(), VerifiableError>;
+    ) -> Result<(), PresentationError>;
 
-    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, VerifiableError>;
+    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
 }
 
 #[async_trait]
 pub trait RepoBuilder: Clone + Sync + Send {
     type EntityAccessor: PresentationEntityAccessor;
 
-    async fn save(&self, data: &Self::EntityAccessor) -> Result<(), VerifiableError>;
-    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, VerifiableError>;
+    async fn save(&self, data: &Self::EntityAccessor) -> Result<(), PresentationError>;
+    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
 }
 
 #[async_trait]
 pub trait RpcBuilder: Clone + Sync + Send {
-    async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), VerifiableError>;
+    async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
 }
 
 #[async_trait]

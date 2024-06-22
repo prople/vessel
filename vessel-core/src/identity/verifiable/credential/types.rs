@@ -3,6 +3,7 @@ use multiaddr::Multiaddr;
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde_json::value::Value;
+use rst_common::with_errors::thiserror::{self, Error};
 
 use prople_crypto::keysecure::KeySecure;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
@@ -11,6 +12,30 @@ use prople_did_core::verifiable::objects::VC;
 use crate::identity::account::types::{AccountAPI, AccountEntityAccessor};
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
+
+#[derive(Debug, Error, Clone)]
+pub enum CredentialError {
+    #[error("unable to generate credential: {0}")]
+    GenerateError(String),
+
+    #[error("unable to process incoming vc: {0}")]
+    ReceiveError(String),
+
+    #[error("unable to send vc: {0}")]
+    SendError(String),
+
+    #[error("unable to confirm vc: {0}")]
+    ConfirmError(String),
+
+    #[error("unable to verify vc: {0}")]
+    VerifyError(String),
+
+    #[error("unable to list vc: {0}")]
+    ListError(String),
+
+    #[error("common error")]
+    CommonError(#[from] VerifiableError),
+}
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
 /// for all `Credential` property fields
@@ -53,7 +78,7 @@ pub trait CredentialAPI: Clone {
         did_issuer: String,
         credential: Value,
         proof_params: Option<ProofParams>,
-    ) -> Result<Self::EntityAccessor, VerifiableError>;
+    ) -> Result<Self::EntityAccessor, CredentialError>;
 
     /// `send_credential_to_holder` used to send a `VC` to some `Holder`, if there is no error it means the `VC`
     /// already received successfully.
@@ -67,7 +92,7 @@ pub trait CredentialAPI: Clone {
         &self,
         id: String,
         receiver: Multiaddr,
-    ) -> Result<(), VerifiableError>;
+    ) -> Result<(), CredentialError>;
 
     /// `receive_credential_by_holder` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
     /// to the persistent storage through `CredentialHolder`
@@ -76,7 +101,7 @@ pub trait CredentialAPI: Clone {
         request_id: String,
         issuer_addr: String,
         vc: VC,
-    ) -> Result<(), VerifiableError>;
+    ) -> Result<(), CredentialError>;
 
     /// `list_credentials_by_did` used to load a list of saved `VC` based on `DID` issuer
     ///
@@ -86,7 +111,7 @@ pub trait CredentialAPI: Clone {
         &self,
         did: String,
         pagination: Option<PaginationParams>,
-    ) -> Result<Vec<Self::EntityAccessor>, VerifiableError>;
+    ) -> Result<Vec<Self::EntityAccessor>, CredentialError>;
 
     /// `list_credentials_by_ids` used to load a list of saved `VC` based on `DID` issuer
     ///
@@ -95,7 +120,7 @@ pub trait CredentialAPI: Clone {
     async fn list_credentials_by_ids(
         &self,
         ids: Vec<String>,
-    ) -> Result<Vec<Self::EntityAccessor>, VerifiableError>;
+    ) -> Result<Vec<Self::EntityAccessor>, CredentialError>;
 }
 
 #[async_trait]
@@ -106,29 +131,29 @@ pub trait RepoBuilder: Clone + Sync + Send {
     async fn save_credential(
         &self,
         data: &Self::CredentialEntityAccessor,
-    ) -> Result<(), VerifiableError>;
+    ) -> Result<(), CredentialError>;
     async fn save_credential_holder(
         &self,
         data: &Self::HolderEntityAccessor,
-    ) -> Result<(), VerifiableError>;
-    async fn remove_credential_by_id(&self, id: String) -> Result<(), VerifiableError>;
-    async fn remove_credential_by_did(&self, did: String) -> Result<(), VerifiableError>;
+    ) -> Result<(), CredentialError>;
+    async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
+    async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
 
     async fn get_credential_by_id(
         &self,
         id: String,
-    ) -> Result<Self::CredentialEntityAccessor, VerifiableError>;
+    ) -> Result<Self::CredentialEntityAccessor, CredentialError>;
 
     async fn list_credentials_by_ids(
         &self,
         ids: Vec<String>,
-    ) -> Result<Vec<Self::CredentialEntityAccessor>, VerifiableError>;
+    ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError>;
 
     async fn list_credentials_by_did(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
-    ) -> Result<Vec<Self::CredentialEntityAccessor>, VerifiableError>;
+    ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError>;
 }
 
 #[async_trait]
@@ -137,13 +162,13 @@ pub trait RpcBuilder: Clone + Sync + Send {
         &self,
         addr: Multiaddr,
         vc: VC,
-    ) -> Result<(), VerifiableError>;
+    ) -> Result<(), CredentialError>;
 
     async fn verify_credential_to_issuer(
         &self,
         addr: Multiaddr,
         vc: VC,
-    ) -> Result<(), VerifiableError>;
+    ) -> Result<(), CredentialError>;
 }
 
 /// `CredentialUsecaseBuilder` is a main trait to build the usecase business logic

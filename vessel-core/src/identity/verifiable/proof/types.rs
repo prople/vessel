@@ -1,4 +1,12 @@
+use rst_common::with_errors::thiserror::{self, Error};
+
 use prople_did_core::verifiable::objects::Proof;
+
+#[derive(Debug, Error, Clone)]
+pub enum ProofError {
+    #[error("build proof error: {0}")]
+    BuildError(String),
+}
 
 /// `ProofParams` used to build our `Verifiable Credential Proof` data object or [`Proof`]
 /// This object will be optional used at [`VerifiableUsecaseBuilder::vc_generate`]

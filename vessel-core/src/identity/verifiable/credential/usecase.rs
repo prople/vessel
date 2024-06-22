@@ -11,7 +11,7 @@ use crate::identity::account::Account;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
-use super::types::{CredentialAPI, RepoBuilder, RpcBuilder, UsecaseBuilder};
+use super::types::{CredentialAPI, CredentialError, RepoBuilder, RpcBuilder, UsecaseBuilder};
 use super::{Credential, Holder};
 
 #[derive(Clone)]
@@ -76,16 +76,16 @@ where
         did_issuer: String,
         claims: Value,
         proof_params: Option<ProofParams>,
-    ) -> Result<Credential, VerifiableError> {
+    ) -> Result<Credential, CredentialError> {
         if password.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "password was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("password was missing".to_string()),
             ));
         }
 
         if did_issuer.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "did_issuer was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("did_issuer was missing".to_string()),
             ));
         }
 
@@ -93,17 +93,18 @@ where
             .account()
             .generate_did(password.clone())
             .await
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))?;
+            .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
 
         let credential =
-            Credential::generate(account, password, did_issuer, claims, proof_params)
-                .await?;
+            Credential::generate(account, password, did_issuer, claims, proof_params).await?;
 
         let _ = self
             .repo()
             .save_credential(&credential.clone())
             .await
-            .map_err(|err| VerifiableError::RepoError(err.to_string()))?;
+            .map_err(|err| {
+                CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+            })?;
 
         Ok(credential)
     }
@@ -112,14 +113,14 @@ where
         &self,
         did: String,
         pagination: Option<PaginationParams>,
-    ) -> Result<Vec<Credential>, VerifiableError> {
+    ) -> Result<Vec<Credential>, CredentialError> {
         self.repo().list_credentials_by_did(did, pagination).await
     }
 
     async fn list_credentials_by_ids(
         &self,
         ids: Vec<String>,
-    ) -> Result<Vec<Credential>, VerifiableError> {
+    ) -> Result<Vec<Credential>, CredentialError> {
         self.repo().list_credentials_by_ids(ids).await
     }
 
@@ -128,16 +129,16 @@ where
         request_id: String,
         issuer_addr: String,
         vc: VC,
-    ) -> Result<(), VerifiableError> {
+    ) -> Result<(), CredentialError> {
         if request_id.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "request_id was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("request_id was missing".to_string()),
             ));
         }
 
         if issuer_addr.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "issuer_addr was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("issuer_addr was missing".to_string()),
             ));
         }
 
@@ -149,10 +150,10 @@ where
         &self,
         id: String,
         receiver: Multiaddr,
-    ) -> Result<(), VerifiableError> {
+    ) -> Result<(), CredentialError> {
         if id.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "id was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("id was missing".to_string()),
             ));
         }
 
@@ -201,23 +202,23 @@ mod tests {
             type CredentialEntityAccessor = Credential;
             type HolderEntityAccessor = Holder;
 
-            async fn save_credential(&self, data: &Credential) -> Result<(), VerifiableError>;
-            async fn save_credential_holder(&self, data: &Holder) -> Result<(), VerifiableError>;
-            async fn remove_credential_by_id(&self, id: String) -> Result<(), VerifiableError>;
-            async fn remove_credential_by_did(&self, did: String) -> Result<(), VerifiableError>;
+            async fn save_credential(&self, data: &Credential) -> Result<(), CredentialError>;
+            async fn save_credential_holder(&self, data: &Holder) -> Result<(), CredentialError>;
+            async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
+            async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
 
-            async fn get_credential_by_id(&self, id: String) -> Result<Credential, VerifiableError>;
+            async fn get_credential_by_id(&self, id: String) -> Result<Credential, CredentialError>;
 
             async fn list_credentials_by_ids(
                 &self,
                 ids: Vec<String>,
-            ) -> Result<Vec<Credential>, VerifiableError>;
+            ) -> Result<Vec<Credential>, CredentialError>;
 
             async fn list_credentials_by_did(
                 &self,
                 did: String,
                 pagination: Option<PaginationParams>,
-            ) -> Result<Vec<Credential>, VerifiableError>;
+            ) -> Result<Vec<Credential>, CredentialError>;
         }
     );
 
@@ -234,13 +235,13 @@ mod tests {
                 &self,
                 addr: Multiaddr,
                 vc: VC,
-            ) -> Result<(), VerifiableError>;
+            ) -> Result<(), CredentialError>;
 
             async fn verify_credential_to_issuer(
                 &self,
                 addr: Multiaddr,
                 vc: VC,
-            ) -> Result<(), VerifiableError>;
+            ) -> Result<(), CredentialError>;
         }
     );
 
@@ -489,9 +490,9 @@ mod tests {
             .authentication
             .map(|val| {
                 val.decrypt_verification("password".to_string())
-                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+                    .map_err(|err| CredentialError::GenerateError(err.to_string()))
             })
-            .ok_or(VerifiableError::VCGenerateError(
+            .ok_or(CredentialError::GenerateError(
                 "PrivateKeyPairs is missing".to_string(),
             ));
         assert!(!account_doc_verification_pem_bytes.is_err());
@@ -500,11 +501,11 @@ mod tests {
             account_doc_verification_pem_bytes.unwrap().unwrap();
         let account_doc_verification_pem =
             String::from_utf8(account_doc_verification_pem_bytes_unwrap)
-                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+                .map_err(|err| CredentialError::GenerateError(err.to_string()));
         assert!(!account_doc_verification_pem.is_err());
 
         let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+            .map_err(|err| CredentialError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
         let (vc_original, proof) = vc.split_proof();
@@ -552,13 +553,10 @@ mod tests {
         assert!(generate_pass.is_err());
 
         let generate_pass_err = generate_pass.unwrap_err();
-        assert!(matches!(
-            generate_pass_err,
-            VerifiableError::ValidationError(_)
-        ));
+        assert!(matches!(generate_pass_err, CredentialError::CommonError(_)));
 
-        if let VerifiableError::ValidationError(msg) = generate_pass_err {
-            assert!(msg.contains("password"))
+        if let CredentialError::CommonError(msg) = generate_pass_err {
+            assert!(msg.to_string().contains("password"))
         }
 
         let generate_issuer = uc
@@ -569,11 +567,11 @@ mod tests {
         let generate_issuer_err = generate_issuer.unwrap_err();
         assert!(matches!(
             generate_issuer_err,
-            VerifiableError::ValidationError(_)
+            CredentialError::CommonError(_)
         ));
 
-        if let VerifiableError::ValidationError(msg) = generate_issuer_err {
-            assert!(msg.contains("did_issuer"))
+        if let CredentialError::CommonError(msg) = generate_issuer_err {
+            assert!(msg.to_string().contains("did_issuer"))
         }
     }
 
@@ -628,9 +626,11 @@ mod tests {
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeRepo::new();
-            expected
-                .expect_save_credential()
-                .returning(|_| Err(VerifiableError::RepoError("repo error".to_string())));
+            expected.expect_save_credential().returning(|_| {
+                Err(CredentialError::CommonError(VerifiableError::RepoError(
+                    "repo error".to_string(),
+                )))
+            });
 
             expected
         });
@@ -688,7 +688,7 @@ mod tests {
             )
             .await;
         assert!(vc.is_err());
-        assert!(matches!(vc.unwrap_err(), VerifiableError::RepoError(_)))
+        assert!(matches!(vc.unwrap_err(), CredentialError::CommonError(_)))
     }
 
     #[tokio::test]
@@ -768,13 +768,10 @@ mod tests {
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
-        assert!(matches!(
-            send_output_err,
-            VerifiableError::ValidationError(_)
-        ));
+        assert!(matches!(send_output_err, CredentialError::CommonError(_)));
 
-        if let VerifiableError::ValidationError(msg) = send_output_err {
-            assert!(msg.contains("id"))
+        if let CredentialError::CommonError(msg) = send_output_err {
+            assert!(msg.to_string().contains("id"))
         }
     }
 
@@ -786,7 +783,11 @@ mod tests {
             expected
                 .expect_get_credential_by_id()
                 .with(eq("cred-id".to_string()))
-                .return_once(move |_| Err(VerifiableError::RepoError("error repo".to_string())));
+                .return_once(move |_| {
+                    Err(CredentialError::CommonError(VerifiableError::RepoError(
+                        "error repo".to_string(),
+                    )))
+                });
 
             expected
         });
@@ -802,7 +803,7 @@ mod tests {
         assert!(send_output.is_err());
         assert!(matches!(
             send_output.unwrap_err(),
-            VerifiableError::RepoError(_)
+            CredentialError::CommonError(_)
         ))
     }
 
@@ -858,7 +859,7 @@ mod tests {
                 .expect_send_credential_to_holder()
                 .with(eq(addr_cloned.clone()), eq(vc))
                 .times(1)
-                .returning(|_, _| Err(VerifiableError::VCSendError("send error".to_string())));
+                .returning(|_, _| Err(CredentialError::SendError("send error".to_string())));
 
             expected
         });
@@ -871,7 +872,7 @@ mod tests {
         assert!(send_output.is_err());
         assert!(matches!(
             send_output.unwrap_err(),
-            VerifiableError::VCSendError(_)
+            CredentialError::SendError(_)
         ))
     }
 
@@ -923,11 +924,11 @@ mod tests {
         let receive_err_request_id = receive_request_id.unwrap_err();
         assert!(matches!(
             receive_err_request_id.clone(),
-            VerifiableError::ValidationError(_)
+            CredentialError::CommonError(_)
         ));
 
-        if let VerifiableError::ValidationError(msg) = receive_err_request_id {
-            assert!(msg.contains("request_id"))
+        if let CredentialError::CommonError(msg) = receive_err_request_id {
+            assert!(msg.to_string().contains("request_id"))
         }
 
         let receive_issuer_addr = uc
@@ -938,11 +939,11 @@ mod tests {
         let receive_err_issuer_addr = receive_issuer_addr.unwrap_err();
         assert!(matches!(
             receive_err_issuer_addr.clone(),
-            VerifiableError::ValidationError(_)
+            CredentialError::CommonError(_)
         ));
 
-        if let VerifiableError::ValidationError(msg) = receive_err_issuer_addr {
-            assert!(msg.contains("issuer_addr"))
+        if let CredentialError::CommonError(msg) = receive_err_issuer_addr {
+            assert!(msg.to_string().contains("issuer_addr"))
         }
     }
 }

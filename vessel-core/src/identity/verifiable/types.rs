@@ -7,27 +7,6 @@ pub enum VerifiableError {
     #[error("did error: {0}")]
     DIDError(String),
 
-    #[error("unable to generate vc: {0}")]
-    VCGenerateError(String),
-
-    #[error("unable to process incoming vc: {0}")]
-    VCReceiveError(String),
-
-    #[error("unable to send vc: {0}")]
-    VCSendError(String),
-
-    #[error("unable to confirm vc: {0}")]
-    VCConfirmError(String),
-
-    #[error("unable to verify vc: {0}")]
-    VCVerifyError(String),
-
-    #[error("unable to list vc: {0}")]
-    VCListError(String),
-
-    #[error("unable to generate vp: {0}")]
-    VPGenerateError(String),
-
     #[error("repo error: {0}")]
     RepoError(String),
 

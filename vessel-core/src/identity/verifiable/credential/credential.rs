@@ -17,7 +17,7 @@ use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
-use super::types::CredentialEntityAccessor;
+use super::types::{CredentialEntityAccessor, CredentialError};
 
 /// `Credential` is a main entity used to save to internal persistent storage
 /// This data must contain a [`VC`] and [`KeySecure`]
@@ -66,16 +66,16 @@ impl Credential {
         did_issuer: String,
         claims: Value,
         proof_params: Option<ProofParams>,
-    ) -> Result<Credential, VerifiableError> {
+    ) -> Result<Credential, CredentialError> {
         if password.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "password was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("password was missing".to_string()),
             ));
         }
 
         if did_issuer.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "did_issuer was missing".to_string(),
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("did_issuer was missing".to_string()),
             ));
         }
 
@@ -94,7 +94,8 @@ impl Credential {
             password,
             account_doc_private_key_pairs.clone(),
             proof_params,
-        )?;
+        )
+        .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
 
         if let Some(proof) = proof_builder {
             vc.proof(proof);
@@ -276,9 +277,9 @@ mod tests {
             .authentication
             .map(|val| {
                 val.decrypt_verification("password".to_string())
-                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+                    .map_err(|err| CredentialError::GenerateError(err.to_string()))
             })
-            .ok_or(VerifiableError::VCGenerateError(
+            .ok_or(CredentialError::GenerateError(
                 "PrivateKeyPairs is missing".to_string(),
             ));
         assert!(!account_doc_verification_pem_bytes.is_err());
@@ -287,11 +288,11 @@ mod tests {
             account_doc_verification_pem_bytes.unwrap().unwrap();
         let account_doc_verification_pem =
             String::from_utf8(account_doc_verification_pem_bytes_unwrap)
-                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+                .map_err(|err| CredentialError::GenerateError(err.to_string()));
         assert!(!account_doc_verification_pem.is_err());
 
         let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+            .map_err(|err| CredentialError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
         let (vc_original, proof_original) = vc.split_proof();

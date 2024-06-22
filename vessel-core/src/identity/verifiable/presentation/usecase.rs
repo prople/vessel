@@ -10,7 +10,7 @@ use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 use crate::identity::verifiable::Credential;
 
-use super::types::{PresentationAPI, RepoBuilder, RpcBuilder, UsecaseBuilder};
+use super::types::{PresentationAPI, PresentationError, RepoBuilder, RpcBuilder, UsecaseBuilder};
 use super::Presentation;
 
 #[derive(Clone)]
@@ -91,7 +91,7 @@ where
 {
     type EntityAccessor = Presentation;
 
-    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, VerifiableError> {
+    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError> {
         self.repo().get_by_id(id).await
     }
 
@@ -99,10 +99,10 @@ where
         &self,
         id: String,
         receiver: Multiaddr,
-    ) -> Result<(), VerifiableError> {
+    ) -> Result<(), PresentationError> {
         if id.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "id was missing".to_string(),
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("id was missing".to_string()),
             ));
         }
 
@@ -116,29 +116,32 @@ where
         did_issuer: String,
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
-    ) -> Result<Self::EntityAccessor, VerifiableError> {
+    ) -> Result<Self::EntityAccessor, PresentationError> {
         if password.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "password was missing".to_string(),
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("password was missing".to_string()),
             ));
         }
 
         if did_issuer.is_empty() {
-            return Err(VerifiableError::ValidationError(
-                "did_issuer was missing".to_string(),
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("did_issuer was missing".to_string()),
             ));
         }
 
         let vcs = self
             .credential()
             .list_credentials_by_ids(credentials)
-            .await?;
+            .await
+            .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
         let account = self
             .account()
             .get_account_did(did_issuer.clone())
             .await
-            .map_err(|err| VerifiableError::DIDError(err.to_string()))?;
+            .map_err(|err| {
+                PresentationError::CommonError(VerifiableError::DIDError(err.to_string()))
+            })?;
 
         let presentation =
             Presentation::generate(password, did_issuer, account, vcs, proof_params)?;
@@ -173,6 +176,7 @@ mod tests {
 
     use crate::identity::account::types::AccountError;
     use crate::identity::account::Account as AccountIdentity;
+    use crate::identity::verifiable::credential::types::CredentialError;
     use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
     use super::Presentation;
@@ -188,8 +192,8 @@ mod tests {
         impl RepoBuilder for FakeRepo {
             type EntityAccessor = Presentation;
 
-            async fn save(&self, data: &Presentation) -> Result<(), VerifiableError>;
-            async fn get_by_id(&self, id: String) -> Result<Presentation, VerifiableError>;
+            async fn save(&self, data: &Presentation) -> Result<(), PresentationError>;
+            async fn get_by_id(&self, id: String) -> Result<Presentation, PresentationError>;
         }
     );
 
@@ -202,7 +206,7 @@ mod tests {
 
         #[async_trait]
         impl RpcBuilder for FakeRPCClient {
-            async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), VerifiableError>;
+            async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
         }
     );
 
@@ -248,31 +252,31 @@ mod tests {
                 did_issuer: String,
                 credential: Value,
                 proof_params: Option<ProofParams>,
-            ) -> Result<Credential, VerifiableError>;
+            ) -> Result<Credential, CredentialError>;
 
             async fn send_credential_to_holder(
                 &self,
                 id: String,
                 receiver: Multiaddr,
-            ) -> Result<(), VerifiableError>;
+            ) -> Result<(), CredentialError>;
 
             async fn receive_credential_by_holder(
                 &self,
                 request_id: String,
                 issuer_addr: String,
                 vc: VC,
-            ) -> Result<(), VerifiableError>;
+            ) -> Result<(), CredentialError>;
 
             async fn list_credentials_by_did(
                 &self,
                 did: String,
                 pagination: Option<PaginationParams>,
-            ) -> Result<Vec<Credential>, VerifiableError>;
+            ) -> Result<Vec<Credential>, CredentialError>;
 
             async fn list_credentials_by_ids(
                 &self,
                 ids: Vec<String>,
-            ) -> Result<Vec<Credential>, VerifiableError>;
+            ) -> Result<Vec<Credential>, CredentialError>;
         }
     );
 
@@ -538,9 +542,9 @@ mod tests {
             .authentication
             .map(|val| {
                 val.decrypt_verification("password".to_string())
-                    .map_err(|err| VerifiableError::VCGenerateError(err.to_string()))
+                    .map_err(|err| PresentationError::GenerateError(err.to_string()))
             })
-            .ok_or(VerifiableError::VCGenerateError(
+            .ok_or(PresentationError::GenerateError(
                 "PrivateKeyPairs is missing".to_string(),
             ));
         assert!(!account_doc_verification_pem_bytes.is_err());
@@ -550,11 +554,11 @@ mod tests {
 
         let account_doc_verification_pem =
             String::from_utf8(account_doc_verification_pem_bytes_unwrap)
-                .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+                .map_err(|err| PresentationError::GenerateError(err.to_string()));
         assert!(!account_doc_verification_pem.is_err());
 
         let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
-            .map_err(|err| VerifiableError::VCGenerateError(err.to_string()));
+            .map_err(|err| PresentationError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
         let (vp_original, proof) = vp.split_proof();
@@ -633,13 +637,10 @@ mod tests {
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
-        assert!(matches!(
-            send_output_err,
-            VerifiableError::ValidationError(_)
-        ));
+        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
 
-        if let VerifiableError::ValidationError(msg) = send_output_err {
-            assert!(msg.contains("id"))
+        if let PresentationError::CommonError(msg) = send_output_err {
+            assert!(msg.to_string().contains("id"))
         }
     }
 
@@ -651,7 +652,11 @@ mod tests {
             expected
                 .expect_get_by_id()
                 .with(eq("id1".to_string()))
-                .returning(move |_| Err(VerifiableError::RepoError("error repo".to_string())));
+                .returning(move |_| {
+                    Err(PresentationError::CommonError(VerifiableError::RepoError(
+                        "error repo".to_string(),
+                    )))
+                });
 
             expected
         });
@@ -667,6 +672,6 @@ mod tests {
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
-        assert!(matches!(send_output_err, VerifiableError::RepoError(_)));
+        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
     }
 }

@@ -7,8 +7,9 @@ use rst_common::standard::uuid::Uuid;
 
 use prople_did_core::verifiable::objects::VC;
 
-use super::types::HolderEntityAccessor;
 use crate::identity::verifiable::types::VerifiableError;
+
+use super::types::{CredentialError, HolderEntityAccessor};
 
 /// `CredentialHolder` is an entity used by a `Holder` to save incoming [`VC`] that sent
 /// from `Issuer`
@@ -34,11 +35,11 @@ pub struct Holder {
 }
 
 impl Holder {
-    pub fn new(request_id: String, issuer_addr: String, vc: VC) -> Result<Self, VerifiableError> {
+    pub fn new(request_id: String, issuer_addr: String, vc: VC) -> Result<Self, CredentialError> {
         let uid = Uuid::new_v4().to_string();
-        let addr = issuer_addr
-            .parse::<Multiaddr>()
-            .map_err(|err| VerifiableError::ParseMultiAddrError(err.to_string()))?;
+        let addr = issuer_addr.parse::<Multiaddr>().map_err(|err| {
+            CredentialError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
+        })?;
 
         Ok(Self {
             id: uid,
