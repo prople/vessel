@@ -33,7 +33,7 @@ pub enum CredentialError {
     #[error("unable to list vc: {0}")]
     ListError(String),
 
-    #[error("common error")]
+    #[error("common error: {0}")]
     CommonError(#[from] VerifiableError),
 }
 
@@ -91,13 +91,14 @@ pub trait CredentialAPI: Clone {
     async fn send_credential_to_holder(
         &self,
         id: String,
-        receiver: Multiaddr,
+        did_uri: String,
     ) -> Result<(), CredentialError>;
 
     /// `receive_credential_by_holder` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
     /// to the persistent storage through `CredentialHolder`
     async fn receive_credential_by_holder(
         &self,
+        did_holder: String,
         request_id: String,
         issuer_addr: String,
         vc: VC,
@@ -160,6 +161,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
 pub trait RpcBuilder: Clone + Sync + Send {
     async fn send_credential_to_holder(
         &self,
+        did_holder: String,
         addr: Multiaddr,
         vc: VC,
     ) -> Result<(), CredentialError>;

@@ -1,5 +1,3 @@
-use multiaddr::Multiaddr;
-
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::serde_json::Value;
 
@@ -7,6 +5,7 @@ use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::account::types::AccountAPI;
 use crate::identity::account::Account;
+use crate::identity::account::URI;
 
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
@@ -126,6 +125,7 @@ where
 
     async fn receive_credential_by_holder(
         &self,
+        did_holder: String,
         request_id: String,
         issuer_addr: String,
         vc: VC,
@@ -142,14 +142,21 @@ where
             ));
         }
 
-        let cred_holder = Holder::new(request_id, issuer_addr, vc)?;
+        // used to make sure that given `did_holder` is belongs to the user
+        let _ = self
+            .account()
+            .get_account_did(did_holder.clone())
+            .await
+            .map_err(|err| CredentialError::ReceiveError(err.to_string()))?;
+
+        let cred_holder = Holder::new(did_holder, request_id, issuer_addr, vc)?;
         self.repo().save_credential_holder(&cred_holder).await
     }
 
     async fn send_credential_to_holder(
         &self,
         id: String,
-        receiver: Multiaddr,
+        did_uri: String,
     ) -> Result<(), CredentialError> {
         if id.is_empty() {
             return Err(CredentialError::CommonError(
@@ -157,9 +164,19 @@ where
             ));
         }
 
+        if did_uri.is_empty() {
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("did_uri was missing".to_string()),
+            ));
+        }
+
+        let (uri_addr, _, uri_did) = URI::parse(did_uri).map_err(|err| {
+            CredentialError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
+        })?;
+
         let cred = self.repo().get_credential_by_id(id).await?;
         self.rpc()
-            .send_credential_to_holder(receiver, cred.vc)
+            .send_credential_to_holder(uri_did, uri_addr, cred.vc)
             .await
     }
 }
@@ -184,10 +201,11 @@ mod tests {
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
+    use prople_did_core::hashlink;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use prople_did_core::verifiable::objects::{ProofValue, VC};
 
-    use crate::identity::account::types::AccountError;
+    use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
 
     mock!(
@@ -233,6 +251,7 @@ mod tests {
         impl RpcBuilder for FakeRPCClient {
             async fn send_credential_to_holder(
                 &self,
+                did_holder: String,
                 addr: Multiaddr,
                 vc: VC,
             ) -> Result<(), CredentialError>;
@@ -293,6 +312,35 @@ mod tests {
 
     fn generate_did() -> DID {
         DID::new()
+    }
+
+    fn generate_holder_account() -> (Account, DID) {
+        let did_holder = generate_did();
+        let mut did_holder_identity = did_holder.identity().unwrap();
+        let did_holder_value = did_holder_identity.value();
+
+        let did_holder_doc = did_holder_identity
+            .build_assertion_method()
+            .build_auth_method()
+            .to_doc();
+
+        let did_holder_doc_privkeys = did_holder_identity
+            .build_private_keys("password".to_string())
+            .unwrap();
+
+        let did_holder_keysecure = did_holder
+            .account()
+            .privkey()
+            .to_keysecure("password".to_string())
+            .unwrap();
+
+        let did_holder_account = Account::new(
+            did_holder_value,
+            did_holder_doc,
+            did_holder_doc_privkeys,
+            did_holder_keysecure,
+        );
+        (did_holder_account, did_holder)
     }
 
     #[tokio::test]
@@ -693,6 +741,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_vc_send_success() {
+        let (did_holder_account, did_holder) = generate_holder_account();
+        let did_holder_value = did_holder.identity().unwrap().value();
+
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -741,17 +792,28 @@ mod tests {
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_credential_to_holder()
-                .with(eq(addr_cloned.clone()), eq(vc))
+                .with(eq(did_holder_value), eq(addr_cloned.clone()), eq(vc))
                 .times(1)
-                .returning(|_, _| Ok(()));
+                .returning(|_, _, _| Ok(()));
 
             expected
         });
 
+        let mut did_uri_params = Params::default();
+        did_uri_params.address = Some(addr.clone().to_string());
+        did_uri_params.hl =
+            Some(hashlink::generate_from_json(did_holder_account.get_doc()).unwrap());
+
+        let did_holder_uri = URI::build(
+            did_holder_account,
+            "password".to_string(),
+            Some(did_uri_params),
+        )
+        .unwrap();
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("cred-id".to_string(), addr)
+            .send_credential_to_holder("cred-id".to_string(), did_holder_uri)
             .await;
         assert!(!send_output.is_err())
     }
@@ -763,8 +825,9 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account);
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let send_output = uc.send_credential_to_holder("".to_string(), addr).await;
+        let send_output = uc
+            .send_credential_to_holder("".to_string(), "".to_string())
+            .await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -792,17 +855,33 @@ mod tests {
             expected
         });
 
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let rpc = MockFakeRPCClient::new();
         let account = MockFakeAccountUsecase::new();
 
+        let (did_holder_account, _) = generate_holder_account();
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let mut did_uri_params = Params::default();
+        did_uri_params.address = Some(addr.clone().to_string());
+        did_uri_params.hl =
+            Some(hashlink::generate_from_json(did_holder_account.get_doc()).unwrap());
+
+        let did_holder_uri = URI::build(
+            did_holder_account,
+            "password".to_string(),
+            Some(did_uri_params),
+        )
+        .unwrap();
+
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("cred-id".to_string(), addr)
+            .send_credential_to_holder("cred-id".to_string(), did_holder_uri)
             .await;
-        assert!(send_output.is_err());
+
+        assert!(send_output.clone().is_err());
         assert!(matches!(
-            send_output.unwrap_err(),
+            send_output.clone().unwrap_err(),
             CredentialError::CommonError(_)
         ))
     }
@@ -852,14 +931,29 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let addr_cloned = addr.clone();
 
+        let (did_holder_account, did_holder) = generate_holder_account();
+        let did_holder_value = did_holder.identity().unwrap().value();
+
+        let mut did_uri_params = Params::default();
+        did_uri_params.address = Some(addr.clone().to_string());
+        did_uri_params.hl =
+            Some(hashlink::generate_from_json(did_holder_account.get_doc()).unwrap());
+
+        let did_holder_uri = URI::build(
+            did_holder_account,
+            "password".to_string(),
+            Some(did_uri_params),
+        )
+        .unwrap();
+
         let mut rpc = MockFakeRPCClient::new();
         rpc.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_credential_to_holder()
-                .with(eq(addr_cloned.clone()), eq(vc))
+                .with(eq(did_holder_value), eq(addr_cloned.clone()), eq(vc))
                 .times(1)
-                .returning(|_, _| Err(CredentialError::SendError("send error".to_string())));
+                .returning(|_, _, _| Err(CredentialError::SendError("send error".to_string())));
 
             expected
         });
@@ -867,7 +961,7 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("cred-id".to_string(), addr)
+            .send_credential_to_holder("cred-id".to_string(), did_holder_uri)
             .await;
         assert!(send_output.is_err());
         assert!(matches!(
@@ -889,7 +983,18 @@ mod tests {
         });
 
         let rpc = MockFakeRPCClient::new();
-        let account = MockFakeAccountUsecase::new();
+
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(move || {
+            let (holder_account, _) = generate_holder_account();
+
+            let mut expected = MockFakeAccountUsecase::new();
+            expected
+                .expect_get_account_did()
+                .returning(move |_| Ok(holder_account.clone()));
+            expected
+        });
+
         let uc = generate_usecase(repo, rpc, account);
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
@@ -900,7 +1005,12 @@ mod tests {
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
 
         let receive = uc
-            .receive_credential_by_holder("request-id-1".to_string(), addr.to_string(), vc)
+            .receive_credential_by_holder(
+                "".to_string(),
+                "request-id-1".to_string(),
+                addr.to_string(),
+                vc,
+            )
             .await;
         assert!(!receive.is_err());
     }
@@ -917,7 +1027,12 @@ mod tests {
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
 
         let receive_request_id = uc
-            .receive_credential_by_holder("".to_string(), "issuer-addr".to_string(), vc.clone())
+            .receive_credential_by_holder(
+                "".to_string(),
+                "".to_string(),
+                "issuer-addr".to_string(),
+                vc.clone(),
+            )
             .await;
         assert!(receive_request_id.is_err());
 
@@ -932,7 +1047,12 @@ mod tests {
         }
 
         let receive_issuer_addr = uc
-            .receive_credential_by_holder("request_id".to_string(), "".to_string(), vc)
+            .receive_credential_by_holder(
+                "".to_string(),
+                "request_id".to_string(),
+                "".to_string(),
+                vc,
+            )
             .await;
         assert!(receive_issuer_addr.is_err());
 

@@ -17,6 +17,7 @@ use super::types::{CredentialError, HolderEntityAccessor};
 #[serde(crate = "self::serde")]
 pub struct Holder {
     pub(crate) id: String,
+    pub(crate) did_holder: String,
     pub(crate) vc: VC,
 
     #[serde(rename = "requestID")]
@@ -35,7 +36,12 @@ pub struct Holder {
 }
 
 impl Holder {
-    pub fn new(request_id: String, issuer_addr: String, vc: VC) -> Result<Self, CredentialError> {
+    pub fn new(
+        did_holder: String,
+        request_id: String,
+        issuer_addr: String,
+        vc: VC,
+    ) -> Result<Self, CredentialError> {
         let uid = Uuid::new_v4().to_string();
         let addr = issuer_addr.parse::<Multiaddr>().map_err(|err| {
             CredentialError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
@@ -43,6 +49,7 @@ impl Holder {
 
         Ok(Self {
             id: uid,
+            did_holder,
             vc,
             request_id,
             issuer_addr: addr,
