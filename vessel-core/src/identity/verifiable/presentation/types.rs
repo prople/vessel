@@ -19,6 +19,9 @@ pub enum PresentationError {
     #[error("unable to generate vp: {0}")]
     GenerateError(String),
 
+    #[error("unable to process incoming VP: {0}")]
+    ReceiveError(String),
+
     #[error("common error")]
     CommonError(#[from] VerifiableError),
 }
@@ -29,6 +32,16 @@ pub trait PresentationEntityAccessor: Clone {
     fn get_id(&self) -> String;
     fn get_vp(&self) -> VP;
     fn get_private_keys(&self) -> IdentityPrivateKeyPairs;
+    fn get_created_at(&self) -> DateTime<Utc>;
+    fn get_updated_at(&self) -> DateTime<Utc>;
+}
+
+pub trait VerifierEntityAccessor: Clone {
+    fn get_id(&self) -> String;
+    fn get_did_verifier(&self) -> String;
+    fn get_vp(&self) -> VP;
+    fn get_request_id(&self) -> String;
+    fn get_issuer_addr(&self) -> Multiaddr;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
@@ -47,42 +60,65 @@ pub trait PresentationAPI: Clone {
         proof_params: Option<ProofParams>,
     ) -> Result<Self::EntityAccessor, PresentationError>;
 
-    async fn send_to_verifier(
-        &self,
-        id: String,
-        receiver: Multiaddr,
-    ) -> Result<(), PresentationError>;
+    async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
 
     async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
+
+    async fn receive_presentation_by_verifier(
+        &self,
+        did_verifier: String,
+        request_id: String,
+        issuer_addr: String,
+        vp: VP,
+    ) -> Result<(), PresentationError>;
 }
 
-/// `RepoBuilder` it's an abstraction used for Presentation's repository data persistent mapper 
+/// `RepoBuilder` it's an abstraction used for Presentation's repository data persistent mapper
 #[async_trait]
 pub trait RepoBuilder: Clone + Sync + Send {
-    type EntityAccessor: PresentationEntityAccessor;
+    type PresentationEntityAccessor: PresentationEntityAccessor;
+    type VerifierEntityAccessor: VerifierEntityAccessor;
 
-    async fn save(&self, data: &Self::EntityAccessor) -> Result<(), PresentationError>;
-    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
+    async fn save(&self, data: &Self::PresentationEntityAccessor) -> Result<(), PresentationError>;
+
+    async fn save_presentation_verifier(
+        &self,
+        data: &Self::VerifierEntityAccessor,
+    ) -> Result<(), PresentationError>;
+
+    async fn get_by_id(
+        &self,
+        id: String,
+    ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 }
 
 /// `RpcBuilder` it's an abstraction to cover Presentation's RPC needs
 #[async_trait]
 pub trait RpcBuilder: Clone + Sync + Send {
-    async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
+    async fn send_to_verifier(
+        &self,
+        did_verifier: String,
+        addr: Multiaddr,
+        vp: VP,
+    ) -> Result<(), PresentationError>;
 }
 
 /// `UsecaseBuilder` is a main abstraction that should be used by application level controller for the Presentation
-/// domain. This usecase abstraction MUST INHERIT the [`PresentationAPI`] 
+/// domain. This usecase abstraction MUST INHERIT the [`PresentationAPI`]
 #[async_trait]
-pub trait UsecaseBuilder<TPresentationEntity, TAccountEntity>:
+pub trait UsecaseBuilder<TPresentationEntity, TVerifierEntity, TAccountEntity>:
     PresentationAPI<EntityAccessor = TPresentationEntity>
 where
     TPresentationEntity: PresentationEntityAccessor,
+    TVerifierEntity: VerifierEntityAccessor,
     TAccountEntity: AccountEntityAccessor,
 {
     type AccountAPIImplementer: AccountAPI;
     type CredentialAPIImplementer: CredentialAPI;
-    type RepoImplementer: RepoBuilder<EntityAccessor = TPresentationEntity>;
+    type RepoImplementer: RepoBuilder<
+        PresentationEntityAccessor = TPresentationEntity,
+        VerifierEntityAccessor = TVerifierEntity,
+    >;
     type RpcImplementer: RpcBuilder;
 
     fn account(&self) -> Self::AccountAPIImplementer;

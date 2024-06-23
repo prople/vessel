@@ -1,9 +1,10 @@
-use multiaddr::Multiaddr;
-
 use rst_common::standard::async_trait::async_trait;
+
+use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::AccountAPI;
 use crate::identity::account::Account;
+use crate::identity::account::URI;
 
 use crate::identity::verifiable::credential::types::CredentialAPI;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
@@ -11,13 +12,14 @@ use crate::identity::verifiable::types::VerifiableError;
 use crate::identity::verifiable::Credential;
 
 use super::types::{PresentationAPI, PresentationError, RepoBuilder, RpcBuilder, UsecaseBuilder};
-use super::Presentation;
+use super::{Presentation, Verifier};
 
 #[derive(Clone)]
 pub struct Usecase<TRPCClient, TRepo, TAccountAPI, TCredentialAPI>
 where
     TRPCClient: RpcBuilder,
-    TRepo: RepoBuilder<EntityAccessor = Presentation>,
+    TRepo:
+        RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     TCredentialAPI: CredentialAPI<EntityAccessor = Credential>,
 {
@@ -31,7 +33,8 @@ impl<TRPCClient, TRepo, TAccountAPI, TCredentialAPI>
     Usecase<TRPCClient, TRepo, TAccountAPI, TCredentialAPI>
 where
     TRPCClient: RpcBuilder,
-    TRepo: RepoBuilder<EntityAccessor = Presentation>,
+    TRepo:
+        RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     TCredentialAPI: CredentialAPI<EntityAccessor = Credential>,
 {
@@ -50,11 +53,12 @@ where
     }
 }
 
-impl<TRPCClient, TRepo, TAccountAPI, TCredentialAPI> UsecaseBuilder<Presentation, Account>
+impl<TRPCClient, TRepo, TAccountAPI, TCredentialAPI> UsecaseBuilder<Presentation, Verifier, Account>
     for Usecase<TRPCClient, TRepo, TAccountAPI, TCredentialAPI>
 where
     TRPCClient: RpcBuilder,
-    TRepo: RepoBuilder<EntityAccessor = Presentation>,
+    TRepo:
+        RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     TCredentialAPI: CredentialAPI<EntityAccessor = Credential> + Sync + Send,
 {
@@ -85,7 +89,8 @@ impl<TRPCClient, TRepo, TAccountAPI, TCredentialAPI> PresentationAPI
     for Usecase<TRPCClient, TRepo, TAccountAPI, TCredentialAPI>
 where
     TRPCClient: RpcBuilder,
-    TRepo: RepoBuilder<EntityAccessor = Presentation>,
+    TRepo:
+        RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     TCredentialAPI: CredentialAPI<EntityAccessor = Credential> + Sync + Send,
 {
@@ -95,19 +100,27 @@ where
         self.repo().get_by_id(id).await
     }
 
-    async fn send_to_verifier(
-        &self,
-        id: String,
-        receiver: Multiaddr,
-    ) -> Result<(), PresentationError> {
+    async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError> {
         if id.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
             ));
         }
 
+        if did_uri.is_empty() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("did_uri was missing".to_string()),
+            ));
+        }
+
+        let (uri_addr, _, uri_did) = URI::parse(did_uri).map_err(|err| {
+            PresentationError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
+        })?;
+
         let presentation = self.repo().get_by_id(id).await?;
-        self.rpc().send_to_verifier(receiver, presentation.vp).await
+        self.rpc()
+            .send_to_verifier(uri_did, uri_addr, presentation.vp)
+            .await
     }
 
     async fn generate(
@@ -149,6 +162,43 @@ where
         let _ = self.repo().save(&presentation.clone()).await?;
         Ok(presentation)
     }
+
+    async fn receive_presentation_by_verifier(
+        &self,
+        did_verifier: String,
+        request_id: String,
+        issuer_addr: String,
+        vp: VP,
+    ) -> Result<(), PresentationError> {
+        if did_verifier.is_empty() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("did_verifier was missing".to_string()),
+            ));
+        }
+
+        if request_id.is_empty() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("request_id was missing".to_string()),
+            ));
+        }
+
+        if issuer_addr.is_empty() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("issuer_addr was missing".to_string()),
+            ));
+        }
+
+        let _ = self
+            .account()
+            .get_account_did(did_verifier.clone())
+            .await
+            .map_err(|err| PresentationError::ReceiveError(err.to_string()))?;
+
+        let presentation_verifier = Verifier::new(did_verifier, request_id, issuer_addr, vp)?;
+        self.repo()
+            .save_presentation_verifier(&presentation_verifier)
+            .await
+    }
 }
 
 #[cfg(test)]
@@ -166,6 +216,7 @@ mod tests {
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
+    use prople_did_core::hashlink;
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
     use prople_did_core::verifiable::objects::ProofValue;
     use prople_did_core::verifiable::objects::VC;
@@ -174,7 +225,7 @@ mod tests {
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::with_tokio::tokio;
 
-    use crate::identity::account::types::AccountError;
+    use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::credential::types::CredentialError;
     use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
@@ -190,9 +241,16 @@ mod tests {
 
         #[async_trait]
         impl RepoBuilder for FakeRepo {
-            type EntityAccessor = Presentation;
+            type PresentationEntityAccessor = Presentation;
+            type VerifierEntityAccessor = Verifier;
 
             async fn save(&self, data: &Presentation) -> Result<(), PresentationError>;
+
+            async fn save_presentation_verifier(
+                &self,
+                data: &Verifier,
+            ) -> Result<(), PresentationError>;
+
             async fn get_by_id(&self, id: String) -> Result<Presentation, PresentationError>;
         }
     );
@@ -206,7 +264,7 @@ mod tests {
 
         #[async_trait]
         impl RpcBuilder for FakeRPCClient {
-            async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
+            async fn send_to_verifier(&self, did_verifier: String, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
         }
     );
 
@@ -257,11 +315,12 @@ mod tests {
             async fn send_credential_to_holder(
                 &self,
                 id: String,
-                receiver: Multiaddr,
+                did_uri: String,
             ) -> Result<(), CredentialError>;
 
             async fn receive_credential_by_holder(
                 &self,
+                did_holder: String,
                 request_id: String,
                 issuer_addr: String,
                 vc: VC,
@@ -291,7 +350,7 @@ mod tests {
     }
 
     fn generate_usecase<
-        TRepo: RepoBuilder<EntityAccessor = Presentation>,
+        TRepo: RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
         TRPCClient: RpcBuilder,
         TAccount: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
         TCredentialAPI: CredentialAPI<EntityAccessor = Credential>,
@@ -356,6 +415,36 @@ mod tests {
         vp.set_holder(identity.value());
 
         Presentation::new(vp, doc_priv_keys)
+    }
+
+    fn generate_verifier_account() -> (Account, DID) {
+        let did_verifier = generate_did();
+        let mut did_verifier_identity = did_verifier.identity().unwrap();
+        let did_verifier_value = did_verifier_identity.value();
+
+        let did_verifier_doc = did_verifier_identity
+            .build_assertion_method()
+            .build_auth_method()
+            .to_doc();
+
+        let did_verifier_doc_privkeys = did_verifier_identity
+            .build_private_keys("password".to_string())
+            .unwrap();
+
+        let did_verifier_keysecure = did_verifier
+            .account()
+            .privkey()
+            .to_keysecure("password".to_string())
+            .unwrap();
+
+        let did_verifier_account = Account::new(
+            did_verifier_value,
+            did_verifier_doc,
+            did_verifier_doc_privkeys,
+            did_verifier_keysecure,
+        );
+
+        (did_verifier_account, did_verifier)
     }
 
     #[tokio::test]
@@ -600,17 +689,31 @@ mod tests {
             expected
         });
 
+        let (verifier_account, verifier_did) = generate_verifier_account();
+        let verifier_did_value = verifier_did.identity().unwrap().value();
+
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let addr_cloned = addr.clone();
+
+        let mut did_uri_params = Params::default();
+        did_uri_params.address = Some(addr.clone().to_string());
+        did_uri_params.hl = Some(hashlink::generate_from_json(verifier_account.get_doc()).unwrap());
+
+        let did_holder_uri = URI::build(
+            verifier_account,
+            "password".to_string(),
+            Some(did_uri_params),
+        )
+        .unwrap();
 
         let mut rpc = MockFakeRPCClient::new();
         rpc.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_to_verifier()
-                .with(eq(addr_cloned), eq(presentation.vp))
+                .with(eq(verifier_did_value), eq(addr_cloned), eq(presentation.vp))
                 .times(1)
-                .returning(|_, _| Ok(()));
+                .returning(|_, _, _| Ok(()));
 
             expected
         });
@@ -619,7 +722,7 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let send_output = uc.send_to_verifier("id1".to_string(), addr).await;
+        let send_output = uc.send_to_verifier("id1".to_string(), did_holder_uri).await;
         assert!(!send_output.is_err())
     }
 
@@ -631,9 +734,22 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
+
+        let (verifier_account, _) = generate_verifier_account();
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
 
-        let send_output = uc.send_to_verifier("".to_string(), addr).await;
+        let mut did_uri_params = Params::default();
+        did_uri_params.address = Some(addr.clone().to_string());
+        did_uri_params.hl = Some(hashlink::generate_from_json(verifier_account.get_doc()).unwrap());
+
+        let did_holder_uri = URI::build(
+            verifier_account,
+            "password".to_string(),
+            Some(did_uri_params),
+        )
+        .unwrap();
+
+        let send_output = uc.send_to_verifier("".to_string(), did_holder_uri).await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -666,12 +782,106 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
+
+        let (verifier_account, _) = generate_verifier_account();
+
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
 
-        let send_output = uc.send_to_verifier("id1".to_string(), addr).await;
+        let mut did_uri_params = Params::default();
+        did_uri_params.address = Some(addr.clone().to_string());
+        did_uri_params.hl = Some(hashlink::generate_from_json(verifier_account.get_doc()).unwrap());
+
+        let did_holder_uri = URI::build(
+            verifier_account,
+            "password".to_string(),
+            Some(did_uri_params),
+        )
+        .unwrap();
+
+        let send_output = uc.send_to_verifier("id1".to_string(), did_holder_uri).await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
         assert!(matches!(send_output_err, PresentationError::CommonError(_)));
+    }
+
+    #[tokio::test]
+    async fn test_receive_by_verifier() {
+        let (verifier_account, verifier_did) = generate_verifier_account();
+        let verifier_did_value = verifier_did.identity().unwrap().value();
+        
+        let presentation = generate_presentation();
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeRepo::new();
+            expected.expect_save_presentation_verifier().times(1).returning(|_| Ok(()));
+
+            expected
+        });
+
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(move || {
+            let verifier_account = verifier_account.clone();
+            let mut expected = MockFakeAccountUsecase::new();
+            expected.expect_get_account_did().returning(move|_| Ok(verifier_account.clone()));
+
+            expected
+        });
+
+        let rpc = MockFakeRPCClient::new();
+        let credential = MockFakeCredentialUsecase::new();
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let uc = generate_usecase(repo, rpc, account, credential);
+        
+        let output = uc.receive_presentation_by_verifier(
+            verifier_did_value,
+            "request-id".to_string(),
+            addr.to_string(),
+            presentation.vp,
+        ).await;
+
+        assert!(!output.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_receive_by_verifier_validation_error() {
+        let repo = MockFakeRepo::new();
+        let account = MockFakeAccountUsecase::new();
+        let rpc = MockFakeRPCClient::new();
+        let credential = MockFakeCredentialUsecase::new();
+         
+        let presentation = generate_presentation();
+        let uc = generate_usecase(repo, rpc, account, credential);
+
+        let vp = presentation.vp;
+        let output = uc.receive_presentation_by_verifier("".to_string(), "".to_string(), "".to_string(), vp.clone()).await;
+        assert!(output.is_err());
+        
+        let send_output_err = output.unwrap_err();
+        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
+        if let PresentationError::CommonError(msg) = send_output_err {
+            assert!(msg.to_string().contains("did_verifier"))
+        }
+        
+        let output = uc.receive_presentation_by_verifier("verifier-did".to_string(), "".to_string(), "".to_string(), vp.clone()).await;
+        assert!(output.is_err());
+        
+        let send_output_err = output.unwrap_err();
+        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
+        if let PresentationError::CommonError(msg) = send_output_err {
+            assert!(msg.to_string().contains("request_id"))
+        }
+        
+        let output = uc.receive_presentation_by_verifier("verifier-did".to_string(), "request-id".to_string(), "".to_string(), vp.clone()).await;
+        assert!(output.is_err());
+        
+        let send_output_err = output.unwrap_err();
+        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
+        if let PresentationError::CommonError(msg) = send_output_err {
+            assert!(msg.to_string().contains("issuer_addr"))
+        }
     }
 }
