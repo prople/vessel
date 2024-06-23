@@ -50,7 +50,8 @@ pub trait VerifierEntityAccessor: Clone {
 /// `Presentation` logics
 #[async_trait]
 pub trait PresentationAPI: Clone {
-    type EntityAccessor: PresentationEntityAccessor;
+    type PresentationEntityAccessor: PresentationEntityAccessor;
+    type VerifierEntityAccessor: VerifierEntityAccessor;
 
     async fn generate(
         &self,
@@ -58,11 +59,14 @@ pub trait PresentationAPI: Clone {
         did_issuer: String,
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
-    ) -> Result<Self::EntityAccessor, PresentationError>;
+    ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
     async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
 
-    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
+    async fn get_by_id(
+        &self,
+        id: String,
+    ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
     async fn receive_presentation_by_verifier(
         &self,
@@ -71,6 +75,11 @@ pub trait PresentationAPI: Clone {
         issuer_addr: String,
         vp: VP,
     ) -> Result<(), PresentationError>;
+
+    async fn list_vps_by_did_verifier(
+        &self,
+        did_verifier: String,
+    ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError>;
 }
 
 /// `RepoBuilder` it's an abstraction used for Presentation's repository data persistent mapper
@@ -78,8 +87,6 @@ pub trait PresentationAPI: Clone {
 pub trait RepoBuilder: Clone + Sync + Send {
     type PresentationEntityAccessor: PresentationEntityAccessor;
     type VerifierEntityAccessor: VerifierEntityAccessor;
-
-    async fn save(&self, data: &Self::PresentationEntityAccessor) -> Result<(), PresentationError>;
 
     async fn save_presentation_verifier(
         &self,
@@ -90,6 +97,13 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         id: String,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
+
+    async fn list_vps_by_did_verifier(
+        &self,
+        did_verifier: String,
+    ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError>;
+
+    async fn save(&self, data: &Self::PresentationEntityAccessor) -> Result<(), PresentationError>;
 }
 
 /// `RpcBuilder` it's an abstraction to cover Presentation's RPC needs
@@ -107,7 +121,10 @@ pub trait RpcBuilder: Clone + Sync + Send {
 /// domain. This usecase abstraction MUST INHERIT the [`PresentationAPI`]
 #[async_trait]
 pub trait UsecaseBuilder<TPresentationEntity, TVerifierEntity, TAccountEntity>:
-    PresentationAPI<EntityAccessor = TPresentationEntity>
+    PresentationAPI<
+    PresentationEntityAccessor = TPresentationEntity,
+    VerifierEntityAccessor = TVerifierEntity,
+>
 where
     TPresentationEntity: PresentationEntityAccessor,
     TVerifierEntity: VerifierEntityAccessor,

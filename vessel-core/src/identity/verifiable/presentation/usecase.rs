@@ -94,9 +94,13 @@ where
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
     TCredentialAPI: CredentialAPI<EntityAccessor = Credential> + Sync + Send,
 {
-    type EntityAccessor = Presentation;
+    type PresentationEntityAccessor = Presentation;
+    type VerifierEntityAccessor = Verifier;
 
-    async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError> {
+    async fn get_by_id(
+        &self,
+        id: String,
+    ) -> Result<Self::PresentationEntityAccessor, PresentationError> {
         self.repo().get_by_id(id).await
     }
 
@@ -129,7 +133,7 @@ where
         did_issuer: String,
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
-    ) -> Result<Self::EntityAccessor, PresentationError> {
+    ) -> Result<Self::PresentationEntityAccessor, PresentationError> {
         if password.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("password was missing".to_string()),
@@ -199,6 +203,19 @@ where
             .save_presentation_verifier(&presentation_verifier)
             .await
     }
+
+    async fn list_vps_by_did_verifier(
+        &self,
+        did_verifier: String,
+    ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError> {
+        if did_verifier.is_empty() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("did_verifier was missing".to_string()),
+            ));
+        }
+
+        self.repo().list_vps_by_did_verifier(did_verifier).await
+    }
 }
 
 #[cfg(test)]
@@ -250,6 +267,11 @@ mod tests {
                 &self,
                 data: &Verifier,
             ) -> Result<(), PresentationError>;
+
+            async fn list_vps_by_did_verifier(
+                &self,
+                did_verifier: String,
+            ) -> Result<Vec<Verifier>, PresentationError>;
 
             async fn get_by_id(&self, id: String) -> Result<Presentation, PresentationError>;
         }
@@ -809,13 +831,16 @@ mod tests {
     async fn test_receive_by_verifier() {
         let (verifier_account, verifier_did) = generate_verifier_account();
         let verifier_did_value = verifier_did.identity().unwrap().value();
-        
+
         let presentation = generate_presentation();
 
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeRepo::new();
-            expected.expect_save_presentation_verifier().times(1).returning(|_| Ok(()));
+            expected
+                .expect_save_presentation_verifier()
+                .times(1)
+                .returning(|_| Ok(()));
 
             expected
         });
@@ -824,7 +849,9 @@ mod tests {
         account.expect_clone().times(1).return_once(move || {
             let verifier_account = verifier_account.clone();
             let mut expected = MockFakeAccountUsecase::new();
-            expected.expect_get_account_did().returning(move|_| Ok(verifier_account.clone()));
+            expected
+                .expect_get_account_did()
+                .returning(move |_| Ok(verifier_account.clone()));
 
             expected
         });
@@ -835,13 +862,15 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        
-        let output = uc.receive_presentation_by_verifier(
-            verifier_did_value,
-            "request-id".to_string(),
-            addr.to_string(),
-            presentation.vp,
-        ).await;
+
+        let output = uc
+            .receive_presentation_by_verifier(
+                verifier_did_value,
+                "request-id".to_string(),
+                addr.to_string(),
+                presentation.vp,
+            )
+            .await;
 
         assert!(!output.is_err());
     }
@@ -852,36 +881,129 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
         let rpc = MockFakeRPCClient::new();
         let credential = MockFakeCredentialUsecase::new();
-         
+
         let presentation = generate_presentation();
         let uc = generate_usecase(repo, rpc, account, credential);
 
         let vp = presentation.vp;
-        let output = uc.receive_presentation_by_verifier("".to_string(), "".to_string(), "".to_string(), vp.clone()).await;
+        let output = uc
+            .receive_presentation_by_verifier(
+                "".to_string(),
+                "".to_string(),
+                "".to_string(),
+                vp.clone(),
+            )
+            .await;
         assert!(output.is_err());
-        
+
         let send_output_err = output.unwrap_err();
         assert!(matches!(send_output_err, PresentationError::CommonError(_)));
         if let PresentationError::CommonError(msg) = send_output_err {
             assert!(msg.to_string().contains("did_verifier"))
         }
-        
-        let output = uc.receive_presentation_by_verifier("verifier-did".to_string(), "".to_string(), "".to_string(), vp.clone()).await;
+
+        let output = uc
+            .receive_presentation_by_verifier(
+                "verifier-did".to_string(),
+                "".to_string(),
+                "".to_string(),
+                vp.clone(),
+            )
+            .await;
         assert!(output.is_err());
-        
+
         let send_output_err = output.unwrap_err();
         assert!(matches!(send_output_err, PresentationError::CommonError(_)));
         if let PresentationError::CommonError(msg) = send_output_err {
             assert!(msg.to_string().contains("request_id"))
         }
-        
-        let output = uc.receive_presentation_by_verifier("verifier-did".to_string(), "request-id".to_string(), "".to_string(), vp.clone()).await;
+
+        let output = uc
+            .receive_presentation_by_verifier(
+                "verifier-did".to_string(),
+                "request-id".to_string(),
+                "".to_string(),
+                vp.clone(),
+            )
+            .await;
         assert!(output.is_err());
-        
+
         let send_output_err = output.unwrap_err();
         assert!(matches!(send_output_err, PresentationError::CommonError(_)));
         if let PresentationError::CommonError(msg) = send_output_err {
             assert!(msg.to_string().contains("issuer_addr"))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_list_vps_by_did_verifier() {
+        let p1 = generate_presentation();
+        let p2 = generate_presentation();
+
+        let did_verifier = generate_did();
+        let did_verifier_value = did_verifier.identity().unwrap().value();
+        let did_verifier_value_cloned = did_verifier_value.clone();
+
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let v1 = Verifier::new(
+            did_verifier_value.clone(),
+            "req-id-1".to_string(),
+            addr.to_string(),
+            p1.vp,
+        )
+        .unwrap();
+        
+        let v2 = Verifier::new(
+            did_verifier_value.clone(),
+            "req-id-2".to_string(),
+            addr.to_string(),
+            p2.vp,
+        )
+        .unwrap();
+
+        let verifiers = vec![v1,v2];
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_clone().times(1).return_once(move || {
+            let verifiers = verifiers.clone();
+
+            let mut expected = MockFakeRepo::new();
+            expected
+                .expect_list_vps_by_did_verifier()
+                .with(eq(did_verifier_value_cloned))
+                .times(1)
+                .return_once(move |_| Ok(verifiers));
+
+            expected
+        });
+        
+        let account = MockFakeAccountUsecase::new();
+        let rpc = MockFakeRPCClient::new();
+        let credential = MockFakeCredentialUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account, credential);
+        let output = uc.list_vps_by_did_verifier(did_verifier_value).await;
+        assert!(!output.is_err());
+        assert_eq!(output.unwrap().len(), 2)
+    }
+
+    #[tokio::test]
+    async fn test_list_vps_by_did_verifier_validation_error() {
+        let repo = MockFakeRepo::new();
+        let account = MockFakeAccountUsecase::new();
+        let rpc = MockFakeRPCClient::new();
+        let credential = MockFakeCredentialUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account, credential);
+        let output = uc.list_vps_by_did_verifier("".to_string()).await;
+        assert!(output.is_err());
+        
+        let send_output_err = output.unwrap_err();
+        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
+       
+        if let PresentationError::CommonError(msg) = send_output_err {
+            assert!(msg.to_string().contains("did_verifier"))
         }
     }
 }
