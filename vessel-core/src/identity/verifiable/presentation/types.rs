@@ -33,6 +33,8 @@ pub trait PresentationEntityAccessor: Clone {
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
 
+/// `PresentationAPI` it's a API that should be used as an entrypoint to the
+/// `Presentation` logics
 #[async_trait]
 pub trait PresentationAPI: Clone {
     type EntityAccessor: PresentationEntityAccessor;
@@ -54,6 +56,7 @@ pub trait PresentationAPI: Clone {
     async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
 }
 
+/// `RepoBuilder` it's an abstraction used for Presentation's repository data persistent mapper 
 #[async_trait]
 pub trait RepoBuilder: Clone + Sync + Send {
     type EntityAccessor: PresentationEntityAccessor;
@@ -62,11 +65,14 @@ pub trait RepoBuilder: Clone + Sync + Send {
     async fn get_by_id(&self, id: String) -> Result<Self::EntityAccessor, PresentationError>;
 }
 
+/// `RpcBuilder` it's an abstraction to cover Presentation's RPC needs
 #[async_trait]
 pub trait RpcBuilder: Clone + Sync + Send {
     async fn send_to_verifier(&self, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
 }
 
+/// `UsecaseBuilder` is a main abstraction that should be used by application level controller for the Presentation
+/// domain. This usecase abstraction MUST INHERIT the [`PresentationAPI`] 
 #[async_trait]
 pub trait UsecaseBuilder<TPresentationEntity, TAccountEntity>:
     PresentationAPI<EntityAccessor = TPresentationEntity>
