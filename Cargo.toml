@@ -2,13 +2,14 @@
 resolver = "2"
 
 members = [
-    "vessel-core",
+    "vessel-core", 
+    "vessel-rpc",
 ]
 
 [workspace.dependencies]
 prople-did-core = {version = "~0.4"}
 prople-crypto = {version = "~0.2"}
-rst-common = {version = "~1", features=["with-errors"]}
+rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
 rstdev-domain = {version = "~0.1"}
 mockall  = {version = "0.12.1"}
 multiaddr = {version = "0.18.1"}
