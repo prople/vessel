@@ -7,7 +7,7 @@ members = [
 ]
 
 [workspace.dependencies]
-prople-did-core = {version = "~0.4"}
+prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
 rstdev-domain = {version = "~0.1"}
