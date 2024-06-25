@@ -41,7 +41,7 @@ pub enum CredentialError {
 /// for all `Credential` property fields
 pub trait CredentialEntityAccessor: Clone {
     fn get_id(&self) -> String;
-    fn get_did(&self) -> String;
+    fn get_did_issuer(&self) -> String;
     fn get_did_vc(&self) -> String;
     fn get_did_vc_doc_private_keys(&self) -> IdentityPrivateKeyPairs;
     fn get_vc(&self) -> VC;
@@ -78,6 +78,7 @@ pub trait CredentialAPI: Clone {
         did_issuer: String,
         credential: Value,
         proof_params: Option<ProofParams>,
+        current_addr: Option<Multiaddr>,
     ) -> Result<Self::EntityAccessor, CredentialError>;
 
     /// `send_credential_to_holder` used to send a `VC` to some `Holder`, if there is no error it means the `VC`

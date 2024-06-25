@@ -25,7 +25,7 @@ use super::types::{CredentialEntityAccessor, CredentialError};
 #[serde(crate = "self::serde")]
 pub struct Credential {
     pub(crate) id: String,
-    pub(crate) did: String,
+    pub(crate) did_issuer: String,
     pub(crate) did_vc: String,
     pub(crate) did_vc_doc_private_keys: IdentityPrivateKeyPairs,
     pub(crate) vc: VC,
@@ -42,7 +42,7 @@ pub struct Credential {
 
 impl Credential {
     pub fn new(
-        did: String,
+        did_issuer: String,
         did_vc: String,
         did_vc_doc_private_keys: IdentityPrivateKeyPairs,
         vc: VC,
@@ -51,7 +51,7 @@ impl Credential {
         Self {
             id: Uuid::new_v4().to_string(),
             keysecure,
-            did,
+            did_issuer,
             did_vc,
             did_vc_doc_private_keys,
             vc,
@@ -83,7 +83,7 @@ impl Credential {
         let account_keysecure = account.get_keysecure();
         let account_doc_private_key_pairs = account.get_doc_private_keys();
 
-        let mut vc = VC::new(account.get_did().clone(), did_issuer.clone());
+        let mut vc = VC::new(account.get_did_uri(), did_issuer.clone());
         vc.add_context(CONTEXT_VC.to_string())
             .add_context(CONTEXT_VC_V2.to_string())
             .add_type("VerifiableCredential".to_string())
@@ -118,8 +118,8 @@ impl CredentialEntityAccessor for Credential {
         self.id.to_owned()
     }
 
-    fn get_did(&self) -> String {
-        self.did.to_owned()
+    fn get_did_issuer(&self) -> String {
+        self.did_issuer.to_owned()
     }
 
     fn get_did_vc(&self) -> String {
@@ -198,6 +198,7 @@ mod tests {
         AccountIdentity {
             id: Uuid::new_v4().to_string(),
             did: did_vc_value_cloned.clone(),
+            did_uri: "did-uri".to_string(),
             keysecure: did_vc_keysecure,
             doc: did_vc_doc,
             doc_private_keys: did_vc_doc_private_keys,
