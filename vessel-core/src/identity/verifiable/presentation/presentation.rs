@@ -67,7 +67,7 @@ impl Presentation {
 
     pub fn generate(
         password: String,
-        did_issuer: String,
+        did_issuer_uri: String,
         account: impl AccountEntityAccessor,
         credentials: Vec<impl CredentialEntityAccessor>,
         proof_params: Option<ProofParams>,
@@ -78,7 +78,7 @@ impl Presentation {
             ));
         }
 
-        if did_issuer.is_empty() {
+        if did_issuer_uri.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("did_issuer was missing".to_string()),
             ));
@@ -87,7 +87,7 @@ impl Presentation {
         let mut vp = VP::new();
         vp.add_context(CONTEXT_VC_V2.to_string())
             .add_type(String::from(VP_TYPE.to_string()))
-            .set_holder(did_issuer.clone());
+            .set_holder(did_issuer_uri.clone());
 
         for credential in credentials.iter() {
             vp.add_credential(credential.get_vc());
@@ -117,6 +117,7 @@ mod tests {
     use mockall::mock;
     use mockall::predicate::eq;
 
+    use multiaddr::Multiaddr;
     use rst_common::standard::async_trait::async_trait;
     use rst_common::standard::serde_json;
     use rst_common::with_tokio::tokio;
@@ -142,7 +143,7 @@ mod tests {
         impl AccountAPI for FakeAccountUsecase {
             type EntityAccessor = AccountIdentity;
 
-            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
+            async fn generate_did(&self, password: String, current_addr: Option<Multiaddr>) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
                 did: String,
@@ -188,6 +189,7 @@ mod tests {
         AccountIdentity {
             id: Uuid::new_v4().to_string(),
             did: did_vc_value_cloned.clone(),
+            did_uri: "did-uri".to_string(),
             keysecure: did_vc_keysecure,
             doc: did_vc_doc,
             doc_private_keys: did_vc_doc_private_keys,
@@ -207,8 +209,8 @@ mod tests {
         let mut expected = MockFakeAccountUsecase::new();
         expected
             .expect_generate_did()
-            .with(eq("password".to_string()))
-            .return_once(move |_| {
+            .with(eq("password".to_string()), eq(None))
+            .return_once(move |_, _| {
                 let mut did_vc_identity = did_vc_cloned.identity().unwrap();
                 let did_vc_value_cloned = did_vc_identity.value();
 
@@ -230,6 +232,7 @@ mod tests {
                 Ok(AccountIdentity {
                     id: Uuid::new_v4().to_string(),
                     did: did_vc_value_cloned.clone(),
+                    did_uri: "did-uri".to_string(),
                     keysecure: did_vc_keysecure,
                     doc: did_vc_doc,
                     doc_private_keys: did_vc_doc_private_keys,
@@ -254,7 +257,7 @@ mod tests {
         .await;
         assert!(!credential_builder.is_err());
 
-        let account_builder = AccountIdentity::generate("password".to_string());
+        let account_builder = AccountIdentity::generate("password".to_string(), None);
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();

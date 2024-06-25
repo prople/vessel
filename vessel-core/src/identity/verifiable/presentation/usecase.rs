@@ -121,16 +121,22 @@ where
             PresentationError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
         })?;
 
+        if uri_addr.is_none() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
+            ));
+        }
+
         let presentation = self.repo().get_by_id(id).await?;
         self.rpc()
-            .send_to_verifier(uri_did, uri_addr, presentation.vp)
+            .send_to_verifier(uri_did, uri_addr.unwrap(), presentation.vp)
             .await
     }
 
     async fn generate(
         &self,
         password: String,
-        did_issuer: String,
+        did_issuer_uri: String,
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError> {
@@ -140,9 +146,18 @@ where
             ));
         }
 
-        if did_issuer.is_empty() {
+        if did_issuer_uri.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("did_issuer was missing".to_string()),
+            ));
+        }
+
+        let check_did_issuer_has_params = URI::has_params(did_issuer_uri.clone())
+            .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
+
+        if !check_did_issuer_has_params {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("did_issuer_uri is not valid".to_string()),
             ));
         }
 
@@ -152,16 +167,19 @@ where
             .await
             .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
+        let (_, _, did_issuer) = URI::parse(did_issuer_uri.clone())
+            .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
+
         let account = self
             .account()
-            .get_account_did(did_issuer.clone())
+            .get_account_did(did_issuer)
             .await
             .map_err(|err| {
                 PresentationError::CommonError(VerifiableError::DIDError(err.to_string()))
             })?;
 
         let presentation =
-            Presentation::generate(password, did_issuer, account, vcs, proof_params)?;
+            Presentation::generate(password, did_issuer_uri, account, vcs, proof_params)?;
 
         let _ = self.repo().save(&presentation.clone()).await?;
         Ok(presentation)
@@ -301,7 +319,7 @@ mod tests {
         impl AccountAPI for FakeAccountUsecase {
             type EntityAccessor = Account;
 
-            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
+            async fn generate_did(&self, password: String, current_addr: Option<Multiaddr>) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
                 did: String,
@@ -332,6 +350,7 @@ mod tests {
                 did_issuer: String,
                 credential: Value,
                 proof_params: Option<ProofParams>,
+                current_addr: Option<Multiaddr>,
             ) -> Result<Credential, CredentialError>;
 
             async fn send_credential_to_holder(
@@ -461,6 +480,7 @@ mod tests {
 
         let did_verifier_account = Account::new(
             did_verifier_value,
+            "did-uri".to_string(),
             did_verifier_doc,
             did_verifier_doc_privkeys,
             did_verifier_keysecure,
@@ -471,9 +491,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_generate_without_params() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        
         let did_issuer = generate_did();
-        let did_issuer_value = did_issuer.identity().unwrap().value();
         let did_issuer_mock = did_issuer.clone();
+
+        let mut did_issuer_uri_params = Params::default();
+        did_issuer_uri_params.address = Some(addr.to_string());
+
+        let did_issuer_uri_builder = did_issuer.build_uri(Some(did_issuer_uri_params));
+        assert!(!did_issuer_uri_builder.is_err());
+
+        let did_issuer_uri = did_issuer_uri_builder.unwrap();
 
         let creds = generate_credentials();
 
@@ -510,6 +539,7 @@ mod tests {
 
                 let result = AccountIdentity::new(
                     did_issuer_mock.identity().unwrap().value(),
+                    "did-uri".to_string(),
                     did_issuer_mock_doc,
                     did_issuer_doc_private_keys,
                     did_issuer_mock_keysecure,
@@ -537,7 +567,7 @@ mod tests {
         let result = uc
             .generate(
                 "password".to_string(),
-                did_issuer_value,
+                did_issuer_uri.clone(),
                 vec!["id1".to_string(), "id2".to_string()],
                 None,
             )
@@ -545,23 +575,31 @@ mod tests {
 
         assert!(!result.is_err());
 
-        let did_issuer_identity = did_issuer.identity().unwrap();
         let presentation = result.unwrap();
         assert!(presentation.vp.holder.is_some());
         assert!(presentation.vp.verifiable_credential.len() == 2);
-        assert_eq!(presentation.vp.holder.unwrap(), did_issuer_identity.value());
+        assert_eq!(presentation.vp.holder.unwrap(), did_issuer_uri);
     }
 
     #[tokio::test]
     async fn test_generate_with_params() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        
         let did_issuer = generate_did();
+
+        let mut did_issuer_uri_params = Params::default();
+        did_issuer_uri_params.address = Some(addr.to_string());
+
+        let did_issuer_uri_builder = did_issuer.build_uri(Some(did_issuer_uri_params));
+        assert!(!did_issuer_uri_builder.is_err());
+
+        let did_issuer_uri = did_issuer_uri_builder.unwrap();
 
         let mut did_issuer_identity = did_issuer.identity().unwrap();
         did_issuer_identity
             .build_assertion_method()
             .build_auth_method();
 
-        let did_issuer_value = did_issuer_identity.value();
         let did_issuer_mock = did_issuer.clone();
 
         let creds = generate_credentials();
@@ -608,6 +646,7 @@ mod tests {
 
                 let result = AccountIdentity::new(
                     did_issuer_mock.identity().unwrap().value(),
+                    "did-uri".to_string(),
                     did_issuer_mock_doc,
                     did_issuer_mock_doc_private_keys,
                     did_issuer_mock_keysecure,
@@ -635,7 +674,7 @@ mod tests {
         let result = uc
             .generate(
                 "password".to_string(),
-                did_issuer_value,
+                did_issuer_uri.clone(),
                 vec!["id1".to_string(), "id2".to_string()],
                 Some(proof_params),
             )
@@ -953,7 +992,7 @@ mod tests {
             p1.vp,
         )
         .unwrap();
-        
+
         let v2 = Verifier::new(
             did_verifier_value.clone(),
             "req-id-2".to_string(),
@@ -962,7 +1001,7 @@ mod tests {
         )
         .unwrap();
 
-        let verifiers = vec![v1,v2];
+        let verifiers = vec![v1, v2];
 
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(move || {
@@ -977,11 +1016,11 @@ mod tests {
 
             expected
         });
-        
+
         let account = MockFakeAccountUsecase::new();
         let rpc = MockFakeRPCClient::new();
         let credential = MockFakeCredentialUsecase::new();
-        
+
         let uc = generate_usecase(repo, rpc, account, credential);
         let output = uc.list_vps_by_did_verifier(did_verifier_value).await;
         assert!(!output.is_err());
@@ -994,14 +1033,14 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
         let rpc = MockFakeRPCClient::new();
         let credential = MockFakeCredentialUsecase::new();
-        
+
         let uc = generate_usecase(repo, rpc, account, credential);
         let output = uc.list_vps_by_did_verifier("".to_string()).await;
         assert!(output.is_err());
-        
+
         let send_output_err = output.unwrap_err();
         assert!(matches!(send_output_err, PresentationError::CommonError(_)));
-       
+
         if let PresentationError::CommonError(msg) = send_output_err {
             assert!(msg.to_string().contains("did_verifier"))
         }
