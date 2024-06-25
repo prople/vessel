@@ -49,6 +49,7 @@ pub enum AccountError {
 pub trait AccountEntityAccessor: Clone + Debug {
     fn get_id(&self) -> String;
     fn get_did(&self) -> String;
+    fn get_did_uri(&self) -> String;
     fn get_doc(&self) -> Doc;
     fn get_doc_private_keys(&self) -> IdentityPrivateKeyPairs;
     fn get_keysecure(&self) -> KeySecure;
@@ -69,7 +70,11 @@ pub trait AccountAPI: Clone {
     /// storage data structure. This strategy following `Ethereum KeyStore` mechanism.
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
-    async fn generate_did(&self, password: String) -> Result<Self::EntityAccessor, AccountError>;
+    async fn generate_did(
+        &self,
+        password: String,
+        current_addr: Option<Multiaddr>,
+    ) -> Result<Self::EntityAccessor, AccountError>;
 
     /// `build_did_uri` used to generate the `DID URI`, a specific URI syntax for the DID
     ///

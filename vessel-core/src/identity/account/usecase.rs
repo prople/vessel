@@ -1,3 +1,4 @@
+use multiaddr::Multiaddr;
 use rst_common::standard::async_trait::async_trait;
 
 use prople_did_core::did::query::Params;
@@ -60,8 +61,12 @@ where
 {
     type EntityAccessor = Account;
 
-    async fn generate_did(&self, password: String) -> Result<Account, AccountError> {
-        let account = Account::generate(password)?;
+    async fn generate_did(
+        &self,
+        password: String,
+        current_addr: Option<Multiaddr>,
+    ) -> Result<Account, AccountError> {
+        let account = Account::generate(password, current_addr)?;
         let _ = self
             .repo()
             .save_account(&account)
@@ -88,7 +93,22 @@ where
 
     async fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError> {
         let (uri_addr, uri_params, uri_did) = URI::parse(uri)?;
-        let doc = self.rpc().resolve_did_doc(uri_addr, uri_did).await?;
+        if uri_params.hl.is_none() {
+            return Err(AccountError::RemoveDIDError(
+                "missing hashlink parameter".to_string(),
+            ));
+        }
+
+        if uri_addr.is_none() {
+            return Err(AccountError::ResolveDIDError(
+                "misisng uri addres".to_string(),
+            ));
+        }
+
+        let doc = self
+            .rpc()
+            .resolve_did_doc(uri_addr.unwrap(), uri_did)
+            .await?;
         verify_from_json(doc.clone(), uri_params.hl.unwrap())
             .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
 
@@ -175,7 +195,7 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
 
         let uc = generate_usecase(repo, rpc);
-        let output = uc.generate_did("password".to_string()).await;
+        let output = uc.generate_did("password".to_string(), None).await;
         assert!(!output.is_err());
 
         let acc = output.unwrap();
@@ -202,7 +222,7 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
 
         let uc = generate_usecase(repo, rpc);
-        let output = uc.generate_did("password".to_string()).await;
+        let output = uc.generate_did("password".to_string(), None).await;
         assert!(output.is_err());
         assert!(matches!(
             output.unwrap_err(),
@@ -233,6 +253,7 @@ mod tests {
 
                 let account = Account::new(
                     identity_value.clone(),
+                    "did-uri".to_string(),
                     identity_doc.clone(),
                     identity_doc_private_keys.clone(),
                     keysecure,
@@ -274,6 +295,7 @@ mod tests {
                     .unwrap();
                 let account = Account::new(
                     identity_value.clone(),
+                    "did-uri".to_string(),
                     identity_doc.clone(),
                     identity_doc_private_keys.clone(),
                     keysecure,
@@ -295,7 +317,6 @@ mod tests {
         let params = Params {
             address: Some("test-addr".to_string()),
             hl: Some(doc_hl.clone()),
-            service: Some("peer".to_string()),
         };
 
         let uri = uc
@@ -308,7 +329,7 @@ mod tests {
         assert!(!uri.is_err());
 
         let uri_expected = format!(
-            "{}?service=peer&address=test-addr&hl={}",
+            "{}?address=test-addr&hl={}",
             identity.clone().value(),
             doc_hl
         );
@@ -348,6 +369,7 @@ mod tests {
                     .unwrap();
                 let account = Account::new(
                     identity_repo_clone.clone().value(),
+                    "did-uri".to_string(),
                     identity_repo_clone_doc.clone(),
                     identity_repo_clone_doc_private_keys.clone(),
                     keysecure,
@@ -374,7 +396,7 @@ mod tests {
         });
 
         let uc = generate_usecase(repo, rpc);
-        let account = uc.generate_did("password".to_string()).await;
+        let account = uc.generate_did("password".to_string(), None).await;
         assert!(!account.is_err());
 
         let doc_hl_result = generate_from_json(identity.clone().to_doc());
@@ -384,7 +406,6 @@ mod tests {
         let params = Params {
             address: Some(input_addr.to_string()),
             hl: Some(doc_hl_result.unwrap()),
-            service: Some("peer".to_string()),
         };
 
         let uri = uc
@@ -415,7 +436,6 @@ mod tests {
         let params = Params {
             address: Some(input_addr.to_string()),
             hl: None,
-            service: Some("peer".to_string()),
         };
 
         let query = params.build_query();
@@ -426,7 +446,7 @@ mod tests {
         assert!(resolved
             .unwrap_err()
             .to_string()
-            .contains(&"invalid hashlink value".to_string()))
+            .contains(&"missing hashlink".to_string()))
     }
 
     #[tokio::test]
@@ -439,7 +459,6 @@ mod tests {
         let params = Params {
             address: Some("invalid-addr".to_string()),
             hl: Some("test-hl".to_string()),
-            service: Some("peer".to_string()),
         };
 
         let query = params.build_query();
@@ -488,6 +507,7 @@ mod tests {
 
                 let account = Account::new(
                     identity_repo_clone.clone().value(),
+                    "did-uri".to_string(),
                     identity_repo_clone_doc.clone(),
                     identity_repo_clone_doc_private_keys.clone(),
                     keysecure,
@@ -514,14 +534,13 @@ mod tests {
         });
 
         let uc = generate_usecase(repo, rpc);
-        let account = uc.generate_did("password".to_string()).await;
+        let account = uc.generate_did("password".to_string(), None).await;
         assert!(!account.is_err());
 
         let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
         let params = Params {
             address: Some(input_addr.to_string()),
             hl: Some("invalid-hl".to_string()),
-            service: Some("peer".to_string()),
         };
 
         let uri = uc
@@ -569,6 +588,7 @@ mod tests {
 
                     let account = Account::new(
                         identity_repo_clone.clone().value(),
+                        "did-uri".to_string(),
                         identity_repo_clone_doc.clone(),
                         identity_repo_clone_doc_private_keys.clone(),
                         keysecure,
