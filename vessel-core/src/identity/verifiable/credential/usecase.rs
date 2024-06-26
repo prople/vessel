@@ -1,4 +1,5 @@
 use multiaddr::Multiaddr;
+
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::serde_json::Value;
 
@@ -11,6 +12,7 @@ use crate::identity::account::URI;
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
+use super::types::HolderEntityAccessor;
 use super::types::{CredentialAPI, CredentialError, RepoBuilder, RpcBuilder, UsecaseBuilder};
 use super::{Credential, Holder};
 
@@ -196,6 +198,36 @@ where
             .send_credential_to_holder(uri_did, uri_addr.unwrap(), cred.vc)
             .await
     }
+
+    async fn verify_credential_by_holder(&self, id: String) -> Result<(), CredentialError> {
+        if id.is_empty() {
+            return Err(CredentialError::CommonError(
+                VerifiableError::ValidationError("id was missing".to_string()),
+            ));
+        }
+
+        let repo = self.repo();
+        let mut holder = repo
+            .get_holder_by_id(id)
+            .await
+            .map(|vc_holder| {
+                if vc_holder.get_is_verified() {
+                    return Err(CredentialError::HolderError(
+                        "credential already been verified".to_string(),
+                    ));
+                }
+
+                Ok(vc_holder)
+            })
+            .map_err(|err| CredentialError::HolderError(err.to_string()))??;
+
+        let _ = holder.clone().verify_vc(self.account()).await?;
+
+        holder.is_verified = true;
+        let _ = repo.set_credential_holder_verified(&holder).await?;
+
+        Ok(())
+    }
 }
 
 #[cfg(test)]
@@ -220,10 +252,12 @@ mod tests {
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
-    use prople_did_core::verifiable::objects::{ProofValue, VC};
+    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
+    use prople_did_core::verifiable::objects::ProofValue;
 
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
+    use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 
     mock!(
         FakeRepo{}
@@ -239,10 +273,16 @@ mod tests {
 
             async fn save_credential(&self, data: &Credential) -> Result<(), CredentialError>;
             async fn save_credential_holder(&self, data: &Holder) -> Result<(), CredentialError>;
+            async fn set_credential_holder_verified(&self, holder: &Holder) -> Result<(), CredentialError>;
             async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
             async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
 
             async fn get_credential_by_id(&self, id: String) -> Result<Credential, CredentialError>;
+
+            async fn get_holder_by_id(
+                &self,
+                id: String,
+            ) -> Result<Holder, CredentialError>;
 
             async fn list_credentials_by_ids(
                 &self,
@@ -359,6 +399,61 @@ mod tests {
             did_holder_keysecure,
         );
         (did_holder_account, did_holder)
+    }
+
+    fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc) {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did = generate_did();
+        let did_value = did.identity().unwrap().value();
+
+        let mut did_identity = did.identity().unwrap();
+        did_identity.build_assertion_method().build_auth_method();
+
+        let did_doc = did_identity.to_doc();
+        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
+
+        let mut query_params = Params::default();
+        query_params.address = Some(addr.to_string());
+
+        let did_uri = did.build_uri(Some(query_params)).unwrap();
+
+        let proof_params = ProofParams {
+            id: "uid".to_string(),
+            typ: "type".to_string(),
+            method: "method".to_string(),
+            purpose: "purpose".to_string(),
+            cryptosuite: None,
+            expires: None,
+            nonce: None,
+        };
+
+        let cred_value = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let mut vc = VC::new(did_uri, did_issuer_value);
+        vc.add_context(CONTEXT_VC.to_string())
+            .add_context(CONTEXT_VC_V2.to_string())
+            .add_type("VerifiableCredential".to_string())
+            .set_credential(cred_value);
+
+        let proof_builder = ProofBuilder::build_proof(
+            vc.clone(),
+            password,
+            did_privkeys.clone(),
+            Some(proof_params),
+        )
+        .unwrap()
+        .unwrap();
+
+        vc.proof(proof_builder);
+        let holder =
+            Holder::new(did_value, "request-id".to_string(), addr.to_string(), vc).unwrap();
+
+        (holder, did_doc)
     }
 
     #[tokio::test]
@@ -1136,6 +1231,105 @@ mod tests {
 
         if let CredentialError::CommonError(msg) = receive_err_issuer_addr {
             assert!(msg.to_string().contains("issuer_addr"))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_verify_credential_by_holder() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let (holder, doc) = generate_holder(addr, String::from("password".to_string()));
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeRepo::new();
+
+            expected
+                .expect_set_credential_holder_verified()
+                .times(1)
+                .returning(|holder| {
+                    assert!(holder.is_verified);
+                    Ok(())
+                });
+
+            expected
+                .expect_get_holder_by_id()
+                .times(1)
+                .with(eq("id-holder".to_string()))
+                .return_once(move |_| Ok(holder.clone()));
+
+            expected
+        });
+
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeAccountUsecase::new();
+
+            expected
+                .expect_resolve_did_doc()
+                .times(1)
+                .return_once(move |_| Ok(doc.clone()));
+
+            expected
+        });
+
+        let rpc = MockFakeRPCClient::new();
+        let uc = generate_usecase(repo, rpc, account);
+        let verify_vc_checker = uc
+            .verify_credential_by_holder("id-holder".to_string())
+            .await;
+
+        assert!(!verify_vc_checker.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_verify_credential_by_holder_invalid_doc() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let (holder, _) = generate_holder(addr, String::from("password".to_string()));
+
+        let did = generate_did();
+        let mut identity = did.identity().unwrap();
+        identity.build_assertion_method().build_auth_method();
+
+        let fake_doc = identity.to_doc();
+        
+        let mut repo = MockFakeRepo::new();
+        repo.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeRepo::new();
+
+            expected
+                .expect_get_holder_by_id()
+                .times(1)
+                .with(eq("id-holder".to_string()))
+                .return_once(move |_| Ok(holder.clone()));
+
+            expected
+        });
+        
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeAccountUsecase::new();
+
+            expected
+                .expect_resolve_did_doc()
+                .times(1)
+                .return_once(move |_| Ok(fake_doc));
+
+            expected
+        });
+        
+        let rpc = MockFakeRPCClient::new();
+        let uc = generate_usecase(repo, rpc, account);
+        let verify_vc_checker = uc
+            .verify_credential_by_holder("id-holder".to_string())
+            .await;
+        
+        assert!(verify_vc_checker.is_err());
+        
+        let verified_err = verify_vc_checker.unwrap_err();
+        assert!(matches!(verified_err, CredentialError::VerifyError(_)));
+        
+        if let CredentialError::VerifyError(msg) = verified_err {
+            assert!(msg.contains("signature invalid"))
         }
     }
 }

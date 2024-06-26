@@ -21,6 +21,9 @@ pub enum CredentialError {
     #[error("unable to process incoming vc: {0}")]
     ReceiveError(String),
 
+    #[error("unable to process holder: {0}")]
+    HolderError(String),
+
     #[error("unable to send vc: {0}")]
     SendError(String),
 
@@ -57,6 +60,7 @@ pub trait HolderEntityAccessor: Clone {
     fn get_vc(&self) -> VC;
     fn get_request_id(&self) -> String;
     fn get_issuer_addr(&self) -> Multiaddr;
+    fn get_is_verified(&self) -> bool;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
@@ -105,6 +109,9 @@ pub trait CredentialAPI: Clone {
         vc: VC,
     ) -> Result<(), CredentialError>;
 
+    /// `verify_credential_by_holder` used by `Holder` to verify its received `VC`
+    async fn verify_credential_by_holder(&self, id: String) -> Result<(), CredentialError>;
+
     /// `list_credentials_by_did` used to load a list of saved `VC` based on `DID` issuer
     ///
     /// This method doesn't contain any logic, actually this method is just a simple proxy
@@ -134,9 +141,15 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         data: &Self::CredentialEntityAccessor,
     ) -> Result<(), CredentialError>;
+
     async fn save_credential_holder(
         &self,
         data: &Self::HolderEntityAccessor,
+    ) -> Result<(), CredentialError>;
+
+    async fn set_credential_holder_verified(
+        &self,
+        holder: &Self::HolderEntityAccessor,
     ) -> Result<(), CredentialError>;
     async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
     async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
@@ -145,6 +158,11 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         id: String,
     ) -> Result<Self::CredentialEntityAccessor, CredentialError>;
+
+    async fn get_holder_by_id(
+        &self,
+        id: String,
+    ) -> Result<Self::HolderEntityAccessor, CredentialError>;
 
     async fn list_credentials_by_ids(
         &self,

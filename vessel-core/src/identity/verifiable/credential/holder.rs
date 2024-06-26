@@ -5,8 +5,12 @@ use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::uuid::Uuid;
 
-use prople_did_core::verifiable::objects::VC;
+use prople_did_core::doc::types::PublicKeyDecoded;
+use prople_did_core::types::VERIFICATION_TYPE_ED25519;
+use prople_did_core::verifiable::objects::{ProofValue, VC};
 
+use crate::identity::account::types::AccountAPI;
+use crate::identity::account::URI;
 use crate::identity::verifiable::types::VerifiableError;
 
 use super::types::{CredentialError, HolderEntityAccessor};
@@ -25,6 +29,9 @@ pub struct Holder {
 
     #[serde(rename = "issuerAddr")]
     pub(crate) issuer_addr: Multiaddr,
+
+    #[serde(rename = "isVerified")]
+    pub(crate) is_verified: bool,
 
     #[serde(with = "ts_seconds")]
     #[serde(rename = "createdAt")]
@@ -53,9 +60,103 @@ impl Holder {
             vc,
             request_id,
             issuer_addr: addr,
+            is_verified: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })
+    }
+
+    pub async fn verify_vc(&self, account: impl AccountAPI) -> Result<(), CredentialError> {
+        let vc = {
+            let internal = self.vc.to_owned();
+            match internal.proof {
+                Some(_) => Ok(internal),
+                None => Err(CredentialError::VerifyError(
+                    "proof was missing".to_string(),
+                )),
+            }
+        }?;
+
+        let vc_did_uri = {
+            let did_uri = vc.clone().id;
+            let check_did_uri_params = URI::has_params(did_uri.clone())
+                .map(move |has_params| {
+                    if !has_params {
+                        return Err(CredentialError::VerifyError(
+                            "current did uri doesn't have any params".to_string(),
+                        ));
+                    }
+
+                    Ok(did_uri)
+                })
+                .map_err(|err| CredentialError::VerifyError(err.to_string()))?;
+
+            check_did_uri_params
+        }?;
+
+        let vc_doc = account
+            .resolve_did_doc(vc_did_uri)
+            .await
+            .map_err(|err| CredentialError::VerifyError(err.to_string()))?;
+
+        let vc_doc_primary_key = {
+            let primary =
+                vc_doc
+                    .authentication
+                    .map(|doc| doc)
+                    .ok_or(CredentialError::VerifyError(
+                        "missing primary keys".to_string(),
+                    ))?;
+
+            let key = primary
+                .iter()
+                .find(|key| {
+                    let key = key.to_owned();
+                    *key.verification_type.to_string() == VERIFICATION_TYPE_ED25519.to_string()
+                })
+                .map(|key| key.to_owned());
+
+            key
+        }
+        .ok_or(CredentialError::VerifyError(
+            "doc public keys not found".to_string(),
+        ))?;
+
+        let vc_doc_pubkey = {
+            let pubkey_decoded = vc_doc_primary_key
+                .decode_pub_key()
+                .map_err(|err| CredentialError::VerifyError(err.to_string()))?;
+
+            match pubkey_decoded {
+                PublicKeyDecoded::EdDSA(pubkey) => Ok(pubkey),
+                _ => Err(CredentialError::VerifyError(
+                    "the public key should be in EdDSA format, others detected".to_string(),
+                )),
+            }
+        }?;
+
+        let (vc_orig, proof_orig) = vc.clone().split_proof();
+
+        let proof_signature = proof_orig
+            .map(|proof| proof)
+            .ok_or(CredentialError::VerifyError(
+                "proof was missing".to_string(),
+            ))?;
+
+        let verified =
+            ProofValue::verify_proof(vc_doc_pubkey, vc_orig, proof_signature.proof_value)
+                .map(|verified| {
+                    if !verified {
+                        return Err(CredentialError::VerifyError(
+                            "proof signature is invalid".to_string(),
+                        ));
+                    }
+
+                    Ok(())
+                })
+                .map_err(|err| CredentialError::VerifyError(err.to_string()))??;
+
+        Ok(verified)
     }
 }
 
@@ -76,11 +177,173 @@ impl HolderEntityAccessor for Holder {
         self.request_id.to_owned()
     }
 
+    fn get_is_verified(&self) -> bool {
+        self.is_verified.to_owned()
+    }
+
     fn get_created_at(&self) -> DateTime<Utc> {
         self.created_at.to_owned()
     }
 
     fn get_updated_at(&self) -> DateTime<Utc> {
         self.updated_at.to_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use mockall::mock;
+
+    use multiaddr::{multiaddr, Multiaddr};
+
+    use rst_common::standard::async_trait::async_trait;
+    use rst_common::standard::serde::{self, Deserialize, Serialize};
+    use rst_common::standard::serde_json;
+    use rst_common::with_tokio::tokio;
+
+    use prople_did_core::did::{query::Params, DID};
+    use prople_did_core::doc::types::{Doc, ToDoc};
+    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
+    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
+
+    use crate::identity::account::types::{AccountAPI, AccountError};
+    use crate::identity::account::Account as AccountIdentity;
+    use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
+    use crate::identity::verifiable::proof::types::Params as ProofParams;
+
+    mock!(
+        FakeAccountUsecase{}
+
+        impl Clone for FakeAccountUsecase {
+            fn clone(&self) -> Self;
+        }
+
+        #[async_trait]
+        impl AccountAPI for FakeAccountUsecase {
+            type EntityAccessor = AccountIdentity;
+
+            async fn generate_did(&self, password: String, current_addr: Option<Multiaddr>) -> Result<AccountIdentity, AccountError>;
+            async fn build_did_uri(
+                &self,
+                did: String,
+                password: String,
+                params: Option<Params>,
+            ) -> Result<String, AccountError>;
+            async fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError>;
+            async fn resolve_did_doc(&self, did: String) -> Result<Doc, AccountError>;
+            async fn remove_did(&self, did: String) -> Result<(), AccountError>;
+            async fn get_account_did(&self, did: String) -> Result<AccountIdentity, AccountError>;
+        }
+    );
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(crate = "self::serde")]
+    struct FakeCredential {
+        pub msg: String,
+    }
+
+    fn generate_did() -> DID {
+        DID::new()
+    }
+
+    fn generate_doc(did: DID) -> Doc {
+        let mut did_identity = did.identity().unwrap();
+        did_identity.build_assertion_method().build_auth_method();
+
+        did_identity.to_doc()
+    }
+
+    fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc) {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did = generate_did();
+        let did_value = did.identity().unwrap().value();
+
+        let mut did_identity = did.identity().unwrap();
+        did_identity.build_assertion_method().build_auth_method();
+
+        let did_doc = did_identity.to_doc();
+        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
+
+        let mut query_params = Params::default();
+        query_params.address = Some(addr.to_string());
+
+        let did_uri = did.build_uri(Some(query_params)).unwrap();
+
+        let proof_params = ProofParams {
+            id: "uid".to_string(),
+            typ: "type".to_string(),
+            method: "method".to_string(),
+            purpose: "purpose".to_string(),
+            cryptosuite: None,
+            expires: None,
+            nonce: None,
+        };
+
+        let cred_value = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let mut vc = VC::new(did_uri, did_issuer_value);
+        vc.add_context(CONTEXT_VC.to_string())
+            .add_context(CONTEXT_VC_V2.to_string())
+            .add_type("VerifiableCredential".to_string())
+            .set_credential(cred_value);
+
+        let proof_builder = ProofBuilder::build_proof(
+            vc.clone(),
+            password,
+            did_privkeys.clone(),
+            Some(proof_params),
+        )
+        .unwrap()
+        .unwrap();
+
+        vc.proof(proof_builder);
+        let holder =
+            Holder::new(did_value, "request-id".to_string(), addr.to_string(), vc).unwrap();
+
+        (holder, did_doc)
+    }
+
+    #[tokio::test]
+    async fn test_holder_verify_success() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let (holder, doc) = generate_holder(addr, String::from("password".to_string()));
+
+        let mut mock_account = MockFakeAccountUsecase::new();
+        mock_account
+            .expect_resolve_did_doc()
+            .returning(move |_| Ok(doc.clone()));
+
+        let verified = holder.verify_vc(mock_account).await;
+        assert!(!verified.is_err())
+    }
+
+    #[tokio::test]
+    async fn test_holder_verify_with_invalid_doc() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let (holder, _) = generate_holder(addr, String::from("password".to_string()));
+
+        let fake_doc = generate_doc(generate_did());
+
+        let mut mock_account = MockFakeAccountUsecase::new();
+        mock_account
+            .expect_resolve_did_doc()
+            .returning(move |_| Ok(fake_doc.clone()));
+
+        let verified = holder.verify_vc(mock_account).await;
+        assert!(verified.is_err());
+
+        let verified_err = verified.unwrap_err();
+        assert!(matches!(verified_err, CredentialError::VerifyError(_)));
+
+        if let CredentialError::VerifyError(msg) = verified_err {
+            assert!(msg.contains("signature invalid"))
+        }
     }
 }

@@ -367,6 +367,8 @@ mod tests {
                 vc: VC,
             ) -> Result<(), CredentialError>;
 
+            async fn verify_credential_by_holder(&self, id: String) -> Result<(), CredentialError>;
+
             async fn list_credentials_by_did(
                 &self,
                 did: String,
@@ -492,7 +494,7 @@ mod tests {
     #[tokio::test]
     async fn test_generate_without_params() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        
+
         let did_issuer = generate_did();
         let did_issuer_mock = did_issuer.clone();
 
@@ -584,7 +586,7 @@ mod tests {
     #[tokio::test]
     async fn test_generate_with_params() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        
+
         let did_issuer = generate_did();
 
         let mut did_issuer_uri_params = Params::default();
