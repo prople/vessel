@@ -128,9 +128,7 @@ where
         }
 
         let presentation = self.repo().get_by_id(id).await?;
-        self.rpc()
-            .send_to_verifier(uri_did, presentation.vp)
-            .await
+        self.rpc().send_to_verifier(uri_did, presentation.vp).await
     }
 
     async fn generate(
@@ -214,9 +212,9 @@ where
                 VerifiableError::ValidationError("id was missing".to_string()),
             ));
         }
-       
+
         let repo = self.repo();
-        let mut verifier = repo
+        let verifier = repo
             .get_verifier_by_id(id)
             .await
             .map(|vp_verifier| {
@@ -229,11 +227,9 @@ where
                 Ok(vp_verifier)
             })
             .map_err(|err| PresentationError::VerifyError(err.to_string()))??;
-        
-        let _ = verifier.clone().verify_vp(self.account()).await?;
 
-        verifier.is_verified = true;
-        let _ = repo.set_presentation_verifier_verified(&verifier).await?;
+        let verifier_verified = verifier.clone().verify_vp(self.account()).await?;
+        let _ = repo.set_presentation_verifier_verified(&verifier_verified).await?;
 
         Ok(())
     }
@@ -269,10 +265,10 @@ mod tests {
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
+    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
     use prople_did_core::verifiable::objects::ProofValue;
     use prople_did_core::verifiable::objects::VC;
     use prople_did_core::verifiable::objects::VP;
-    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::with_tokio::tokio;
@@ -280,8 +276,8 @@ mod tests {
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::credential::types::CredentialError;
-    use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
     use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
+    use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
     use super::Presentation;
 
@@ -303,12 +299,12 @@ mod tests {
                 &self,
                 data: &Verifier,
             ) -> Result<(), PresentationError>;
-    
+
             async fn set_presentation_verifier_verified(
                 &self,
                 holder: &Verifier,
             ) -> Result<(), PresentationError>;
-    
+
             async fn get_verifier_by_id(
                 &self,
                 id: String,
@@ -524,7 +520,11 @@ mod tests {
         did_identity.to_doc()
     }
 
-    fn generate_verifier(addr: Multiaddr, password: String, vcs: Vec<Credential>) -> (Verifier, Doc) {
+    fn generate_verifier(
+        addr: Multiaddr,
+        password: String,
+        vcs: Vec<Credential>,
+    ) -> (Verifier, Doc) {
         let did = generate_did();
         let did_value = did.identity().unwrap().value();
 
@@ -554,7 +554,7 @@ mod tests {
             .add_context(CONTEXT_VC_V2.to_string())
             .add_type("VerifiableCredential".to_string())
             .set_holder(did_uri.clone());
-        
+
         for credential in vcs.iter() {
             vp.add_credential(credential.vc.to_owned());
         }
@@ -569,8 +569,7 @@ mod tests {
         .unwrap();
 
         vp.add_proof(proof_builder);
-        let verifier =
-            Verifier::new(did_value, vp);
+        let verifier = Verifier::new(did_value, vp);
 
         (verifier, did_doc)
     }
@@ -986,10 +985,7 @@ mod tests {
         let uc = generate_usecase(repo, rpc, account, credential);
 
         let output = uc
-            .receive_presentation_by_verifier(
-                verifier_did_value,
-                presentation.vp,
-            )
+            .receive_presentation_by_verifier(verifier_did_value, presentation.vp)
             .await;
 
         assert!(!output.is_err());
@@ -1007,10 +1003,7 @@ mod tests {
 
         let vp = presentation.vp;
         let output = uc
-            .receive_presentation_by_verifier(
-                "".to_string(),
-                vp.clone(),
-            )
+            .receive_presentation_by_verifier("".to_string(), vp.clone())
             .await;
         assert!(output.is_err());
 
@@ -1030,15 +1023,9 @@ mod tests {
         let did_verifier_value = did_verifier.identity().unwrap().value();
         let did_verifier_value_cloned = did_verifier_value.clone();
 
-        let v1 = Verifier::new(
-            did_verifier_value.clone(),
-            p1.vp,
-        );        
+        let v1 = Verifier::new(did_verifier_value.clone(), p1.vp);
 
-        let v2 = Verifier::new(
-            did_verifier_value.clone(),
-            p2.vp,
-        );
+        let v2 = Verifier::new(did_verifier_value.clone(), p2.vp);
 
         let verifiers = vec![v1, v2];
 
@@ -1084,12 +1071,13 @@ mod tests {
             assert!(msg.to_string().contains("did_verifier"))
         }
     }
-    
+
     #[tokio::test]
     async fn test_verify_presentation_by_verifier() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let credentials = generate_credentials();
-        let (verifier, doc) = generate_verifier(addr, String::from("password".to_string()), credentials);
+        let (verifier, doc) =
+            generate_verifier(addr, String::from("password".to_string()), credentials);
 
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(|| {
@@ -1126,7 +1114,7 @@ mod tests {
 
         let rpc = MockFakeRPCClient::new();
         let credential = MockFakeCredentialUsecase::new();
-        
+
         let uc = generate_usecase(repo, rpc, account, credential);
         let verify_vp_checker = uc
             .verify_presentation_by_verifier("id-holder".to_string())
@@ -1134,19 +1122,20 @@ mod tests {
 
         assert!(!verify_vp_checker.is_err());
     }
-    
+
     #[tokio::test]
     async fn test_verify_credential_by_holder_invalid_doc() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let credentials = generate_credentials();
-        let (verifier, _) = generate_verifier(addr, String::from("password".to_string()), credentials);
+        let (verifier, _) =
+            generate_verifier(addr, String::from("password".to_string()), credentials);
 
         let did = generate_did();
         let mut identity = did.identity().unwrap();
         identity.build_assertion_method().build_auth_method();
 
         let fake_doc = generate_doc(generate_did());
-        
+
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(|| {
             let mut expected = MockFakeRepo::new();
@@ -1159,7 +1148,7 @@ mod tests {
 
             expected
         });
-        
+
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(|| {
             let mut expected = MockFakeAccountUsecase::new();
@@ -1171,20 +1160,20 @@ mod tests {
 
             expected
         });
-        
+
         let rpc = MockFakeRPCClient::new();
         let credential = MockFakeCredentialUsecase::new();
-        
+
         let uc = generate_usecase(repo, rpc, account, credential);
         let verify_vc_checker = uc
             .verify_presentation_by_verifier("id-holder".to_string())
             .await;
-        
+
         assert!(verify_vc_checker.is_err());
-        
+
         let verified_err = verify_vc_checker.unwrap_err();
         assert!(matches!(verified_err, PresentationError::VerifyError(_)));
-        
+
         if let PresentationError::VerifyError(msg) = verified_err {
             assert!(msg.contains("signature invalid"))
         }

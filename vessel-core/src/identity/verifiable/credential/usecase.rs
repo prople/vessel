@@ -92,14 +92,17 @@ where
             ));
         }
 
-        let check_did_issuer_has_params = URI::has_params(did_issuer_uri.clone())
-            .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
+        let _ = URI::has_params(did_issuer_uri.clone())
+            .map(|uri| {
+                if !uri {
+                    return Err(CredentialError::GenerateError(
+                        "did_issuer_uri is not valid".to_string(),
+                    ));
+                }
 
-        if !check_did_issuer_has_params {
-            return Err(CredentialError::CommonError(
-                VerifiableError::ValidationError("did_issuer_uri is not valid".to_string()),
-            ));
-        }
+                Ok(())
+            })
+            .map_err(|err| CredentialError::GenerateError(err.to_string()))??;
 
         let account = self
             .account()
@@ -173,15 +176,13 @@ where
             CredentialError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
         })?;
 
-        if uri_addr.is_none() {
-            return Err(CredentialError::CommonError(
-                VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
-            ));
-        }
+        let uri_addr_checked = uri_addr.map(|uri| uri).ok_or(CredentialError::CommonError(
+            VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
+        ))?;
 
         let cred = self.repo().get_credential_by_id(id).await?;
         self.rpc()
-            .send_credential_to_holder(uri_did, uri_addr.unwrap(), cred.vc)
+            .send_credential_to_holder(uri_did, uri_addr_checked, cred.vc)
             .await
     }
 
@@ -193,7 +194,7 @@ where
         }
 
         let repo = self.repo();
-        let mut holder = repo
+        let holder = repo
             .get_holder_by_id(id)
             .await
             .map(|vc_holder| {
@@ -207,10 +208,8 @@ where
             })
             .map_err(|err| CredentialError::HolderError(err.to_string()))??;
 
-        let _ = holder.clone().verify_vc(self.account()).await?;
-
-        holder.is_verified = true;
-        let _ = repo.set_credential_holder_verified(&holder).await?;
+        let verified_holder = holder.clone().verify_vc(self.account()).await?;
+        let _ = repo.set_credential_holder_verified(&verified_holder).await?;
 
         Ok(())
     }
@@ -436,8 +435,7 @@ mod tests {
         .unwrap();
 
         vc.proof(proof_builder);
-        let holder =
-            Holder::new(did_value, vc);
+        let holder = Holder::new(did_value, vc);
 
         (holder, did_doc)
     }
@@ -1155,12 +1153,7 @@ mod tests {
 
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
 
-        let receive = uc
-            .receive_credential_by_holder(
-                "".to_string(),
-                vc,
-            )
-            .await;
+        let receive = uc.receive_credential_by_holder("".to_string(), vc).await;
         assert!(!receive.is_err());
     }
 
@@ -1221,7 +1214,7 @@ mod tests {
         identity.build_assertion_method().build_auth_method();
 
         let fake_doc = identity.to_doc();
-        
+
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(|| {
             let mut expected = MockFakeRepo::new();
@@ -1234,7 +1227,7 @@ mod tests {
 
             expected
         });
-        
+
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(|| {
             let mut expected = MockFakeAccountUsecase::new();
@@ -1246,18 +1239,18 @@ mod tests {
 
             expected
         });
-        
+
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account);
         let verify_vc_checker = uc
             .verify_credential_by_holder("id-holder".to_string())
             .await;
-        
+
         assert!(verify_vc_checker.is_err());
-        
+
         let verified_err = verify_vc_checker.unwrap_err();
         assert!(matches!(verified_err, CredentialError::VerifyError(_)));
-        
+
         if let CredentialError::VerifyError(msg) = verified_err {
             assert!(msg.contains("signature invalid"))
         }

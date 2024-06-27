@@ -34,10 +34,7 @@ pub struct Holder {
 }
 
 impl Holder {
-    pub fn new(
-        did_holder: String,
-        vc: VC,
-    ) -> Self {
+    pub fn new(did_holder: String, vc: VC) -> Self {
         let uid = Uuid::new_v4().to_string();
         Self {
             id: uid,
@@ -49,7 +46,7 @@ impl Holder {
         }
     }
 
-    pub async fn verify_vc(&self, account: impl AccountAPI) -> Result<(), CredentialError> {
+    pub async fn verify_vc(&self, account: impl AccountAPI) -> Result<Self, CredentialError> {
         let vc = {
             let internal = self.vc.to_owned();
             match internal.proof {
@@ -126,7 +123,7 @@ impl Holder {
                 "proof was missing".to_string(),
             ))?;
 
-        let verified =
+        let _ =
             ProofValue::verify_proof(vc_doc_pubkey, vc_orig, proof_signature.proof_value)
                 .map(|verified| {
                     if !verified {
@@ -139,7 +136,10 @@ impl Holder {
                 })
                 .map_err(|err| CredentialError::VerifyError(err.to_string()))??;
 
-        Ok(verified)
+        let mut verified_holder = self.clone();
+        verified_holder.is_verified = true;
+
+        Ok(verified_holder)
     }
 }
 
@@ -279,8 +279,7 @@ mod tests {
         .unwrap();
 
         vc.proof(proof_builder);
-        let holder =
-            Holder::new(did_value, vc);
+        let holder = Holder::new(did_value, vc);
 
         (holder, did_doc)
     }

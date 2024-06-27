@@ -62,7 +62,7 @@ pub trait PresentationAPI: Clone {
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
     async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
-    
+
     async fn verify_presentation_by_verifier(&self, id: String) -> Result<(), PresentationError>;
 
     async fn get_by_id(
@@ -92,7 +92,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         data: &Self::VerifierEntityAccessor,
     ) -> Result<(), PresentationError>;
-    
+
     async fn set_presentation_verifier_verified(
         &self,
         holder: &Self::VerifierEntityAccessor,
@@ -102,7 +102,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         id: String,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
-    
+
     async fn get_verifier_by_id(
         &self,
         id: String,
@@ -119,11 +119,8 @@ pub trait RepoBuilder: Clone + Sync + Send {
 /// `RpcBuilder` it's an abstraction to cover Presentation's RPC needs
 #[async_trait]
 pub trait RpcBuilder: Clone + Sync + Send {
-    async fn send_to_verifier(
-        &self,
-        did_verifier: String,
-        vp: VP,
-    ) -> Result<(), PresentationError>;
+    async fn send_to_verifier(&self, did_verifier: String, vp: VP)
+        -> Result<(), PresentationError>;
 }
 
 /// `UsecaseBuilder` is a main abstraction that should be used by application level controller for the Presentation
