@@ -1,5 +1,3 @@
-use multiaddr::Multiaddr;
-
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::with_errors::thiserror::{self, Error};
@@ -40,8 +38,6 @@ pub trait VerifierEntityAccessor: Clone {
     fn get_id(&self) -> String;
     fn get_did_verifier(&self) -> String;
     fn get_vp(&self) -> VP;
-    fn get_request_id(&self) -> String;
-    fn get_issuer_addr(&self) -> Multiaddr;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
@@ -71,8 +67,6 @@ pub trait PresentationAPI: Clone {
     async fn receive_presentation_by_verifier(
         &self,
         did_verifier: String,
-        request_id: String,
-        issuer_addr: String,
         vp: VP,
     ) -> Result<(), PresentationError>;
 
@@ -112,7 +106,6 @@ pub trait RpcBuilder: Clone + Sync + Send {
     async fn send_to_verifier(
         &self,
         did_verifier: String,
-        addr: Multiaddr,
         vp: VP,
     ) -> Result<(), PresentationError>;
 }

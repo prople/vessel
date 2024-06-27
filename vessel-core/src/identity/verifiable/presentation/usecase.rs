@@ -129,7 +129,7 @@ where
 
         let presentation = self.repo().get_by_id(id).await?;
         self.rpc()
-            .send_to_verifier(uri_did, uri_addr.unwrap(), presentation.vp)
+            .send_to_verifier(uri_did, presentation.vp)
             .await
     }
 
@@ -188,25 +188,11 @@ where
     async fn receive_presentation_by_verifier(
         &self,
         did_verifier: String,
-        request_id: String,
-        issuer_addr: String,
         vp: VP,
     ) -> Result<(), PresentationError> {
         if did_verifier.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("did_verifier was missing".to_string()),
-            ));
-        }
-
-        if request_id.is_empty() {
-            return Err(PresentationError::CommonError(
-                VerifiableError::ValidationError("request_id was missing".to_string()),
-            ));
-        }
-
-        if issuer_addr.is_empty() {
-            return Err(PresentationError::CommonError(
-                VerifiableError::ValidationError("issuer_addr was missing".to_string()),
             ));
         }
 
@@ -216,7 +202,7 @@ where
             .await
             .map_err(|err| PresentationError::ReceiveError(err.to_string()))?;
 
-        let presentation_verifier = Verifier::new(did_verifier, request_id, issuer_addr, vp)?;
+        let presentation_verifier = Verifier::new(did_verifier, vp);
         self.repo()
             .save_presentation_verifier(&presentation_verifier)
             .await
@@ -304,7 +290,7 @@ mod tests {
 
         #[async_trait]
         impl RpcBuilder for FakeRPCClient {
-            async fn send_to_verifier(&self, did_verifier: String, addr: Multiaddr, vp: VP) -> Result<(), PresentationError>;
+            async fn send_to_verifier(&self, did_verifier: String, vp: VP) -> Result<(), PresentationError>;
         }
     );
 
@@ -756,7 +742,6 @@ mod tests {
         let verifier_did_value = verifier_did.identity().unwrap().value();
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let addr_cloned = addr.clone();
 
         let mut did_uri_params = Params::default();
         did_uri_params.address = Some(addr.clone().to_string());
@@ -774,9 +759,9 @@ mod tests {
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_to_verifier()
-                .with(eq(verifier_did_value), eq(addr_cloned), eq(presentation.vp))
+                .with(eq(verifier_did_value), eq(presentation.vp))
                 .times(1)
-                .returning(|_, _, _| Ok(()));
+                .returning(|_, _| Ok(()));
 
             expected
         });
@@ -900,15 +885,11 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
         let credential = MockFakeCredentialUsecase::new();
 
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-
         let uc = generate_usecase(repo, rpc, account, credential);
 
         let output = uc
             .receive_presentation_by_verifier(
                 verifier_did_value,
-                "request-id".to_string(),
-                addr.to_string(),
                 presentation.vp,
             )
             .await;
@@ -930,8 +911,6 @@ mod tests {
         let output = uc
             .receive_presentation_by_verifier(
                 "".to_string(),
-                "".to_string(),
-                "".to_string(),
                 vp.clone(),
             )
             .await;
@@ -941,38 +920,6 @@ mod tests {
         assert!(matches!(send_output_err, PresentationError::CommonError(_)));
         if let PresentationError::CommonError(msg) = send_output_err {
             assert!(msg.to_string().contains("did_verifier"))
-        }
-
-        let output = uc
-            .receive_presentation_by_verifier(
-                "verifier-did".to_string(),
-                "".to_string(),
-                "".to_string(),
-                vp.clone(),
-            )
-            .await;
-        assert!(output.is_err());
-
-        let send_output_err = output.unwrap_err();
-        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
-        if let PresentationError::CommonError(msg) = send_output_err {
-            assert!(msg.to_string().contains("request_id"))
-        }
-
-        let output = uc
-            .receive_presentation_by_verifier(
-                "verifier-did".to_string(),
-                "request-id".to_string(),
-                "".to_string(),
-                vp.clone(),
-            )
-            .await;
-        assert!(output.is_err());
-
-        let send_output_err = output.unwrap_err();
-        assert!(matches!(send_output_err, PresentationError::CommonError(_)));
-        if let PresentationError::CommonError(msg) = send_output_err {
-            assert!(msg.to_string().contains("issuer_addr"))
         }
     }
 
@@ -985,23 +932,15 @@ mod tests {
         let did_verifier_value = did_verifier.identity().unwrap().value();
         let did_verifier_value_cloned = did_verifier_value.clone();
 
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-
         let v1 = Verifier::new(
             did_verifier_value.clone(),
-            "req-id-1".to_string(),
-            addr.to_string(),
             p1.vp,
-        )
-        .unwrap();
+        );        
 
         let v2 = Verifier::new(
             did_verifier_value.clone(),
-            "req-id-2".to_string(),
-            addr.to_string(),
             p2.vp,
-        )
-        .unwrap();
+        );
 
         let verifiers = vec![v1, v2];
 
