@@ -147,6 +147,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         holder: &Self::HolderEntityAccessor,
     ) -> Result<(), CredentialError>;
+
     async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
     async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
 

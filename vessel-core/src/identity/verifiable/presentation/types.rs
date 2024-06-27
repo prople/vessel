@@ -20,6 +20,9 @@ pub enum PresentationError {
     #[error("unable to process incoming VP: {0}")]
     ReceiveError(String),
 
+    #[error("unable to verify VP: {0}")]
+    VerifyError(String),
+
     #[error("common error")]
     CommonError(#[from] VerifiableError),
 }
@@ -38,6 +41,7 @@ pub trait VerifierEntityAccessor: Clone {
     fn get_id(&self) -> String;
     fn get_did_verifier(&self) -> String;
     fn get_vp(&self) -> VP;
+    fn is_verified(&self) -> bool;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
@@ -58,6 +62,8 @@ pub trait PresentationAPI: Clone {
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
     async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
+    
+    async fn verify_presentation_by_verifier(&self, id: String) -> Result<(), PresentationError>;
 
     async fn get_by_id(
         &self,
@@ -86,11 +92,21 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         data: &Self::VerifierEntityAccessor,
     ) -> Result<(), PresentationError>;
+    
+    async fn set_presentation_verifier_verified(
+        &self,
+        holder: &Self::VerifierEntityAccessor,
+    ) -> Result<(), PresentationError>;
 
     async fn get_by_id(
         &self,
         id: String,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
+    
+    async fn get_verifier_by_id(
+        &self,
+        id: String,
+    ) -> Result<Self::VerifierEntityAccessor, PresentationError>;
 
     async fn list_vps_by_did_verifier(
         &self,

@@ -208,6 +208,36 @@ where
             .await
     }
 
+    async fn verify_presentation_by_verifier(&self, id: String) -> Result<(), PresentationError> {
+        if id.is_empty() {
+            return Err(PresentationError::CommonError(
+                VerifiableError::ValidationError("id was missing".to_string()),
+            ));
+        }
+       
+        let repo = self.repo();
+        let mut verifier = repo
+            .get_verifier_by_id(id)
+            .await
+            .map(|vp_verifier| {
+                if vp_verifier.is_verified {
+                    return Err(PresentationError::VerifyError(
+                        "credential already been verified".to_string(),
+                    ));
+                }
+
+                Ok(vp_verifier)
+            })
+            .map_err(|err| PresentationError::VerifyError(err.to_string()))??;
+        
+        let _ = verifier.clone().verify_vp(self.account()).await?;
+
+        verifier.is_verified = true;
+        let _ = repo.set_presentation_verifier_verified(&verifier).await?;
+
+        Ok(())
+    }
+
     async fn list_vps_by_did_verifier(
         &self,
         did_verifier: String,
@@ -242,6 +272,7 @@ mod tests {
     use prople_did_core::verifiable::objects::ProofValue;
     use prople_did_core::verifiable::objects::VC;
     use prople_did_core::verifiable::objects::VP;
+    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::with_tokio::tokio;
@@ -250,6 +281,7 @@ mod tests {
     use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::credential::types::CredentialError;
     use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
+    use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 
     use super::Presentation;
 
@@ -271,6 +303,16 @@ mod tests {
                 &self,
                 data: &Verifier,
             ) -> Result<(), PresentationError>;
+    
+            async fn set_presentation_verifier_verified(
+                &self,
+                holder: &Verifier,
+            ) -> Result<(), PresentationError>;
+    
+            async fn get_verifier_by_id(
+                &self,
+                id: String,
+            ) -> Result<Verifier, PresentationError>;
 
             async fn list_vps_by_did_verifier(
                 &self,
@@ -473,6 +515,64 @@ mod tests {
         );
 
         (did_verifier_account, did_verifier)
+    }
+
+    fn generate_doc(did: DID) -> Doc {
+        let mut did_identity = did.identity().unwrap();
+        did_identity.build_assertion_method().build_auth_method();
+
+        did_identity.to_doc()
+    }
+
+    fn generate_verifier(addr: Multiaddr, password: String, vcs: Vec<Credential>) -> (Verifier, Doc) {
+        let did = generate_did();
+        let did_value = did.identity().unwrap().value();
+
+        let mut did_identity = did.identity().unwrap();
+        did_identity.build_assertion_method().build_auth_method();
+
+        let did_doc = did_identity.to_doc();
+        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
+
+        let mut query_params = Params::default();
+        query_params.address = Some(addr.to_string());
+
+        let did_uri = did.build_uri(Some(query_params)).unwrap();
+
+        let proof_params = ProofParams {
+            id: "uid".to_string(),
+            typ: "type".to_string(),
+            method: "method".to_string(),
+            purpose: "purpose".to_string(),
+            cryptosuite: None,
+            expires: None,
+            nonce: None,
+        };
+
+        let mut vp = VP::new();
+        vp.add_context(CONTEXT_VC.to_string())
+            .add_context(CONTEXT_VC_V2.to_string())
+            .add_type("VerifiableCredential".to_string())
+            .set_holder(did_uri.clone());
+        
+        for credential in vcs.iter() {
+            vp.add_credential(credential.vc.to_owned());
+        }
+
+        let proof_builder = ProofBuilder::build_proof(
+            vp.clone(),
+            password,
+            did_privkeys.clone(),
+            Some(proof_params),
+        )
+        .unwrap()
+        .unwrap();
+
+        vp.add_proof(proof_builder);
+        let verifier =
+            Verifier::new(did_value, vp);
+
+        (verifier, did_doc)
     }
 
     #[tokio::test]
@@ -982,6 +1082,111 @@ mod tests {
 
         if let PresentationError::CommonError(msg) = send_output_err {
             assert!(msg.to_string().contains("did_verifier"))
+        }
+    }
+    
+    #[tokio::test]
+    async fn test_verify_presentation_by_verifier() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let credentials = generate_credentials();
+        let (verifier, doc) = generate_verifier(addr, String::from("password".to_string()), credentials);
+
+        let mut repo = MockFakeRepo::new();
+        repo.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeRepo::new();
+
+            expected
+                .expect_set_presentation_verifier_verified()
+                .times(1)
+                .returning(|holder| {
+                    assert!(holder.is_verified);
+                    Ok(())
+                });
+
+            expected
+                .expect_get_verifier_by_id()
+                .times(1)
+                .with(eq("id-holder".to_string()))
+                .return_once(move |_| Ok(verifier.clone()));
+
+            expected
+        });
+
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeAccountUsecase::new();
+
+            expected
+                .expect_resolve_did_doc()
+                .times(1)
+                .return_once(move |_| Ok(doc.clone()));
+
+            expected
+        });
+
+        let rpc = MockFakeRPCClient::new();
+        let credential = MockFakeCredentialUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account, credential);
+        let verify_vp_checker = uc
+            .verify_presentation_by_verifier("id-holder".to_string())
+            .await;
+
+        assert!(!verify_vp_checker.is_err());
+    }
+    
+    #[tokio::test]
+    async fn test_verify_credential_by_holder_invalid_doc() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let credentials = generate_credentials();
+        let (verifier, _) = generate_verifier(addr, String::from("password".to_string()), credentials);
+
+        let did = generate_did();
+        let mut identity = did.identity().unwrap();
+        identity.build_assertion_method().build_auth_method();
+
+        let fake_doc = generate_doc(generate_did());
+        
+        let mut repo = MockFakeRepo::new();
+        repo.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeRepo::new();
+
+            expected
+                .expect_get_verifier_by_id()
+                .times(1)
+                .with(eq("id-holder".to_string()))
+                .return_once(move |_| Ok(verifier.clone()));
+
+            expected
+        });
+        
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(|| {
+            let mut expected = MockFakeAccountUsecase::new();
+
+            expected
+                .expect_resolve_did_doc()
+                .times(1)
+                .return_once(move |_| Ok(fake_doc));
+
+            expected
+        });
+        
+        let rpc = MockFakeRPCClient::new();
+        let credential = MockFakeCredentialUsecase::new();
+        
+        let uc = generate_usecase(repo, rpc, account, credential);
+        let verify_vc_checker = uc
+            .verify_presentation_by_verifier("id-holder".to_string())
+            .await;
+        
+        assert!(verify_vc_checker.is_err());
+        
+        let verified_err = verify_vc_checker.unwrap_err();
+        assert!(matches!(verified_err, PresentationError::VerifyError(_)));
+        
+        if let PresentationError::VerifyError(msg) = verified_err {
+            assert!(msg.contains("signature invalid"))
         }
     }
 }
