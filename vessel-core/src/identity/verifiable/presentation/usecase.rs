@@ -348,8 +348,6 @@ mod tests {
             async fn receive_credential_by_holder(
                 &self,
                 did_holder: String,
-                request_id: String,
-                issuer_addr: String,
                 vc: VC,
             ) -> Result<(), CredentialError>;
 

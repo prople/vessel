@@ -1,5 +1,3 @@
-use multiaddr::Multiaddr;
-
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde::{self, Deserialize, Serialize};
@@ -11,7 +9,6 @@ use prople_did_core::verifiable::objects::{ProofValue, VC};
 
 use crate::identity::account::types::AccountAPI;
 use crate::identity::account::URI;
-use crate::identity::verifiable::types::VerifiableError;
 
 use super::types::{CredentialError, HolderEntityAccessor};
 
@@ -23,12 +20,6 @@ pub struct Holder {
     pub(crate) id: String,
     pub(crate) did_holder: String,
     pub(crate) vc: VC,
-
-    #[serde(rename = "requestID")]
-    pub(crate) request_id: String,
-
-    #[serde(rename = "issuerAddr")]
-    pub(crate) issuer_addr: Multiaddr,
 
     #[serde(rename = "isVerified")]
     pub(crate) is_verified: bool,
@@ -45,25 +36,17 @@ pub struct Holder {
 impl Holder {
     pub fn new(
         did_holder: String,
-        request_id: String,
-        issuer_addr: String,
         vc: VC,
-    ) -> Result<Self, CredentialError> {
+    ) -> Self {
         let uid = Uuid::new_v4().to_string();
-        let addr = issuer_addr.parse::<Multiaddr>().map_err(|err| {
-            CredentialError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
-        })?;
-
-        Ok(Self {
+        Self {
             id: uid,
             did_holder,
             vc,
-            request_id,
-            issuer_addr: addr,
             is_verified: false,
             created_at: Utc::now(),
             updated_at: Utc::now(),
-        })
+        }
     }
 
     pub async fn verify_vc(&self, account: impl AccountAPI) -> Result<(), CredentialError> {
@@ -167,14 +150,6 @@ impl HolderEntityAccessor for Holder {
 
     fn get_vc(&self) -> VC {
         self.vc.to_owned()
-    }
-
-    fn get_issuer_addr(&self) -> Multiaddr {
-        self.issuer_addr.to_owned()
-    }
-
-    fn get_request_id(&self) -> String {
-        self.request_id.to_owned()
     }
 
     fn get_is_verified(&self) -> bool {
@@ -305,7 +280,7 @@ mod tests {
 
         vc.proof(proof_builder);
         let holder =
-            Holder::new(did_value, "request-id".to_string(), addr.to_string(), vc).unwrap();
+            Holder::new(did_value, vc);
 
         (holder, did_doc)
     }

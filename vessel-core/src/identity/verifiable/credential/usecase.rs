@@ -139,22 +139,8 @@ where
     async fn receive_credential_by_holder(
         &self,
         did_holder: String,
-        request_id: String,
-        issuer_addr: String,
         vc: VC,
     ) -> Result<(), CredentialError> {
-        if request_id.is_empty() {
-            return Err(CredentialError::CommonError(
-                VerifiableError::ValidationError("request_id was missing".to_string()),
-            ));
-        }
-
-        if issuer_addr.is_empty() {
-            return Err(CredentialError::CommonError(
-                VerifiableError::ValidationError("issuer_addr was missing".to_string()),
-            ));
-        }
-
         // used to make sure that given `did_holder` is belongs to the user
         let _ = self
             .account()
@@ -162,7 +148,7 @@ where
             .await
             .map_err(|err| CredentialError::ReceiveError(err.to_string()))?;
 
-        let cred_holder = Holder::new(did_holder, request_id, issuer_addr, vc)?;
+        let cred_holder = Holder::new(did_holder, vc);
         self.repo().save_credential_holder(&cred_holder).await
     }
 
@@ -451,7 +437,7 @@ mod tests {
 
         vc.proof(proof_builder);
         let holder =
-            Holder::new(did_value, "request-id".to_string(), addr.to_string(), vc).unwrap();
+            Holder::new(did_value, vc);
 
         (holder, did_doc)
     }
@@ -1164,8 +1150,6 @@ mod tests {
 
         let uc = generate_usecase(repo, rpc, account);
 
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -1174,64 +1158,10 @@ mod tests {
         let receive = uc
             .receive_credential_by_holder(
                 "".to_string(),
-                "request-id-1".to_string(),
-                addr.to_string(),
                 vc,
             )
             .await;
         assert!(!receive.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_receive_by_holder_validation_error() {
-        let repo = MockFakeRepo::new();
-        let rpc = MockFakeRPCClient::new();
-        let account = MockFakeAccountUsecase::new();
-        let uc = generate_usecase(repo, rpc, account);
-
-        let did_issuer = generate_did();
-        let did_issuer_value = did_issuer.identity().unwrap().value();
-        let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
-
-        let receive_request_id = uc
-            .receive_credential_by_holder(
-                "".to_string(),
-                "".to_string(),
-                "issuer-addr".to_string(),
-                vc.clone(),
-            )
-            .await;
-        assert!(receive_request_id.is_err());
-
-        let receive_err_request_id = receive_request_id.unwrap_err();
-        assert!(matches!(
-            receive_err_request_id.clone(),
-            CredentialError::CommonError(_)
-        ));
-
-        if let CredentialError::CommonError(msg) = receive_err_request_id {
-            assert!(msg.to_string().contains("request_id"))
-        }
-
-        let receive_issuer_addr = uc
-            .receive_credential_by_holder(
-                "".to_string(),
-                "request_id".to_string(),
-                "".to_string(),
-                vc,
-            )
-            .await;
-        assert!(receive_issuer_addr.is_err());
-
-        let receive_err_issuer_addr = receive_issuer_addr.unwrap_err();
-        assert!(matches!(
-            receive_err_issuer_addr.clone(),
-            CredentialError::CommonError(_)
-        ));
-
-        if let CredentialError::CommonError(msg) = receive_err_issuer_addr {
-            assert!(msg.to_string().contains("issuer_addr"))
-        }
     }
 
     #[tokio::test]

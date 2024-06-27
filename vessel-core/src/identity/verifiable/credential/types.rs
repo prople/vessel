@@ -58,8 +58,6 @@ pub trait CredentialEntityAccessor: Clone {
 pub trait HolderEntityAccessor: Clone {
     fn get_id(&self) -> String;
     fn get_vc(&self) -> VC;
-    fn get_request_id(&self) -> String;
-    fn get_issuer_addr(&self) -> Multiaddr;
     fn get_is_verified(&self) -> bool;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
@@ -104,8 +102,6 @@ pub trait CredentialAPI: Clone {
     async fn receive_credential_by_holder(
         &self,
         did_holder: String,
-        request_id: String,
-        issuer_addr: String,
         vc: VC,
     ) -> Result<(), CredentialError>;
 
