@@ -1,9 +1,11 @@
 [workspace]
 resolver = "2"
 
-members = [
+members = [ "vessel-cli",
+    "vesseld",
     "vessel-core", 
     "vessel-rpc",
+    "vessel-cli",
 ]
 
 [workspace.dependencies]
@@ -11,6 +13,7 @@ prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
 rstdev-domain = {version = "~0.1"}
+clap = {version = "~4.5", features=["derive"]}
 mockall  = {version = "0.12.1"}
 multiaddr = {version = "0.18.1"}
 table-test = {version = "0.2.1"} 
