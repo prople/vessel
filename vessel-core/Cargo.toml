@@ -1,7 +1,16 @@
 [package]
-name = "vessel-core"
+name = "prople-vessel-core"
 version = "0.1.0"
-edition = "2021"
+description = "An abstraction of core business logic for the prople/vessel"
+readme = "README.md"
+keywords = ["prople", "vessel", "did", "decentralized", "identity"]
+categories = ["authentication", "cryptography", "data-structures"]
+authors.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
