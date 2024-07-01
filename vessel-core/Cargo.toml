@@ -5,6 +5,7 @@ description = "An abstraction of core business logic for the prople/vessel"
 readme = "README.md"
 keywords = ["prople", "vessel", "did", "decentralized", "identity"]
 categories = ["authentication", "cryptography", "data-structures"]
+documentation = "https://docs.rs/prople-vessel-core"
 authors.workspace = true
 rust-version.workspace = true
 edition.workspace = true
