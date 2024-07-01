@@ -1,0 +1,9 @@
+[identity.common]
+path = "./identity-storage"
+cf_name = "identity-cf"
+
+[identity.db]
+create_if_missing = true
+create_missing_columns = true
+set_error_if_missing = true
+set_wal_dir = "./identity-db-wall"
