@@ -13,6 +13,9 @@ prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
 rstdev-domain = {version = "~0.1"}
+rstdev-config = {version = "~0.1"}
+rstdev-storage = {version = "~0.3", features=["rocksdb"]}
+toml = {version = "~0.8"}
 clap = {version = "~4.5", features=["derive"]}
 mockall  = {version = "0.12.1"}
 multiaddr = {version = "0.18.1"}
