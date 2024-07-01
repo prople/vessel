@@ -8,7 +8,17 @@ members = [ "vessel-cli",
     "vessel-cli",
 ]
 
+[workspace.package]
+rust-version = "1.77"
+edition = "2021"
+repository = "https://github.com/prople/vessel/tree/main"
+homepage = "https://github.com/prople"
+license = "AGPL-3.0-or-later"
+authors = ["rstlix0x0 (@rstlix0x0)", "Vessel Contributors (@prople/vessel-contributors)"]
+
 [workspace.dependencies]
+prople-vessel-core = {version = "0.1.0", path = "vessel-core"}
+
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
