@@ -55,6 +55,15 @@ impl TryInto<Vec<u8>> for Presentation {
     }
 }
 
+impl TryFrom<Vec<u8>> for Presentation {
+    type Error = PresentationError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let presentation: Presentation = serde_json::from_slice(&value).map_err(|err| PresentationError::UnserializeError(err.to_string()))?;
+        Ok(presentation)
+    }
+}
+
 impl PresentationEntityAccessor for Presentation {
     fn get_id(&self) -> String {
         self.id.to_owned()

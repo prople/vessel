@@ -1,6 +1,6 @@
 [package]
 name = "prople-vessel-core"
-version = "0.2.0"
+version = "0.2.1"
 description = "An abstraction of core business logic for the prople/vessel"
 readme = "README.md"
 keywords = ["prople", "vessel", "did", "decentralized", "identity"]

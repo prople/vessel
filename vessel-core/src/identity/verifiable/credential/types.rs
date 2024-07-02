@@ -43,13 +43,16 @@ pub enum CredentialError {
     #[error("unable to list vc: {0}")]
     ListError(String),
 
+    #[error("unable unserialize account: {0}")]
+    UnserializeError(String),
+
     #[error("common error: {0}")]
     CommonError(#[from] VerifiableError),
 }
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
 /// for all `Credential` property fields
-pub trait CredentialEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
+pub trait CredentialEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_did_issuer(&self) -> String;
     fn get_did_vc(&self) -> String;
@@ -62,7 +65,7 @@ pub trait CredentialEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
 
 /// `HolderEntityAccessor`  it's an interface used as a getter object for all `Holder` property
 /// fields
-pub trait HolderEntityAccessor: Clone {
+pub trait HolderEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_vc(&self) -> VC;
     fn get_is_verified(&self) -> bool;

@@ -135,6 +135,15 @@ impl TryInto<Vec<u8>> for Credential {
     }
 }
 
+impl TryFrom<Vec<u8>> for Credential {
+    type Error = CredentialError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let credential: Credential = serde_json::from_slice(&value).map_err(|err| CredentialError::UnserializeError(err.to_string()))?;
+        Ok(credential)
+    }
+}
+
 impl CredentialEntityAccessor for Credential {
     fn get_id(&self) -> String {
         self.id.to_owned()

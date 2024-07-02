@@ -1,7 +1,11 @@
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde::{self, Deserialize, Serialize};
+use rst_common::standard::serde_json;
 use rst_common::standard::uuid::Uuid;
+
+use rstdev_domain::entity::ToJSON;
+use rstdev_domain::BaseError;
 
 use prople_did_core::doc::types::PublicKeyDecoded;
 use prople_did_core::types::VERIFICATION_TYPE_ED25519;
@@ -139,6 +143,34 @@ impl Holder {
         verified_holder.is_verified = true;
 
         Ok(verified_holder)
+    }
+}
+
+impl ToJSON for Holder {
+    fn to_json(&self) -> Result<String, BaseError> {        
+        let json_str =
+            serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
+
+        Ok(json_str)
+    }
+}
+
+impl TryInto<Vec<u8>> for Holder {
+    type Error = CredentialError;
+
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        let json = serde_json::to_vec(&self)
+            .map_err(|err| CredentialError::GenerateJSONError(err.to_string()))?;
+        Ok(json)
+    }
+}
+
+impl TryFrom<Vec<u8>> for Holder {
+    type Error = CredentialError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let holder: Holder = serde_json::from_slice(&value).map_err(|err| CredentialError::UnserializeError(err.to_string()))?;
+        Ok(holder)
     }
 }
 

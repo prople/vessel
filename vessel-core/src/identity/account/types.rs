@@ -43,6 +43,9 @@ pub enum AccountError {
     #[error("unable to build DID uri: {0}")]
     BuildURIError(String),
 
+    #[error("unable unserialize account: {0}")]
+    UnserializeError(String),
+
     #[error("unknown DID")]
     DIDNotFound,
 }
@@ -51,7 +54,7 @@ pub enum AccountError {
 /// property fields. This entity  will be useful from the outside of this crate
 /// to access those fields because we need to protect the properties from direct
 /// access or manipulation from outside
-pub trait AccountEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
+pub trait AccountEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_did(&self) -> String;
     fn get_did_uri(&self) -> String;

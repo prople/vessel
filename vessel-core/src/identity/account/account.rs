@@ -130,6 +130,15 @@ impl TryInto<Vec<u8>> for Account {
     }
 }
 
+impl TryFrom<Vec<u8>> for Account {
+    type Error = AccountError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let account: Account = serde_json::from_slice(&value).map_err(|err| AccountError::UnserializeError(err.to_string()))?;
+        Ok(account)
+    }
+}
+
 impl AccountEntityAccessor for Account {
     fn get_id(&self) -> String {
         self.id.to_owned()
@@ -188,6 +197,23 @@ mod tests {
 
         let json_str = String::from_utf8(json_bytes.unwrap());
         assert!(!json_str.is_err());
+    }
+
+    #[test]
+    fn test_unserialize_from_bytes() {
+        let account_builder = Account::generate("password".to_string(), None);
+        assert!(!account_builder.is_err());
+
+        let account = account_builder.unwrap();
+        let json_bytes: Result<Vec<u8>, AccountError> = account.clone().try_into();
+        assert!(!json_bytes.is_err());
+
+        let jb = json_bytes.unwrap();
+        let account_regenerate = Account::try_from(jb);
+        assert!(!account_regenerate.is_err());
+
+        let account_new = account_regenerate.unwrap();
+        assert_eq!(account.get_did(), account_new.get_did())
     }
 
     #[test]

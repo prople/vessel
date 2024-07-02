@@ -172,6 +172,15 @@ impl TryInto<Vec<u8>> for Verifier {
     }
 }
 
+impl TryFrom<Vec<u8>> for Verifier {
+    type Error = PresentationError;
+
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
+        let verifier: Verifier = serde_json::from_slice(&value).map_err(|err| PresentationError::UnserializeError(err.to_string()))?;
+        Ok(verifier)
+    }
+}
+
 impl VerifierEntityAccessor for Verifier {
     fn get_id(&self) -> String {
         self.id.to_owned()

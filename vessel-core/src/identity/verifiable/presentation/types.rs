@@ -29,6 +29,9 @@ pub enum PresentationError {
 
     #[error("unable to verify VP: {0}")]
     VerifyError(String),
+    
+    #[error("unable unserialize account: {0}")]
+    UnserializeError(String),
 
     #[error("common error")]
     CommonError(#[from] VerifiableError),
@@ -36,7 +39,7 @@ pub enum PresentationError {
 
 /// `PresentationEntityAccessor` is a getter object used to access
 /// all `Presentation` property fields
-pub trait PresentationEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
+pub trait PresentationEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_vp(&self) -> VP;
     fn get_private_keys(&self) -> IdentityPrivateKeyPairs;
@@ -44,7 +47,7 @@ pub trait PresentationEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> 
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
 
-pub trait VerifierEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
+pub trait VerifierEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_did_verifier(&self) -> String;
     fn get_vp(&self) -> VP;
