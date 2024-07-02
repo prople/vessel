@@ -1,6 +1,6 @@
 use rst_common::standard::serde::{self, Deserialize};
 
-use crate::common::types::{ToValidate, CommonError};
+use crate::common::types::{CommonError, ToValidate};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(crate = "self::serde")]
@@ -27,11 +27,15 @@ impl Default for RocksDBCommon {
 impl ToValidate for RocksDBCommon {
     fn validate(&self) -> Result<(), CommonError> {
         if self.path.is_empty() {
-            return Err(CommonError::ValidationError("config: rocksdbcommon:path is missing".to_string()))
+            return Err(CommonError::ValidationError(
+                "config: rocksdbcommon:path is missing".to_string(),
+            ));
         }
-        
+
         if self.cf_name.is_empty() {
-            return Err(CommonError::ValidationError("config: rocksdbcommon:cf_name is missing".to_string()))
+            return Err(CommonError::ValidationError(
+                "config: rocksdbcommon:cf_name is missing".to_string(),
+            ));
         }
 
         Ok(())
@@ -43,7 +47,7 @@ impl ToValidate for RocksDBCommon {
 pub struct RocksDBOptions {
     pub(super) create_if_missing: bool,
     pub(super) create_missing_columns: bool,
-    pub(super) set_error_if_missing: bool,
+    pub(super) set_error_if_exists: bool,
     pub(super) set_wal_dir: String,
 }
 
@@ -56,8 +60,8 @@ impl RocksDBOptions {
         self.create_missing_columns.to_owned()
     }
 
-    pub fn get_set_error_if_missing(&self) -> bool {
-        self.set_error_if_missing.to_owned()
+    pub fn get_set_error_if_exists(&self) -> bool {
+        self.set_error_if_exists.to_owned()
     }
 
     pub fn get_set_wal_dir(&self) -> String {
@@ -70,7 +74,7 @@ impl Default for RocksDBOptions {
         Self {
             create_if_missing: true,
             create_missing_columns: true,
-            set_error_if_missing: false,
+            set_error_if_exists: false,
             set_wal_dir: "".to_string(),
         }
     }
@@ -79,7 +83,9 @@ impl Default for RocksDBOptions {
 impl ToValidate for RocksDBOptions {
     fn validate(&self) -> Result<(), CommonError> {
         if self.set_wal_dir.is_empty() {
-            return Err(CommonError::ValidationError("config: rocksdboptions:wal_dir is missing".to_string()))
+            return Err(CommonError::ValidationError(
+                "config: rocksdboptions:wal_dir is missing".to_string(),
+            ));
         }
 
         Ok(())
@@ -116,8 +122,8 @@ pub struct Identity {
 }
 
 impl Identity {
-    pub fn get_common(&self) -> (String, String) {
-        self.common.get()
+    pub fn get_common(&self) -> RocksDBCommon {
+        self.common.to_owned()
     }
 
     pub fn get_db_options(&self) -> RocksDBOptions {
@@ -177,7 +183,7 @@ mod tests {
 
         assert!(config_db.identity.db.create_if_missing);
         assert!(config_db.identity.db.create_missing_columns);
-        assert!(config_db.identity.db.set_error_if_missing);
+        assert!(config_db.identity.db.set_error_if_exists);
         Ok(())
     }
 
@@ -188,12 +194,18 @@ mod tests {
 
         let validation = helpers::validate(common_opts.clone());
         assert!(validation.is_err());
-        assert!(validation.unwrap_err().to_string().contains("rocksdbcommon:path"));
+        assert!(validation
+            .unwrap_err()
+            .to_string()
+            .contains("rocksdbcommon:path"));
 
         common_opts.path = "path".to_string();
         let validation = helpers::validate(common_opts);
         assert!(validation.is_err());
-        assert!(validation.unwrap_err().to_string().contains("rocksdbcommon:cf_name"))
+        assert!(validation
+            .unwrap_err()
+            .to_string()
+            .contains("rocksdbcommon:cf_name"))
     }
 
     #[test]
@@ -201,7 +213,10 @@ mod tests {
         let db_opts = RocksDBOptions::default();
         let validation = helpers::validate(db_opts.clone());
         assert!(validation.is_err());
-        assert!(validation.unwrap_err().to_string().contains("rocksdboptions:wal_dir"));
+        assert!(validation
+            .unwrap_err()
+            .to_string()
+            .contains("rocksdboptions:wal_dir"));
     }
 
     #[test]
@@ -209,6 +224,9 @@ mod tests {
         let identity_opts = Identity::default();
         let validation = helpers::validate(identity_opts.clone());
         assert!(validation.is_err());
-        assert!(validation.unwrap_err().to_string().contains("rocksdbcommon:cf_name"));
+        assert!(validation
+            .unwrap_err()
+            .to_string()
+            .contains("rocksdbcommon:cf_name"));
     }
 }

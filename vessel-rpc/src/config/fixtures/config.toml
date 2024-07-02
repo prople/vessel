@@ -5,11 +5,11 @@ port = "8181"
 [database]
 
 [database.identity.common]
-path = "./identity-storage"
+path = "./identity-db-storage"
 cf_name = "identity-cf"
 
 [database.identity.db]
 create_if_missing = true
 create_missing_columns = true
-set_error_if_missing = true
+set_error_if_exists = false 
 set_wal_dir = "./identity-db-wall"

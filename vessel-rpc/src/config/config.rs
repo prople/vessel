@@ -1,8 +1,8 @@
 use rst_common::standard::serde::{self, Deserialize};
 
-use crate::common::types::{ToValidate, CommonError};
+use crate::common::types::{CommonError, ToValidate};
 
-use super::{Database, App};
+use super::{App, Database};
 
 #[derive(Deserialize, Debug)]
 #[serde(crate = "self::serde")]
@@ -54,6 +54,9 @@ mod tests {
         let cfg = Config::default();
         let validation = helpers::validate(cfg);
         assert!(validation.is_err());
-        assert!(matches!(validation.unwrap_err(), CommonError::ValidationError(_)))
+        assert!(matches!(
+            validation.unwrap_err(),
+            CommonError::ValidationError(_)
+        ))
     }
 }

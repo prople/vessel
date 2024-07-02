@@ -1,11 +1,11 @@
 mod database;
-use database::Database;
+pub use database::{Database, RocksDBCommon, RocksDBOptions};
 
 mod app;
 use app::App;
 
 mod config;
-use config::Config;
+pub use config::Config;
 
 mod parser;
 pub use parser::Parser;
