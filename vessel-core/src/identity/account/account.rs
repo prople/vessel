@@ -3,7 +3,11 @@ use multiaddr::Multiaddr;
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde::{self, Deserialize, Serialize};
+use rst_common::standard::serde_json;
 use rst_common::standard::uuid::Uuid;
+
+use rstdev_domain::entity::ToJSON;
+use rstdev_domain::BaseError;
 
 use prople_crypto::keysecure::types::ToKeySecure;
 use prople_crypto::keysecure::KeySecure;
@@ -107,6 +111,25 @@ impl Account {
     }
 }
 
+impl ToJSON for Account {
+    fn to_json(&self) -> Result<String, BaseError> {
+        let json_str =
+            serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
+
+        Ok(json_str)
+    }
+}
+
+impl TryInto<Vec<u8>> for Account {
+    type Error = AccountError;
+
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        let json = serde_json::to_vec(&self)
+            .map_err(|err| AccountError::GenerateJSONError(err.to_string()))?;
+        Ok(json)
+    }
+}
+
 impl AccountEntityAccessor for Account {
     fn get_id(&self) -> String {
         self.id.to_owned()
@@ -143,6 +166,29 @@ impl AccountEntityAccessor for Account {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_build_json_str() {
+        let account_builder = Account::generate("password".to_string(), None);
+        assert!(!account_builder.is_err());
+
+        let json_str = account_builder.unwrap().to_json();
+        assert!(!json_str.is_err());
+        assert!(!json_str.unwrap().is_empty())
+    }
+
+    #[test]
+    fn test_build_json_bytes() {
+        let account_builder = Account::generate("password".to_string(), None);
+        assert!(!account_builder.is_err());
+
+        let account = account_builder.unwrap();
+        let json_bytes: Result<Vec<u8>, AccountError> = account.try_into();
+        assert!(!json_bytes.is_err());
+
+        let json_str = String::from_utf8(json_bytes.unwrap());
+        assert!(!json_str.is_err());
+    }
 
     #[test]
     fn test_generate_account_without_address() {

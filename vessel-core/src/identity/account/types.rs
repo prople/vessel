@@ -10,12 +10,17 @@ use prople_did_core::{did::query::Params, keys::IdentityPrivateKeyPairs};
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::with_errors::thiserror::{self, Error};
 
+use rstdev_domain::entity::ToJSON;
+
 /// `AccountError` provides all specific error types relate with entity account
 /// management
 #[derive(Debug, PartialEq, Error)]
 pub enum AccountError {
     #[error("unknown error: {0}")]
     UnknownError(String),
+
+    #[error("json error: {0}")]
+    GenerateJSONError(String),
 
     #[error("unable to resolve did: {0}")]
     ResolveDIDError(String),
@@ -46,7 +51,7 @@ pub enum AccountError {
 /// property fields. This entity  will be useful from the outside of this crate
 /// to access those fields because we need to protect the properties from direct
 /// access or manipulation from outside
-pub trait AccountEntityAccessor: Clone + Debug {
+pub trait AccountEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_did(&self) -> String;
     fn get_did_uri(&self) -> String;

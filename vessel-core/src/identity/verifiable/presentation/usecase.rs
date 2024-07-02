@@ -229,7 +229,9 @@ where
             .map_err(|err| PresentationError::VerifyError(err.to_string()))??;
 
         let verifier_verified = verifier.clone().verify_vp(self.account()).await?;
-        let _ = repo.set_presentation_verifier_verified(&verifier_verified).await?;
+        let _ = repo
+            .set_presentation_verifier_verified(&verifier_verified)
+            .await?;
 
         Ok(())
     }

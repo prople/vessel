@@ -1,6 +1,10 @@
+use std::fmt::Debug;
+
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::with_errors::thiserror::{self, Error};
+
+use rstdev_domain::entity::ToJSON;
 
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::VP;
@@ -16,6 +20,9 @@ pub const VP_TYPE: &str = "VerifiablePresentation";
 pub enum PresentationError {
     #[error("unable to generate vp: {0}")]
     GenerateError(String),
+    
+    #[error("json error: {0}")]
+    GenerateJSONError(String),
 
     #[error("unable to process incoming VP: {0}")]
     ReceiveError(String),
@@ -29,7 +36,7 @@ pub enum PresentationError {
 
 /// `PresentationEntityAccessor` is a getter object used to access
 /// all `Presentation` property fields
-pub trait PresentationEntityAccessor: Clone {
+pub trait PresentationEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_vp(&self) -> VP;
     fn get_private_keys(&self) -> IdentityPrivateKeyPairs;
@@ -37,7 +44,7 @@ pub trait PresentationEntityAccessor: Clone {
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
 
-pub trait VerifierEntityAccessor: Clone {
+pub trait VerifierEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_did_verifier(&self) -> String;
     fn get_vp(&self) -> VP;

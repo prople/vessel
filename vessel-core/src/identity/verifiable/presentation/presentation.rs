@@ -3,6 +3,10 @@ use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::uuid::Uuid;
 
 use rst_common::standard::serde::{self, Deserialize, Serialize};
+use rst_common::standard::serde_json;
+
+use rstdev_domain::entity::ToJSON;
+use rstdev_domain::BaseError;
 
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::CONTEXT_VC_V2;
@@ -30,6 +34,25 @@ pub struct Presentation {
     #[serde(with = "ts_seconds")]
     #[serde(rename = "updatedAt")]
     pub(crate) updated_at: DateTime<Utc>,
+}
+
+impl ToJSON for Presentation {
+    fn to_json(&self) -> Result<String, BaseError> {        
+        let json_str =
+            serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
+
+        Ok(json_str)
+    }
+}
+
+impl TryInto<Vec<u8>> for Presentation {
+    type Error = PresentationError;
+
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        let json = serde_json::to_vec(&self)
+            .map_err(|err| PresentationError::GenerateJSONError(err.to_string()))?;
+        Ok(json)
+    }
 }
 
 impl PresentationEntityAccessor for Presentation {

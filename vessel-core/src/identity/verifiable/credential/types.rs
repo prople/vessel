@@ -1,9 +1,13 @@
+use std::fmt::Debug;
+
 use multiaddr::Multiaddr;
 
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde_json::value::Value;
 use rst_common::with_errors::thiserror::{self, Error};
+
+use rstdev_domain::entity::ToJSON;
 
 use prople_crypto::keysecure::KeySecure;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
@@ -17,6 +21,9 @@ use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 pub enum CredentialError {
     #[error("unable to generate credential: {0}")]
     GenerateError(String),
+    
+    #[error("json error: {0}")]
+    GenerateJSONError(String),
 
     #[error("unable to process incoming vc: {0}")]
     ReceiveError(String),
@@ -42,7 +49,7 @@ pub enum CredentialError {
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
 /// for all `Credential` property fields
-pub trait CredentialEntityAccessor: Clone {
+pub trait CredentialEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> {
     fn get_id(&self) -> String;
     fn get_did_issuer(&self) -> String;
     fn get_did_vc(&self) -> String;

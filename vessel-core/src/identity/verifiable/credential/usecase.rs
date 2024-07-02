@@ -209,7 +209,9 @@ where
             .map_err(|err| CredentialError::HolderError(err.to_string()))??;
 
         let verified_holder = holder.clone().verify_vc(self.account()).await?;
-        let _ = repo.set_credential_holder_verified(&verified_holder).await?;
+        let _ = repo
+            .set_credential_holder_verified(&verified_holder)
+            .await?;
 
         Ok(())
     }

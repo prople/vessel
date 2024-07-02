@@ -1,7 +1,11 @@
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde::{self, Deserialize, Serialize};
+use rst_common::standard::serde_json;
 use rst_common::standard::uuid::Uuid;
+
+use rstdev_domain::entity::ToJSON;
+use rstdev_domain::BaseError;
 
 use prople_did_core::doc::types::PublicKeyDecoded;
 use prople_did_core::types::VERIFICATION_TYPE_ED25519;
@@ -130,23 +134,41 @@ impl Verifier {
                     "proof was missing".to_string(),
                 ))?;
 
-        let _ =
-            ProofValue::verify_proof(vc_doc_pubkey, vp_orig, proof_signature.proof_value)
-                .map(|verified| {
-                    if !verified {
-                        return Err(PresentationError::VerifyError(
-                            "proof signature is invalid".to_string(),
-                        ));
-                    }
+        let _ = ProofValue::verify_proof(vc_doc_pubkey, vp_orig, proof_signature.proof_value)
+            .map(|verified| {
+                if !verified {
+                    return Err(PresentationError::VerifyError(
+                        "proof signature is invalid".to_string(),
+                    ));
+                }
 
-                    Ok(())
-                })
-                .map_err(|err| PresentationError::VerifyError(err.to_string()))??;
+                Ok(())
+            })
+            .map_err(|err| PresentationError::VerifyError(err.to_string()))??;
 
         let mut verifier_verified = self.clone();
         verifier_verified.is_verified = true;
 
         Ok(verifier_verified)
+    }
+}
+
+impl ToJSON for Verifier {
+    fn to_json(&self) -> Result<String, BaseError> {        
+        let json_str =
+            serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
+
+        Ok(json_str)
+    }
+}
+
+impl TryInto<Vec<u8>> for Verifier {
+    type Error = PresentationError;
+
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        let json = serde_json::to_vec(&self)
+            .map_err(|err| PresentationError::GenerateJSONError(err.to_string()))?;
+        Ok(json)
     }
 }
 

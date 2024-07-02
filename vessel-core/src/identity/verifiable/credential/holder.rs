@@ -123,18 +123,17 @@ impl Holder {
                 "proof was missing".to_string(),
             ))?;
 
-        let _ =
-            ProofValue::verify_proof(vc_doc_pubkey, vc_orig, proof_signature.proof_value)
-                .map(|verified| {
-                    if !verified {
-                        return Err(CredentialError::VerifyError(
-                            "proof signature is invalid".to_string(),
-                        ));
-                    }
+        let _ = ProofValue::verify_proof(vc_doc_pubkey, vc_orig, proof_signature.proof_value)
+            .map(|verified| {
+                if !verified {
+                    return Err(CredentialError::VerifyError(
+                        "proof signature is invalid".to_string(),
+                    ));
+                }
 
-                    Ok(())
-                })
-                .map_err(|err| CredentialError::VerifyError(err.to_string()))??;
+                Ok(())
+            })
+            .map_err(|err| CredentialError::VerifyError(err.to_string()))??;
 
         let mut verified_holder = self.clone();
         verified_holder.is_verified = true;

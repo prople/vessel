@@ -3,7 +3,10 @@ use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::uuid::Uuid;
 
 use rst_common::standard::serde::{self, Deserialize, Serialize};
-use rst_common::standard::serde_json::value::Value;
+use rst_common::standard::serde_json::{self, value::Value};
+
+use rstdev_domain::entity::ToJSON;
+use rstdev_domain::BaseError;
 
 use prople_crypto::keysecure::KeySecure;
 
@@ -110,6 +113,25 @@ impl Credential {
         );
 
         Ok(cred)
+    }
+}
+
+impl ToJSON for Credential {
+    fn to_json(&self) -> Result<String, BaseError> {        
+        let json_str =
+            serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
+
+        Ok(json_str)
+    }
+}
+
+impl TryInto<Vec<u8>> for Credential {
+    type Error = CredentialError;
+
+    fn try_into(self) -> Result<Vec<u8>, Self::Error> {
+        let json = serde_json::to_vec(&self)
+            .map_err(|err| CredentialError::GenerateJSONError(err.to_string()))?;
+        Ok(json)
     }
 }
 
