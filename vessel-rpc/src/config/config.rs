@@ -1,5 +1,7 @@
 use rst_common::standard::serde::{self, Deserialize};
 
+use crate::common::types::{ToValidate, CommonError};
+
 use super::{Database, App};
 
 #[derive(Deserialize, Debug)]
@@ -29,5 +31,29 @@ impl Default for Config {
             database: Database::default(),
             app: App::default(),
         }
+    }
+}
+
+impl ToValidate for Config {
+    fn validate(&self) -> Result<(), CommonError> {
+        _ = self.app.validate()?;
+        _ = self.database.validate()?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::common::helpers;
+    use crate::common::types::CommonError;
+
+    #[test]
+    fn test_validation_failed() {
+        let cfg = Config::default();
+        let validation = helpers::validate(cfg);
+        assert!(validation.is_err());
+        assert!(matches!(validation.unwrap_err(), CommonError::ValidationError(_)))
     }
 }
