@@ -21,7 +21,7 @@ use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 pub enum CredentialError {
     #[error("unable to generate credential: {0}")]
     GenerateError(String),
-    
+
     #[error("json error: {0}")]
     GenerateJSONError(String),
 
@@ -52,7 +52,9 @@ pub enum CredentialError {
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
 /// for all `Credential` property fields
-pub trait CredentialEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
+pub trait CredentialEntityAccessor:
+    Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>>
+{
     fn get_id(&self) -> String;
     fn get_did_issuer(&self) -> String;
     fn get_did_vc(&self) -> String;
@@ -65,7 +67,9 @@ pub trait CredentialEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + 
 
 /// `HolderEntityAccessor`  it's an interface used as a getter object for all `Holder` property
 /// fields
-pub trait HolderEntityAccessor: Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>> {
+pub trait HolderEntityAccessor:
+    Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>>
+{
     fn get_id(&self) -> String;
     fn get_vc(&self) -> VC;
     fn get_is_verified(&self) -> bool;

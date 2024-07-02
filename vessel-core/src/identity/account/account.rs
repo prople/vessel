@@ -134,7 +134,8 @@ impl TryFrom<Vec<u8>> for Account {
     type Error = AccountError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let account: Account = serde_json::from_slice(&value).map_err(|err| AccountError::UnserializeError(err.to_string()))?;
+        let account: Account = serde_json::from_slice(&value)
+            .map_err(|err| AccountError::UnserializeError(err.to_string()))?;
         Ok(account)
     }
 }

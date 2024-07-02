@@ -154,7 +154,7 @@ impl Verifier {
 }
 
 impl ToJSON for Verifier {
-    fn to_json(&self) -> Result<String, BaseError> {        
+    fn to_json(&self) -> Result<String, BaseError> {
         let json_str =
             serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
 
@@ -176,7 +176,8 @@ impl TryFrom<Vec<u8>> for Verifier {
     type Error = PresentationError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let verifier: Verifier = serde_json::from_slice(&value).map_err(|err| PresentationError::UnserializeError(err.to_string()))?;
+        let verifier: Verifier = serde_json::from_slice(&value)
+            .map_err(|err| PresentationError::UnserializeError(err.to_string()))?;
         Ok(verifier)
     }
 }

@@ -117,7 +117,7 @@ impl Credential {
 }
 
 impl ToJSON for Credential {
-    fn to_json(&self) -> Result<String, BaseError> {        
+    fn to_json(&self) -> Result<String, BaseError> {
         let json_str =
             serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
 
@@ -139,7 +139,8 @@ impl TryFrom<Vec<u8>> for Credential {
     type Error = CredentialError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let credential: Credential = serde_json::from_slice(&value).map_err(|err| CredentialError::UnserializeError(err.to_string()))?;
+        let credential: Credential = serde_json::from_slice(&value)
+            .map_err(|err| CredentialError::UnserializeError(err.to_string()))?;
         Ok(credential)
     }
 }

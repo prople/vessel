@@ -37,7 +37,7 @@ pub struct Presentation {
 }
 
 impl ToJSON for Presentation {
-    fn to_json(&self) -> Result<String, BaseError> {        
+    fn to_json(&self) -> Result<String, BaseError> {
         let json_str =
             serde_json::to_string(&self).map_err(|err| BaseError::ToJSONError(err.to_string()))?;
 
@@ -59,7 +59,8 @@ impl TryFrom<Vec<u8>> for Presentation {
     type Error = PresentationError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let presentation: Presentation = serde_json::from_slice(&value).map_err(|err| PresentationError::UnserializeError(err.to_string()))?;
+        let presentation: Presentation = serde_json::from_slice(&value)
+            .map_err(|err| PresentationError::UnserializeError(err.to_string()))?;
         Ok(presentation)
     }
 }
