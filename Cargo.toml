@@ -17,7 +17,7 @@ license = "AGPL-3.0-or-later"
 authors = ["rstlix0x0 (@rstlix0x0)", "Vessel Contributors (@prople/vessel-contributors)"]
 
 [workspace.dependencies]
-prople-vessel-core = {version = "0.2.0", path = "vessel-core"}
+prople-vessel-core = {version = "~0.2", path = "vessel-core"}
 
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
