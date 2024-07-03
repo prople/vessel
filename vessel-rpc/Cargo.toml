@@ -10,6 +10,9 @@ prople-vessel-core.workspace = true
 rst-common.workspace = true
 rstdev-config.workspace = true
 rstdev-storage.workspace = true
+rstdev-domain.workspace = true
+multiaddr.workspace = true
+once_cell.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
