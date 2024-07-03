@@ -4,7 +4,7 @@ use crate::common::types::{CommonError, ToValidate};
 
 use super::{App, Database};
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Clone)]
 #[serde(crate = "self::serde")]
 pub struct Config {
     pub(super) database: Database,

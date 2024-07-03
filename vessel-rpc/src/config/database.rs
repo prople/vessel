@@ -162,7 +162,7 @@ mod tests {
     use crate::common::helpers;
 
     #[test]
-    fn test_parse_databae_config() -> Result<(), ConfigError> {
+    fn test_parse_database_config() -> Result<(), ConfigError> {
         let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         path.push("src/config/fixtures");
 
@@ -177,9 +177,9 @@ mod tests {
         assert!(!config_toml.is_err());
 
         let config_db = config_toml.unwrap();
-        assert_eq!(config_db.identity.common.cf_name, "identity-cf");
-        assert_eq!(config_db.identity.common.path, "./identity-storage");
-        assert_eq!(config_db.identity.db.set_wal_dir, "./identity-db-wall");
+        assert_eq!(config_db.identity.common.cf_name, "identity-cf-config");
+        assert_eq!(config_db.identity.common.path, "./identity-db-storage-config");
+        assert_eq!(config_db.identity.db.set_wal_dir, "./identity-db-wall-config");
 
         assert!(config_db.identity.db.create_if_missing);
         assert!(config_db.identity.db.create_missing_columns);
