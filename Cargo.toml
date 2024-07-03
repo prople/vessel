@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = [ "vessel-cli",
+members = [ 
     "vesseld",
     "vessel-core", 
     "vessel-rpc",
@@ -17,16 +17,21 @@ license = "AGPL-3.0-or-later"
 authors = ["rstlix0x0 (@rstlix0x0)", "Vessel Contributors (@prople/vessel-contributors)"]
 
 [workspace.dependencies]
+# specific prople libraries
 prople-vessel-core = {version = "~0.2", path = "vessel-core"}
-
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
+
+# rstdev and rst_common libraries
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
 rstdev-domain = {version = "~0.1"}
 rstdev-config = {version = "~0.1"}
 rstdev-storage = {version = "~0.3", features=["rocksdb"]}
+
+# third party libraries
 toml = {version = "~0.8"}
 clap = {version = "~4.5", features=["derive"]}
-mockall  = {version = "0.12.1"}
-multiaddr = {version = "0.18.1"}
-table-test = {version = "0.2.1"} 
+mockall  = {version = "~0.12"}
+multiaddr = {version = "~0.18"}
+table-test = {version = "~0.2"} 
+once_cell = {version = "~1.19"}
