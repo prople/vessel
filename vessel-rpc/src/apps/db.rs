@@ -6,27 +6,32 @@ use crate::common::types::CommonError;
 use crate::config::{Database, RocksDBCommon, RocksDBOptions};
 use crate::Config;
 
-#[derive(Clone)]
-pub struct Builder<TStorage>
-where
-    TStorage: Storage<Instance = DB>,
-{
-    cfg: Config,
-    pub(crate) instance: Option<TStorage>,
+use super::types::AppError;
+
+pub enum Instruction {
+    SaveCf { key: String, value: Vec<u8> },
+    GetCf { key: String },
+    RemoveCf { key: String },
 }
 
-impl<TStorage> Builder<TStorage>
+#[derive(Clone)]
+pub struct Runner<TStorage>
 where
     TStorage: Storage<Instance = DB>,
 {
-    pub fn new(cfg: Config) -> Self {
-        Self {
-            cfg,
-            instance: None,
-        }
+    instance: TStorage,
+    cfg: Config,
+}
+
+impl<TStorage> Runner<TStorage>
+where
+    TStorage: Storage<Instance = DB>,
+{
+    pub fn new(instance: TStorage, cfg: Config) -> Self {
+        Self { instance, cfg }
     }
 
-    pub fn get_cf(&self, callback: impl FnOnce(&Database) -> RocksDBCommon) -> String {
+    pub fn get_cf_def(&self, callback: impl FnOnce(&Database) -> RocksDBCommon) -> String {
         let common = callback(self.cfg.db());
         let (_, cf) = common.get();
 
@@ -34,11 +39,67 @@ where
     }
 }
 
-impl Builder<DB> {
+impl Runner<DB> {
+    pub fn exec(&self, instruction: Instruction) -> Result<Option<Vec<u8>>, AppError> {
+        let instance = self.instance.clone().get_instance();
+
+        let db_instance = instance
+            .db
+            .clone()
+            .map(|val| val)
+            .ok_or(AppError::DbError("db instance is missing".to_string()))?;
+
+        let cf = db_instance
+            .cf_handle(self.get_cf_def(|db| db.identity.get_common()).as_str())
+            .map(|val| val.to_owned())
+            .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+
+        match instruction {
+            Instruction::SaveCf { key, value } => {
+                let _ = db_instance
+                    .put_cf(cf, key, value)
+                    .map_err(|err| AppError::DbError(err.to_string()))?;
+
+                Ok(None)
+            }
+            Instruction::GetCf { key } => {
+                let value = db_instance
+                    .get_cf(cf, key)
+                    .map_err(|err| AppError::DbError(err.to_string()))?
+                    .map(|val| val);
+
+                Ok(value)
+            }
+            Instruction::RemoveCf { key } => {
+                let _ = db_instance
+                    .delete_cf(cf, key)
+                    .map_err(|err| AppError::DbError(err.to_string()))?;
+
+                Ok(None)
+            }
+        }
+    }
+}
+
+pub struct Builder
+{
+    cfg: Config,
+}
+
+impl Builder
+{
+    pub fn new(cfg: Config) -> Self {
+        Self {
+            cfg,
+        }
+    }
+}
+
+impl Builder {
     pub fn build(
         &mut self,
         db_callback: impl FnOnce(&Config) -> (RocksDBCommon, RocksDBOptions),
-    ) -> Result<(), CommonError> {
+    ) -> Result<Runner<DB>, CommonError> {
         let (opts_common, opts_db) = db_callback(&self.cfg);
         let (opts_path, opts_cf_name) = opts_common.get();
 
@@ -59,8 +120,6 @@ impl Builder<DB> {
             .build()
             .map_err(|err| CommonError::DBError(err.to_string()))?;
 
-        self.instance = Some(db);
-
-        Ok(())
+        Ok(Runner::new(db, self.cfg.to_owned()))
     }
 }

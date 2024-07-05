@@ -178,8 +178,14 @@ mod tests {
 
         let config_db = config_toml.unwrap();
         assert_eq!(config_db.identity.common.cf_name, "identity-cf-config");
-        assert_eq!(config_db.identity.common.path, "./identity-db-storage-config");
-        assert_eq!(config_db.identity.db.set_wal_dir, "./identity-db-wall-config");
+        assert_eq!(
+            config_db.identity.common.path,
+            "./identity-db-storage-config"
+        );
+        assert_eq!(
+            config_db.identity.db.set_wal_dir,
+            "./identity-db-wall-config"
+        );
 
         assert!(config_db.identity.db.create_if_missing);
         assert!(config_db.identity.db.create_missing_columns);

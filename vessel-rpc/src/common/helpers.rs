@@ -7,14 +7,14 @@ pub fn validate(validator: impl ToValidate) -> Result<(), CommonError> {
 #[cfg(test)]
 pub mod testdb {
 
+    use once_cell::sync::OnceCell;
     use std::env;
     use std::path::PathBuf;
-    use once_cell::sync::OnceCell;
-   
+
     use rstdev_storage::engine::rocksdb::db::DB;
-    
+
     use crate::ConfigManager;
-    use crate::DbBuilder;
+    use crate::{DbBuilder, DbRunner};
 
     pub fn global_db_parser() -> &'static ConfigManager {
         static INSTANCE: OnceCell<ConfigManager> = OnceCell::new();
@@ -27,10 +27,10 @@ pub mod testdb {
 
             config_parser
         })
-    } 
+    }
 
-    pub fn global_db_builder() -> &'static DbBuilder<DB> {
-        static INSTANCE: OnceCell<DbBuilder<DB>> = OnceCell::new();
+    pub fn global_db_builder() -> &'static DbRunner<DB> {
+        static INSTANCE: OnceCell<DbRunner<DB>> = OnceCell::new();
         INSTANCE.get_or_init(|| {
             let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             path.push("src/config/fixtures");
@@ -38,20 +38,21 @@ pub mod testdb {
             let toml_file = format!("{}/config.toml", path.display());
             let config_parser = ConfigManager::new(toml_file);
             let config = config_parser.parse().unwrap();
-        
+
             let mut db_builder = DbBuilder::new(config);
-            let _ = db_builder.build(|opts| {
-                let opts_db = opts.db();
-                let opts_db_identity = opts_db.identity.clone();
+            let runner = db_builder
+                .build(|opts| {
+                    let opts_db = opts.db();
+                    let opts_db_identity = opts_db.identity.clone();
 
-                let opts_db_common = opts_db_identity.clone().get_common().clone();
-                let opts_db_main = opts_db_identity.clone().get_db_options().clone();
+                    let opts_db_common = opts_db_identity.clone().get_common().clone();
+                    let opts_db_main = opts_db_identity.clone().get_db_options().clone();
 
-                (opts_db_common, opts_db_main)
-            });
+                    (opts_db_common, opts_db_main)
+                })
+                .unwrap();
 
-            db_builder
+            runner
         })
     }
-
 }
