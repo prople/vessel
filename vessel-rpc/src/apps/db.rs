@@ -1,3 +1,5 @@
+use rst_common::with_tokio::tokio::task::spawn_blocking;
+
 use rstdev_storage::engine::rocksdb::db::DB;
 use rstdev_storage::engine::rocksdb::options::Options;
 use rstdev_storage::types::Storage;
@@ -40,7 +42,7 @@ where
 }
 
 impl Runner<DB> {
-    pub fn exec(&self, instruction: Instruction) -> Result<Option<Vec<u8>>, AppError> {
+    pub async fn exec(&self, instruction: Instruction) -> Result<Option<Vec<u8>>, AppError> {
         let instance = self.instance.clone().get_instance();
 
         let db_instance = instance
@@ -49,31 +51,62 @@ impl Runner<DB> {
             .map(|val| val)
             .ok_or(AppError::DbError("db instance is missing".to_string()))?;
 
-        let cf = db_instance
-            .cf_handle(self.get_cf_def(|db| db.identity.get_common()).as_str())
-            .map(|val| val.to_owned())
-            .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+        let cf_def = self.get_cf_def(|db| db.identity.get_common()).clone();
 
         match instruction {
             Instruction::SaveCf { key, value } => {
-                let _ = db_instance
-                    .put_cf(cf, key, value)
-                    .map_err(|err| AppError::DbError(err.to_string()))?;
+                let _ = spawn_blocking(move || {
+                    let cf = db_instance
+                        .cf_handle(cf_def.as_str())
+                        .map(|val| val.to_owned())
+                        .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+
+                    let result = db_instance
+                        .put_cf(cf, key, value)
+                        .map_err(|err| AppError::DbError(err.to_string()));
+
+                    result
+                })
+                .await
+                .map_err(|err| AppError::DbError(err.to_string()))?;
 
                 Ok(None)
             }
             Instruction::GetCf { key } => {
-                let value = db_instance
-                    .get_cf(cf, key)
-                    .map_err(|err| AppError::DbError(err.to_string()))?
-                    .map(|val| val);
+                let value = spawn_blocking(move || {
+                    let cf = db_instance
+                        .cf_handle(cf_def.as_str())
+                        .map(|val| val.to_owned())
+                        .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+
+                    let result = db_instance
+                        .get_cf(cf, key)
+                        .map_err(|err| AppError::DbError(err.to_string()))
+                        .map(|val| val);
+
+                    result
+                })
+                .await
+                .map_err(|err| AppError::DbError(err.to_string()))??;
 
                 Ok(value)
             }
             Instruction::RemoveCf { key } => {
-                let _ = db_instance
-                    .delete_cf(cf, key)
-                    .map_err(|err| AppError::DbError(err.to_string()))?;
+                let _ = spawn_blocking(move || {
+                    let cf = db_instance
+                        .cf_handle(cf_def.as_str())
+                        .map(|val| val.to_owned())
+                        .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+
+                    let result = db_instance
+                        .delete_cf(cf, key)
+                        .map_err(|err| AppError::DbError(err.to_string()))
+                        .map(|val| val);
+
+                    result
+                })
+                .await
+                .map_err(|err| AppError::DbError(err.to_string()))?;
 
                 Ok(None)
             }
@@ -81,17 +114,13 @@ impl Runner<DB> {
     }
 }
 
-pub struct Builder
-{
+pub struct Builder {
     cfg: Config,
 }
 
-impl Builder
-{
+impl Builder {
     pub fn new(cfg: Config) -> Self {
-        Self {
-            cfg,
-        }
+        Self { cfg }
     }
 }
 
