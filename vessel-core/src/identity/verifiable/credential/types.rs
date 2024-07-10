@@ -163,7 +163,6 @@ pub trait RepoBuilder: Clone + Sync + Send {
     ) -> Result<(), CredentialError>;
 
     async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
-    async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
 
     async fn get_credential_by_id(
         &self,

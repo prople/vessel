@@ -262,7 +262,6 @@ mod tests {
             async fn save_credential_holder(&self, data: &Holder) -> Result<(), CredentialError>;
             async fn set_credential_holder_verified(&self, holder: &Holder) -> Result<(), CredentialError>;
             async fn remove_credential_by_id(&self, id: String) -> Result<(), CredentialError>;
-            async fn remove_credential_by_did(&self, did: String) -> Result<(), CredentialError>;
 
             async fn get_credential_by_id(&self, id: String) -> Result<Credential, CredentialError>;
 
