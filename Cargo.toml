@@ -18,9 +18,9 @@ authors = ["rstlix0x0 (@rstlix0x0)", "Vessel Contributors (@prople/vessel-contri
 
 [workspace.dependencies]
 # specific prople libraries
-prople-vessel-core = {version = "~0.2", path = "vessel-core"}
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
+prople-vessel-core = {version = "~0.2", path = "vessel-core"}
 
 # rstdev and rst_common libraries
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
