@@ -7,6 +7,8 @@ edition = "2021"
 
 [dependencies]
 prople-vessel-core.workspace = true
+prople-did-core.workspace = true
+prople-crypto.workspace = true
 rst-common.workspace = true
 rstdev-config.workspace = true
 rstdev-storage.workspace = true

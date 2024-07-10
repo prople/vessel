@@ -9,7 +9,7 @@ use prople_vessel_core::identity::account::types::{
 use prople_vessel_core::identity::account::Account;
 
 use crate::apps::types::AppError;
-use crate::apps::{DbInstruction, DbRunner};
+use crate::apps::{DbInstruction, DbOutput, DbRunner};
 
 const ACCOUNT_KEY_ID: &str = "account_id";
 const ACCOUNT_KEY_DID: &str = "account_did";
@@ -39,15 +39,20 @@ impl Repository {
     async fn get_id_by_did(&self, did: String) -> Result<String, AppError> {
         let account_key_did = self.build_account_key(ACCOUNT_KEY_DID.to_string(), did);
 
-        let value_id = self
+        let output = self
             .db
             .exec(DbInstruction::GetCf {
                 key: account_key_did.clone(),
             })
             .await
-            .map_err(|err| AppError::DbError(err.to_string()))?
-            .map(|val| val)
-            .ok_or(AppError::DbError("did not found".to_string()))?;
+            .map_err(|err| AppError::DbError(err.to_string()))?;
+
+        let value_id = match output {
+            DbOutput::SingleByte { value } => Ok(value),
+            _ => Err(AppError::DbError("unknown output type".to_string())),
+        }?
+        .map(|val| val)
+        .ok_or(AppError::DbError("value was missing".to_string()))?;
 
         let str_id =
             String::from_utf8(value_id).map_err(|err| AppError::DbError(err.to_string()))?;
@@ -123,15 +128,23 @@ impl RepoBuilder for Repository {
             .map_err(|err| AccountError::UnknownError(err.to_string()))?;
 
         let account_key_id = self.build_account_key(ACCOUNT_KEY_ID.to_string(), str_id);
-        let value_account = self
+        let output = self
             .db
             .exec(DbInstruction::GetCf {
                 key: account_key_id,
             })
             .await
-            .map_err(|err| AccountError::UnknownError(err.to_string()))?
-            .map(|val| val)
-            .ok_or(AccountError::DIDNotFound)?;
+            .map_err(|err| AccountError::UnknownError(err.to_string()))
+            .map_err(|err| AccountError::UnknownError(err.to_string()))?;
+
+        let value_account = match output {
+            DbOutput::SingleByte { value } => Ok(value),
+            _ => Err(AccountError::UnknownError(
+                "unknown output type".to_string(),
+            )),
+        }?
+        .map(|val| val)
+        .ok_or(AccountError::UnknownError("value was missing".to_string()))?;
 
         let account = Account::try_from(value_account)
             .map_err(|err| AccountError::UnknownError(err.to_string()))?;

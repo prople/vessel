@@ -13,7 +13,27 @@ use super::types::AppError;
 pub enum Instruction {
     SaveCf { key: String, value: Vec<u8> },
     GetCf { key: String },
+    MultiGetCf { keys: Vec<String> },
     RemoveCf { key: String },
+}
+
+pub enum OutputOpts {
+    SingleByte {
+        value: Option<Vec<u8>>,
+    },
+    MultiBytes {
+        values: Vec<Result<Option<Vec<u8>>, AppError>>,
+    },
+    None,
+}
+
+impl OutputOpts {
+    pub fn is_none(&self) -> bool {
+        match self {
+            OutputOpts::None => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -42,7 +62,7 @@ where
 }
 
 impl Runner<DB> {
-    pub async fn exec(&self, instruction: Instruction) -> Result<Option<Vec<u8>>, AppError> {
+    pub async fn exec(&self, instruction: Instruction) -> Result<OutputOpts, AppError> {
         let instance = self.instance.clone().get_instance();
 
         let db_instance = instance
@@ -70,7 +90,7 @@ impl Runner<DB> {
                 .await
                 .map_err(|err| AppError::DbError(err.to_string()))?;
 
-                Ok(None)
+                Ok(OutputOpts::None)
             }
             Instruction::GetCf { key } => {
                 let value = spawn_blocking(move || {
@@ -89,7 +109,30 @@ impl Runner<DB> {
                 .await
                 .map_err(|err| AppError::DbError(err.to_string()))??;
 
-                Ok(value)
+                Ok(OutputOpts::SingleByte { value })
+            }
+            Instruction::MultiGetCf { keys } => {
+                let value = spawn_blocking(move || {
+                    let cf = db_instance
+                        .cf_handle(cf_def.as_str())
+                        .map(|val| val.to_owned())
+                        .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+
+                    let cf_keys = keys.iter().map(|val| (cf, val));
+                    let result = db_instance.multi_get_cf(cf_keys);
+
+                    Ok(result)
+                })
+                .await
+                .map_err(|err| AppError::DbError(err.to_string()))??
+                .iter()
+                .map(|val| match val.to_owned() {
+                    Ok(ok_val) => Ok(ok_val),
+                    Err(err) => Err(AppError::DbError(err.to_string())),
+                })
+                .collect();
+
+                Ok(OutputOpts::MultiBytes { values: value })
             }
             Instruction::RemoveCf { key } => {
                 let _ = spawn_blocking(move || {
@@ -108,7 +151,7 @@ impl Runner<DB> {
                 .await
                 .map_err(|err| AppError::DbError(err.to_string()))?;
 
-                Ok(None)
+                Ok(OutputOpts::None)
             }
         }
     }
