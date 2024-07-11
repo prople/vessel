@@ -1,40 +1,12 @@
 use rst_common::with_tokio::tokio::task::spawn_blocking;
-
 use rstdev_storage::engine::rocksdb::db::DB;
-use rstdev_storage::engine::rocksdb::options::Options;
 use rstdev_storage::types::Storage;
 
-use crate::common::types::CommonError;
-use crate::config::{Database, RocksDBCommon, RocksDBOptions};
+use crate::config::{Database, RocksDBCommon};
 use crate::Config;
+use crate::apps::types::AppError;
 
-use super::types::AppError;
-
-pub enum Instruction {
-    SaveCf { key: String, value: Vec<u8> },
-    GetCf { key: String },
-    MultiGetCf { keys: Vec<String> },
-    RemoveCf { key: String },
-}
-
-pub enum OutputOpts {
-    SingleByte {
-        value: Option<Vec<u8>>,
-    },
-    MultiBytes {
-        values: Vec<Result<Option<Vec<u8>>, AppError>>,
-    },
-    None,
-}
-
-impl OutputOpts {
-    pub fn is_none(&self) -> bool {
-        match self {
-            OutputOpts::None => true,
-            _ => false,
-        }
-    }
-}
+use super::types::{Instruction, OutputOpts};
 
 #[derive(Clone)]
 pub struct Runner<TStorage>
@@ -154,44 +126,5 @@ impl Runner<DB> {
                 Ok(OutputOpts::None)
             }
         }
-    }
-}
-
-pub struct Builder {
-    cfg: Config,
-}
-
-impl Builder {
-    pub fn new(cfg: Config) -> Self {
-        Self { cfg }
-    }
-}
-
-impl Builder {
-    pub fn build(
-        &mut self,
-        db_callback: impl FnOnce(&Config) -> (RocksDBCommon, RocksDBOptions),
-    ) -> Result<Runner<DB>, CommonError> {
-        let (opts_common, opts_db) = db_callback(&self.cfg);
-        let (opts_path, opts_cf_name) = opts_common.get();
-
-        let opts_db_main = opts_db.clone();
-
-        let mut db_opts = Options::new(opts_path, opts_cf_name);
-        db_opts.build_default_opts().set_db_opts(move |opt| {
-            opt.create_if_missing(opts_db_main.get_create_if_missing());
-            opt.create_missing_column_families(opts_db_main.get_create_missing_columns());
-            opt.set_error_if_exists(opts_db_main.get_set_error_if_exists());
-            opt.set_wal_dir(opts_db_main.get_set_wal_dir());
-
-            opt
-        });
-
-        let mut db = DB::new(db_opts).map_err(|err| CommonError::DBError(err.to_string()))?;
-        let _ = db
-            .build()
-            .map_err(|err| CommonError::DBError(err.to_string()))?;
-
-        Ok(Runner::new(db, self.cfg.to_owned()))
     }
 }
