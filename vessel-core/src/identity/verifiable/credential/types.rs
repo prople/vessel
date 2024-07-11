@@ -48,6 +48,9 @@ pub enum CredentialError {
 
     #[error("common error: {0}")]
     CommonError(#[from] VerifiableError),
+
+    #[error("credential not found")]
+    CredentialNotFound,
 }
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
