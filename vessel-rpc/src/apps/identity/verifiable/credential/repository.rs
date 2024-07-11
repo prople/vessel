@@ -27,7 +27,7 @@ impl Repository {
     fn build_credential_id_key(&self, val: String) -> String {
         format!("{}:{}", CREDENTIAL_KEY_ID.to_string(), val)
     }
-    
+
     fn build_credential_did_key(&self, val: String) -> String {
         format!("{}:{}", CREDENTIAL_KEY_DID.to_string(), val)
     }
@@ -62,7 +62,7 @@ impl RepoBuilder for Repository {
             .await
             .map_err(|err| {
                 CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
-            })?;        
+            })?;
 
         Ok(())
     }
@@ -213,28 +213,33 @@ impl RepoBuilder for Repository {
                 DbOutput::MultiBytes { values } => {
                     let mut creds: Vec<Credential> = Vec::new();
 
-                    let _ = values.iter().map(|val| {
-                        let cred_val = val.as_ref().map_or(None, |val| {
-                            let cred_val_bytes = val.clone()
-                                .map(|val| {
-                                    let cred = Credential::try_from(val)
-                                        .map_err(|err| {
-                                            CredentialError::CommonError(
-                                                VerifiableError::RepoError(err.to_string()),
-                                            )
-                                        })
-                                        .map_or(None, |cred| Some(cred));
+                    let _ = values
+                        .iter()
+                        .map(|val| {
+                            let cred_val = val.as_ref().map_or(None, |val| {
+                                let cred_val_bytes = val
+                                    .clone()
+                                    .map(|val| {
+                                        let cred = Credential::try_from(val)
+                                            .map_err(|err| {
+                                                CredentialError::CommonError(
+                                                    VerifiableError::RepoError(err.to_string()),
+                                                )
+                                            })
+                                            .map_or(None, |cred| Some(cred));
 
-                                    cred
-                                }).flatten();
+                                        cred
+                                    })
+                                    .flatten();
 
-                            cred_val_bytes
+                                cred_val_bytes
+                            });
+
+                            cred_val
+                        })
+                        .for_each(|val| {
+                            val.map(|cred| creds.push(cred));
                         });
-
-                        cred_val
-                    }).for_each(|val| {
-                        val.map(|cred| creds.push(cred));
-                    });
 
                     Ok(creds)
                 }
@@ -251,7 +256,7 @@ impl RepoBuilder for Repository {
         &self,
         _did: String,
         _pagination: Option<PaginationParams>,
-    ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError> { 
+    ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError> {
         Err(CredentialError::CommonError(VerifiableError::RepoError(
             "not implemented".to_string(),
         )))
@@ -261,21 +266,21 @@ impl RepoBuilder for Repository {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     use crate::common::helpers::testdb;
 
-    use rst_common::with_tokio::tokio;
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;
-    
+    use rst_common::with_tokio::tokio;
+
     use prople_crypto::keysecure::types::ToKeySecure;
-    
+
     use prople_did_core::did::DID;
     use prople_did_core::doc::types::ToDoc;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
-    
+
     use prople_vessel_core::identity::account::Account as AccountIdentity;
-    
+
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
     struct FakeCredential {
@@ -306,12 +311,11 @@ mod tests {
             .unwrap();
 
         AccountIdentity::new(
-            did_vc_value_cloned.clone(), 
-            "did-uri".
-            to_string(), 
-            did_vc_doc, 
-            did_vc_doc_private_keys, 
-            did_vc_keysecure
+            did_vc_value_cloned.clone(),
+            "did-uri".to_string(),
+            did_vc_doc,
+            did_vc_doc_private_keys,
+            did_vc_keysecure,
         )
     }
 
@@ -340,54 +344,61 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_save_get() { 
-        let credential = generate_credential().await; 
+    async fn test_save_get() {
+        let credential = generate_credential().await;
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
 
         let try_save = repo.save_credential(&credential).await;
         assert!(!try_save.is_err());
-        
+
         let cred_value = repo.get_credential_by_id(credential.get_id()).await;
         assert!(!cred_value.is_err());
-        
+
         let cred_from_db = cred_value.unwrap();
         assert_eq!(cred_from_db.get_did_vc(), credential.get_did_vc())
     }
 
     #[tokio::test]
     async fn test_save_remove_get() {
-        let credential = generate_credential().await; 
+        let credential = generate_credential().await;
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
-        
+
         let try_save = repo.save_credential(&credential).await;
         assert!(!try_save.is_err());
 
         let try_remove = repo.remove_credential_by_id(credential.get_id()).await;
         assert!(!try_remove.is_err());
-        
+
         let cred_value = repo.get_credential_by_id(credential.get_id()).await;
         assert!(cred_value.is_err());
-        assert!(matches!(cred_value.unwrap_err(), CredentialError::CredentialNotFound))
+        assert!(matches!(
+            cred_value.unwrap_err(),
+            CredentialError::CredentialNotFound
+        ))
     }
 
     #[tokio::test]
     async fn test_save_many_credetials_list() {
-        let credential1 = generate_credential().await; 
-        let credential2 = generate_credential().await; 
-        let credential3 = generate_credential().await; 
+        let credential1 = generate_credential().await;
+        let credential2 = generate_credential().await;
+        let credential3 = generate_credential().await;
 
-        let credential_ids = vec![credential1.get_id(), credential2.get_id(), credential3.get_id()];
+        let credential_ids = vec![
+            credential1.get_id(),
+            credential2.get_id(),
+            credential3.get_id(),
+        ];
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
-        
+
         let try_save1 = repo.save_credential(&credential1).await;
         assert!(!try_save1.is_err());
-        
+
         let try_save2 = repo.save_credential(&credential2).await;
         assert!(!try_save2.is_err());
-        
+
         let try_save3 = repo.save_credential(&credential3).await;
         assert!(!try_save3.is_err());
 
@@ -405,23 +416,28 @@ mod tests {
 
     #[tokio::test]
     async fn test_credentials_partial_not_found() {
-        let credential1 = generate_credential().await; 
-        let credential2 = generate_credential().await; 
-        let credential3 = generate_credential().await; 
+        let credential1 = generate_credential().await;
+        let credential2 = generate_credential().await;
+        let credential3 = generate_credential().await;
 
-        let credential_ids = vec![credential1.get_id(), credential2.get_id(), credential3.get_id(), "unknown id".to_string()];
+        let credential_ids = vec![
+            credential1.get_id(),
+            credential2.get_id(),
+            credential3.get_id(),
+            "unknown id".to_string(),
+        ];
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
-        
+
         let try_save1 = repo.save_credential(&credential1).await;
         assert!(!try_save1.is_err());
-        
+
         let try_save2 = repo.save_credential(&credential2).await;
         assert!(!try_save2.is_err());
-        
+
         let try_save3 = repo.save_credential(&credential3).await;
         assert!(!try_save3.is_err());
-        
+
         let credentials_finder = repo.list_credentials_by_ids(credential_ids.clone()).await;
         assert!(!credentials_finder.is_err());
 

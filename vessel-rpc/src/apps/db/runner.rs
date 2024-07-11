@@ -2,9 +2,9 @@ use rst_common::with_tokio::tokio::task::spawn_blocking;
 use rstdev_storage::engine::rocksdb::db::DB;
 use rstdev_storage::types::Storage;
 
+use crate::apps::types::AppError;
 use crate::config::{Database, RocksDBCommon};
 use crate::Config;
-use crate::apps::types::AppError;
 
 use super::types::{Instruction, OutputOpts};
 
