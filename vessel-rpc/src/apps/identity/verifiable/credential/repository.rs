@@ -139,9 +139,7 @@ impl RepoBuilder for Repository {
                             Credential::try_from(val)
                                 .map_err(|err| CredentialError::UnserializeError(err.to_string()))
                         })
-                        .ok_or(CredentialError::UnserializeError(
-                            "unable to unserialize output bytes".to_string(),
-                        ))??;
+                        .ok_or(CredentialError::CredentialNotFound)??;
 
                     Ok(output)
                 }
@@ -317,8 +315,7 @@ mod tests {
         )
     }
 
-    #[tokio::test]
-    async fn test_save_get() { 
+    async fn generate_credential() -> Credential {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -338,10 +335,14 @@ mod tests {
             None,
         )
         .await;
-        assert!(!credential_builder.is_err());
-        
+
+        credential_builder.unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_save_get() { 
+        let credential = generate_credential().await; 
         let db_builder = testdb::global_db_builder().to_owned();
-        let credential = credential_builder.unwrap();
         let repo = Repository::new(db_builder);
 
         let try_save = repo.save_credential(&credential).await;
@@ -352,5 +353,79 @@ mod tests {
         
         let cred_from_db = cred_value.unwrap();
         assert_eq!(cred_from_db.get_did_vc(), credential.get_did_vc())
+    }
+
+    #[tokio::test]
+    async fn test_save_remove_get() {
+        let credential = generate_credential().await; 
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+        
+        let try_save = repo.save_credential(&credential).await;
+        assert!(!try_save.is_err());
+
+        let try_remove = repo.remove_credential_by_id(credential.get_id()).await;
+        assert!(!try_remove.is_err());
+        
+        let cred_value = repo.get_credential_by_id(credential.get_id()).await;
+        assert!(cred_value.is_err());
+        assert!(matches!(cred_value.unwrap_err(), CredentialError::CredentialNotFound))
+    }
+
+    #[tokio::test]
+    async fn test_save_many_credetials_list() {
+        let credential1 = generate_credential().await; 
+        let credential2 = generate_credential().await; 
+        let credential3 = generate_credential().await; 
+
+        let credential_ids = vec![credential1.get_id(), credential2.get_id(), credential3.get_id()];
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+        
+        let try_save1 = repo.save_credential(&credential1).await;
+        assert!(!try_save1.is_err());
+        
+        let try_save2 = repo.save_credential(&credential2).await;
+        assert!(!try_save2.is_err());
+        
+        let try_save3 = repo.save_credential(&credential3).await;
+        assert!(!try_save3.is_err());
+
+        let credentials_finder = repo.list_credentials_by_ids(credential_ids.clone()).await;
+        assert!(!credentials_finder.is_err());
+
+        let credentials_from_db = credentials_finder.unwrap();
+        assert_eq!(credentials_from_db.len(), 3);
+
+        let credential_ids_slice = credential_ids.as_slice();
+        for cred in credentials_from_db.iter() {
+            assert!(credential_ids_slice.contains(&cred.get_id()))
+        }
+    }
+
+    #[tokio::test]
+    async fn test_credentials_partial_not_found() {
+        let credential1 = generate_credential().await; 
+        let credential2 = generate_credential().await; 
+        let credential3 = generate_credential().await; 
+
+        let credential_ids = vec![credential1.get_id(), credential2.get_id(), credential3.get_id(), "unknown id".to_string()];
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+        
+        let try_save1 = repo.save_credential(&credential1).await;
+        assert!(!try_save1.is_err());
+        
+        let try_save2 = repo.save_credential(&credential2).await;
+        assert!(!try_save2.is_err());
+        
+        let try_save3 = repo.save_credential(&credential3).await;
+        assert!(!try_save3.is_err());
+        
+        let credentials_finder = repo.list_credentials_by_ids(credential_ids.clone()).await;
+        assert!(!credentials_finder.is_err());
+
+        let credentials_from_db = credentials_finder.unwrap();
+        assert_eq!(credentials_from_db.len(), 3);
     }
 }
