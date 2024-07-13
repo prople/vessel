@@ -60,7 +60,25 @@ impl Runner<DB> {
                     result
                 })
                 .await
-                .map_err(|err| AppError::DbError(err.to_string()))?;
+                .map_err(|err| AppError::DbError(err.to_string()))??;
+
+                Ok(OutputOpts::None)
+            }
+            Instruction::MergeCf { key, value } => {
+                let _ = spawn_blocking(move || {
+                    let cf = db_instance
+                        .cf_handle(cf_def.as_str())
+                        .map(|val| val.to_owned())
+                        .ok_or(AppError::DbError("cf handler failed".to_string()))?;
+
+                    let result = db_instance
+                        .merge_cf(cf, key, value)
+                        .map_err(|err| AppError::DbError(err.to_string()));
+
+                    result
+                })
+                .await
+                .map_err(|err| AppError::DbError(err.to_string()))??;
 
                 Ok(OutputOpts::None)
             }
@@ -121,7 +139,7 @@ impl Runner<DB> {
                     result
                 })
                 .await
-                .map_err(|err| AppError::DbError(err.to_string()))?;
+                .map_err(|err| AppError::DbError(err.to_string()))??;
 
                 Ok(OutputOpts::None)
             }

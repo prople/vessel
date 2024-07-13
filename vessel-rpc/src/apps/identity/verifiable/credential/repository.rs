@@ -7,10 +7,11 @@ use prople_vessel_core::identity::verifiable::credential::types::{
 use prople_vessel_core::identity::verifiable::types::{PaginationParams, VerifiableError};
 use prople_vessel_core::identity::verifiable::{Credential, Holder};
 
-use crate::apps::{DbInstruction, DbOutput, DbRunner};
+use crate::apps::{DbBucket, DbError, DbInstruction, DbOutput, DbRunner};
 
 const CREDENTIAL_KEY_ID: &str = "credential_id";
 const CREDENTIAL_KEY_DID: &str = "credential_did";
+const CREDENTIAL_MERGE_KEY_DID: &str = "merge_credential";
 const HOLDER_KEY_ID: &str = "holder_id";
 
 #[derive(Clone)]
@@ -35,6 +36,48 @@ impl Repository {
     fn build_holder_key(&self, val: String) -> String {
         format!("{}:{}", HOLDER_KEY_ID.to_string(), val)
     }
+
+    fn build_credential_merge_did_key(&self, val: String) -> String {
+        format!("{}:{}", CREDENTIAL_MERGE_KEY_DID.to_string(), val)
+    }
+
+    async fn check_merge_credential_did_exists(&self, key: String) -> bool {
+        let value_cred = self
+            .db
+            .exec(DbInstruction::GetCf { key })
+            .await
+            .map_err(|err| {
+                CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+            });
+
+        if value_cred.is_err() {
+            return false;
+        }
+
+        let checker = {
+            match value_cred.unwrap() {
+                DbOutput::SingleByte { value } => {
+                    let output = value
+                        .map(|val| {
+                            let bucket: Result<DbBucket<Credential>, DbError> =
+                                DbBucket::try_from(val)
+                                    .map_err(|err| DbError::BucketError(err.to_string()));
+
+                            bucket
+                        })
+                        .ok_or(CredentialError::CredentialNotFound)
+                        .map_err(|err| CredentialError::ListError(err.to_string()));
+
+                    output
+                }
+                _ => Err(CredentialError::UnserializeError(
+                    "unknown output type".to_string(),
+                )),
+            }
+        };
+
+        return !checker.is_err();
+    }
 }
 
 #[async_trait]
@@ -53,6 +96,8 @@ impl RepoBuilder for Repository {
         })?;
 
         let credential_id_key = self.build_credential_id_key(data.get_id());
+        let credential_did_merge_key = self.build_credential_merge_did_key(data.get_did_issuer());
+
         let _ = self
             .db
             .exec(DbInstruction::SaveCf {
@@ -63,6 +108,45 @@ impl RepoBuilder for Repository {
             .map_err(|err| {
                 CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
             })?;
+
+        // before we're able to merge some values, we need to make sure that given bucket already exists or not
+        let check_bucket_exists = self
+            .check_merge_credential_did_exists(credential_did_merge_key.clone())
+            .await;
+
+        match check_bucket_exists {
+            true => {
+                let _ = self
+                    .db
+                    .exec(DbInstruction::MergeCf {
+                        key: credential_did_merge_key.clone(),
+                        value: credential_bytes.clone(),
+                    })
+                    .await
+                    .map_err(|err| {
+                        CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+                    })?;
+            }
+            false => {
+                let mut bucket = DbBucket::<Credential>::new();
+                bucket.add(data.to_owned());
+
+                let bucket_bytes: Vec<u8> = bucket
+                    .try_into()
+                    .map_err(|err: DbError| CredentialError::GenerateJSONError(err.to_string()))?;
+
+                let _ = self
+                    .db
+                    .exec(DbInstruction::SaveCf {
+                        key: credential_did_merge_key.clone(),
+                        value: bucket_bytes,
+                    })
+                    .await
+                    .map_err(|err| {
+                        CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+                    })?;
+            }
+        }
 
         Ok(())
     }
@@ -254,12 +338,46 @@ impl RepoBuilder for Repository {
 
     async fn list_credentials_by_did(
         &self,
-        _did: String,
+        did: String,
         _pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError> {
-        Err(CredentialError::CommonError(VerifiableError::RepoError(
-            "not implemented".to_string(),
-        )))
+        let credential_merge_key = self.build_credential_merge_did_key(did);
+
+        let value_cred = self
+            .db
+            .exec(DbInstruction::GetCf {
+                key: credential_merge_key,
+            })
+            .await
+            .map_err(|err| {
+                CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+            })?;
+
+        let credential = {
+            match value_cred {
+                DbOutput::SingleByte { value } => {
+                    let output = value
+                        .map(|val| {
+                            let bucket: Result<DbBucket<Credential>, DbError> = val.try_into();
+                            bucket
+                        })
+                        .ok_or(CredentialError::CredentialNotFound)?
+                        .map_err(|err| CredentialError::ListError(err.to_string()))?;
+
+                    Ok(output)
+                }
+                _ => Err(CredentialError::UnserializeError(
+                    "unknown output type".to_string(),
+                )),
+            }
+        }?;
+
+        let mut output: Vec<Credential> = Vec::new();
+        for cred in credential.iterate() {
+            output.push(cred.to_owned())
+        }
+
+        Ok(output)
     }
 }
 
@@ -323,6 +441,27 @@ mod tests {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
+        let did_vc = generate_did();
+
+        let claims = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let account = generate_account(did_vc);
+        let credential_builder = Credential::generate(
+            account,
+            "password".to_string(),
+            did_issuer_value,
+            claims,
+            None,
+        )
+        .await;
+
+        credential_builder.unwrap()
+    }
+
+    async fn generate_credetial_custom_did_issuer(did_issuer_value: String) -> Credential {
         let did_vc = generate_did();
 
         let claims = serde_json::to_value(FakeCredential {
@@ -443,5 +582,33 @@ mod tests {
 
         let credentials_from_db = credentials_finder.unwrap();
         assert_eq!(credentials_from_db.len(), 3);
+    }
+
+    #[tokio::test]
+    async fn test_save_merge_list_credentials() {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let credential1 = generate_credetial_custom_did_issuer(did_issuer_value.clone()).await;
+        let credential2 = generate_credetial_custom_did_issuer(did_issuer_value.clone()).await;
+        let credential3 = generate_credetial_custom_did_issuer(did_issuer_value.clone()).await;
+
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+
+        let try_save1 = repo.save_credential(&credential1).await;
+        assert!(!try_save1.is_err());
+
+        let try_save2 = repo.save_credential(&credential2).await;
+        assert!(!try_save2.is_err());
+
+        let try_save3 = repo.save_credential(&credential3).await;
+        assert!(!try_save3.is_err());
+
+        let credentials_finder = repo.list_credentials_by_did(did_issuer_value, None).await;
+        assert!(!credentials_finder.is_err());
+
+        let credentials = credentials_finder.unwrap();
+        assert_eq!(credentials.len(), 3)
     }
 }

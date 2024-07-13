@@ -1,3 +1,5 @@
+use core::slice::Iter;
+
 use rst_common::standard::serde::de::DeserializeOwned;
 use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json;
@@ -16,7 +18,6 @@ where
     collections: Vec<T>,
 }
 
-#[allow(dead_code)]
 impl<T> Bucket<T>
 where
     T: TryInto<Vec<u8>> + Serialize + DeserializeOwned,
@@ -30,6 +31,11 @@ where
     pub fn add(&mut self, val: T) {
         self.collections.push(val)
     }
+
+    pub fn iterate(&self) -> Iter<T> {
+        let iterator = self.collections.iter();
+        iterator
+    }
 }
 
 impl<T> TryInto<Vec<u8>> for Bucket<T>
@@ -38,8 +44,8 @@ where
 {
     type Error = DbError;
     fn try_into(self) -> Result<Vec<u8>, Self::Error> {
-        let json =
-            serde_json::to_vec(&self).map_err(|err| DbError::BucketError(err.to_string()))?;
+        let json = serde_json::to_vec(&self)
+            .map_err(|err| DbError::BucketError(format!("error try into: {}", err.to_string())))?;
 
         Ok(json)
     }
@@ -52,8 +58,8 @@ where
     type Error = DbError;
 
     fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
-        let bucket: Self =
-            serde_json::from_slice(&value).map_err(|err| DbError::BucketError(err.to_string()))?;
+        let bucket: Self = serde_json::from_slice(&value)
+            .map_err(|err| DbError::BucketError(format!("error try from: {}", err.to_string())))?;
         Ok(bucket)
     }
 }

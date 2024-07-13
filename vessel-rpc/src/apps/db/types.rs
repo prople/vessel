@@ -14,11 +14,13 @@ pub enum DbError {
 
 pub enum Instruction {
     SaveCf { key: String, value: Vec<u8> },
+    MergeCf { key: String, value: Vec<u8> },
     GetCf { key: String },
     MultiGetCf { keys: Vec<String> },
     RemoveCf { key: String },
 }
 
+#[derive(Debug)]
 pub enum OutputOpts {
     SingleByte {
         value: Option<Vec<u8>>,
