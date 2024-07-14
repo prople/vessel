@@ -1,9 +1,8 @@
 pub mod types;
 
 mod db;
-pub use db::{
-    Bucket as DbBucket, Builder as DbBuilder, DbError, Instruction as DbInstruction,
-    OutputOpts as DbOutput, Runner as DbRunner,
-};
+pub use db::DbError;
+pub use db::Builder as DbBuilder;
+pub use db::Bucket as DbBucket;
 
 mod identity;

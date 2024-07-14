@@ -1,13 +1,15 @@
 use rst_common::standard::async_trait::async_trait;
-use rstdev_storage::engine::rocksdb::db::DB;
+use rstdev_storage::engine::rocksdb::executor::Executor;
+use rstdev_storage::engine::rocksdb::types::{Instruction as DbInstruction, OutputOpts as DbOutput};
 
 use prople_vessel_core::identity::verifiable::credential::types::{
     CredentialEntityAccessor, CredentialError, HolderEntityAccessor, RepoBuilder,
 };
+
 use prople_vessel_core::identity::verifiable::types::{PaginationParams, VerifiableError};
 use prople_vessel_core::identity::verifiable::{Credential, Holder};
 
-use crate::apps::{DbBucket, DbError, DbInstruction, DbOutput, DbRunner};
+use crate::apps::{DbBucket, DbError};
 
 const CREDENTIAL_KEY_ID: &str = "credential_id";
 const CREDENTIAL_KEY_DID: &str = "credential_did";
@@ -16,12 +18,12 @@ const HOLDER_KEY_ID: &str = "holder_id";
 
 #[derive(Clone)]
 pub struct Repository {
-    db: DbRunner<DB>,
+    db: Executor,
 }
 
 #[allow(dead_code)]
 impl Repository {
-    pub fn new(db: DbRunner<DB>) -> Self {
+    pub fn new(db: Executor) -> Self {
         Self { db }
     }
 

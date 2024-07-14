@@ -11,10 +11,10 @@ pub mod testdb {
     use std::env;
     use std::path::PathBuf;
 
-    use rstdev_storage::engine::rocksdb::db::DB;
+    use rstdev_storage::engine::rocksdb::executor::Executor;
 
     use crate::ConfigManager;
-    use crate::{DbBuilder, DbRunner};
+    use crate::DbBuilder;
 
     pub fn global_db_parser() -> &'static ConfigManager {
         static INSTANCE: OnceCell<ConfigManager> = OnceCell::new();
@@ -29,8 +29,8 @@ pub mod testdb {
         })
     }
 
-    pub fn global_db_builder() -> &'static DbRunner<DB> {
-        static INSTANCE: OnceCell<DbRunner<DB>> = OnceCell::new();
+    pub fn global_db_builder() -> &'static Executor {
+        static INSTANCE: OnceCell<Executor> = OnceCell::new();
         INSTANCE.get_or_init(|| {
             let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             path.push("src/config/fixtures");

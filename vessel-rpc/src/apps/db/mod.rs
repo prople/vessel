@@ -1,9 +1,5 @@
 mod types;
-#[allow(unused_imports)]
-pub use types::{DbError, Instruction, OutputOpts};
-
-mod runner;
-pub use runner::Runner;
+pub use types::DbError;
 
 mod builder;
 pub use builder::Builder;

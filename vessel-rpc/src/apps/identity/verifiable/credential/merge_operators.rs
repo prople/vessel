@@ -1,4 +1,4 @@
-use rstdev_storage::engine::rocksdb::rocksdb::rust_rocksdb::merge_operator::MergeOperands;
+use rstdev_storage::engine::rocksdb::lib::rust_rocksdb::merge_operator::MergeOperands;
 
 use prople_vessel_core::identity::verifiable::credential::types::CredentialError;
 use prople_vessel_core::identity::verifiable::Credential;

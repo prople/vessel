@@ -1,4 +1,5 @@
 use rstdev_storage::engine::rocksdb::db::DB;
+use rstdev_storage::engine::rocksdb::executor::Executor;
 use rstdev_storage::engine::rocksdb::options::Options;
 
 use crate::common::types::CommonError;
@@ -8,8 +9,6 @@ use crate::Config;
 use crate::apps::identity::verifiable::credential::merge_operators::{
     merge_bucket_credential, MERGE_BUCKET_CREDENTIAL_ID,
 };
-
-use super::Runner;
 
 pub struct Builder {
     cfg: Config,
@@ -23,13 +22,13 @@ impl Builder {
     pub fn build<'a>(
         &'a mut self,
         db_callback: impl FnOnce(&Config) -> (RocksDBCommon, RocksDBOptions),
-    ) -> Result<Runner<DB>, CommonError> {
+    ) -> Result<Executor, CommonError> {
         let (opts_common, opts_db) = db_callback(&self.cfg);
         let (opts_path, opts_cf_name) = opts_common.get();
 
         let opts_db_main = opts_db.clone();
 
-        let mut db_opts = Options::new(opts_path, opts_cf_name);
+        let mut db_opts = Options::new(opts_path, opts_cf_name.clone());
         db_opts
             .build_default_opts()
             .set_db_opts(move |opt| {
@@ -50,10 +49,13 @@ impl Builder {
             });
 
         let mut db = DB::new(db_opts).map_err(|err| CommonError::DBError(err.to_string()))?;
-        let _ = db
+
+        let db_instance = db
             .build()
             .map_err(|err| CommonError::DBError(err.to_string()))?;
 
-        Ok(Runner::new(db, self.cfg.to_owned()))
+        db.set_db(db_instance);
+
+        Ok(Executor::new(db, opts_cf_name))
     }
 }

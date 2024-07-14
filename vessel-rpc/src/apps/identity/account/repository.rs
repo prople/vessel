@@ -1,27 +1,29 @@
 use std::convert::TryInto;
 
 use rst_common::standard::async_trait::async_trait;
-use rstdev_storage::engine::rocksdb::db::DB;
+
+use rstdev_storage::engine::rocksdb::executor::Executor;
+use rstdev_storage::engine::rocksdb::types::{Instruction as DbInstruction, OutputOpts as DbOutput};
 
 use prople_vessel_core::identity::account::types::{
     AccountEntityAccessor, AccountError, RepoBuilder,
 };
+
 use prople_vessel_core::identity::account::Account;
 
 use crate::apps::types::AppError;
-use crate::apps::{DbInstruction, DbOutput, DbRunner};
 
 const ACCOUNT_KEY_ID: &str = "account_id";
 const ACCOUNT_KEY_DID: &str = "account_did";
 
 #[derive(Clone)]
 pub struct Repository {
-    db: DbRunner<DB>,
+    db: Executor,
 }
 
 #[allow(dead_code)]
 impl Repository {
-    pub fn new(db: DbRunner<DB>) -> Self {
+    pub fn new(db: Executor) -> Self {
         Self { db }
     }
 
