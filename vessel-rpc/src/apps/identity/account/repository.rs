@@ -3,7 +3,9 @@ use std::convert::TryInto;
 use rst_common::standard::async_trait::async_trait;
 
 use rstdev_storage::engine::rocksdb::executor::Executor;
-use rstdev_storage::engine::rocksdb::types::{Instruction as DbInstruction, OutputOpts as DbOutput};
+use rstdev_storage::engine::rocksdb::types::{
+    Instruction as DbInstruction, OutputOpts as DbOutput,
+};
 
 use prople_vessel_core::identity::account::types::{
     AccountEntityAccessor, AccountError, RepoBuilder,
