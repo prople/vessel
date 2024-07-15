@@ -6,3 +6,5 @@ pub use builder::Builder;
 
 mod bucket;
 pub use bucket::Bucket;
+
+mod merge_operators;

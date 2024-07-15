@@ -6,9 +6,7 @@ use crate::common::types::CommonError;
 use crate::config::{RocksDBCommon, RocksDBOptions};
 use crate::Config;
 
-use crate::apps::identity::verifiable::credential::merge_operators::{
-    merge_bucket_credential, MERGE_BUCKET_CREDENTIAL_ID,
-};
+use super::merge_operators::bucket::{merge_bucket, MERGE_BUCKET_ID};
 
 pub struct Builder {
     cfg: Config,
@@ -40,10 +38,7 @@ impl Builder {
                 opt
             })
             .set_cf_opts(|opt| {
-                opt.set_merge_operator_associative(
-                    MERGE_BUCKET_CREDENTIAL_ID,
-                    merge_bucket_credential,
-                );
+                opt.set_merge_operator_associative(MERGE_BUCKET_ID, merge_bucket);
 
                 opt
             });
