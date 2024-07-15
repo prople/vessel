@@ -18,6 +18,9 @@ pub enum VerifiableError {
 
     #[error("unknown error: {0}")]
     UnknownError(String),
+
+    #[error("trait: method not implemented")]
+    MethodNotImplemented,
 }
 
 /// `PaginationParams` used when we need to load a list of something from persistent storage
