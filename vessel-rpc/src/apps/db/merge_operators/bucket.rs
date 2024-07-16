@@ -7,7 +7,7 @@ use prople_vessel_core::identity::verifiable::credential::types::CredentialError
 use prople_vessel_core::identity::verifiable::Credential;
 
 use prople_vessel_core::identity::verifiable::presentation::types::PresentationError;
-use prople_vessel_core::identity::verifiable::Presentation;
+use prople_vessel_core::identity::verifiable::presentation::Verifier;
 
 use crate::apps::{DbBucket, DbError};
 
@@ -63,11 +63,11 @@ fn merge_bucket_credential(existing: Option<&[u8]>, operands: &MergeOperands) ->
 }
 
 fn merge_bucket_presentation(existing: Option<&[u8]>, operands: &MergeOperands) -> Option<Vec<u8>> {
-    let mut bucket: DbBucket<Presentation> = merge_bucket_builder(existing)?;
+    let mut bucket: DbBucket<Verifier> = merge_bucket_builder(existing)?;
 
     for op in operands {
         let op_presentation = {
-            let presentation_builder: Result<Presentation, PresentationError> =
+            let presentation_builder: Result<Verifier, PresentationError> =
                 op.to_vec().try_into();
 
             match presentation_builder {

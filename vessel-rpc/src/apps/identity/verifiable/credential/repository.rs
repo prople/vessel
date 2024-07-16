@@ -389,6 +389,8 @@ impl RepoBuilder for Repository {
 mod tests {
     use super::*;
 
+    use multiaddr::{multiaddr, Multiaddr};
+    
     use crate::common::helpers::testdb;
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
@@ -397,11 +399,15 @@ mod tests {
 
     use prople_crypto::keysecure::types::ToKeySecure;
 
-    use prople_did_core::did::DID;
-    use prople_did_core::doc::types::ToDoc;
+    use prople_did_core::did::{query::Params, DID};
+    use prople_did_core::doc::types::{ToDoc, Doc};
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
+    use prople_did_core::verifiable::objects::VC;
+    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 
+    use prople_vessel_core::identity::verifiable::proof::builder::Builder as ProofBuilder;
     use prople_vessel_core::identity::account::Account as AccountIdentity;
+    use prople_vessel_core::identity::verifiable::proof::types::Params as ProofParams;
 
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
@@ -464,6 +470,60 @@ mod tests {
 
         credential_builder.unwrap()
     }
+    
+    fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc) {
+        let did_issuer = generate_did();
+        let did_issuer_value = did_issuer.identity().unwrap().value();
+
+        let did = generate_did();
+        let did_value = did.identity().unwrap().value();
+
+        let mut did_identity = did.identity().unwrap();
+        did_identity.build_assertion_method().build_auth_method();
+
+        let did_doc = did_identity.to_doc();
+        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
+
+        let mut query_params = Params::default();
+        query_params.address = Some(addr.to_string());
+
+        let did_uri = did.build_uri(Some(query_params)).unwrap();
+
+        let proof_params = ProofParams {
+            id: "uid".to_string(),
+            typ: "type".to_string(),
+            method: "method".to_string(),
+            purpose: "purpose".to_string(),
+            cryptosuite: None,
+            expires: None,
+            nonce: None,
+        };
+
+        let cred_value = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let mut vc = VC::new(did_uri, did_issuer_value);
+        vc.add_context(CONTEXT_VC.to_string())
+            .add_context(CONTEXT_VC_V2.to_string())
+            .add_type("VerifiableCredential".to_string())
+            .set_credential(cred_value);
+
+        let proof_builder = ProofBuilder::build_proof(
+            vc.clone(),
+            password,
+            did_privkeys.clone(),
+            Some(proof_params),
+        )
+        .unwrap()
+        .unwrap();
+
+        vc.proof(proof_builder);
+        let holder = Holder::new(did_value, vc);
+
+        (holder, did_doc)
+    }
 
     async fn generate_credetial_custom_did_issuer(did_issuer_value: String) -> Credential {
         let did_vc = generate_did();
@@ -500,6 +560,45 @@ mod tests {
 
         let cred_from_db = cred_value.unwrap();
         assert_eq!(cred_from_db.get_did_vc(), credential.get_did_vc())
+    }
+
+    #[tokio::test]
+    async fn test_save_get_holder() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let (holder, _) = generate_holder(addr, "password".to_string());
+        
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+        
+        let try_save = repo.save_credential_holder(&holder).await;
+        assert!(!try_save.is_err());
+        
+        let holder_value = repo.get_holder_by_id(holder.get_id()).await;
+        assert!(!holder_value.is_err());
+        assert_eq!(holder_value.unwrap().get_id(), holder.get_id())
+    }
+
+    #[tokio::test]
+    async fn test_save_update_holder() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let (mut holder, _) = generate_holder(addr, "password".to_string());
+        
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+        
+        let try_save = repo.save_credential_holder(&holder).await;
+        assert!(!try_save.is_err());
+
+        let holder_updated = holder.set_verified();
+        let try_update = repo.set_credential_holder_verified(holder_updated).await;
+        assert!(!try_update.is_err());
+        
+        let holder_value = repo.get_holder_by_id(holder.get_id()).await;
+        assert!(!holder_value.is_err());
+
+        let holder_from_db = holder_value.unwrap();
+        assert!(holder_from_db.get_is_verified());
+        assert_eq!(holder.get_id(), holder_from_db.get_id())
     }
 
     #[tokio::test]
