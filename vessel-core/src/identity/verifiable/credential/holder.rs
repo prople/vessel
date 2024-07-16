@@ -50,6 +50,11 @@ impl Holder {
         }
     }
 
+    pub fn set_verified(&mut self) -> &mut Self {
+        self.is_verified = true;
+        self
+    }
+
     pub async fn verify_vc(&self, account: impl AccountAPI) -> Result<Self, CredentialError> {
         let vc = {
             let internal = self.vc.to_owned();

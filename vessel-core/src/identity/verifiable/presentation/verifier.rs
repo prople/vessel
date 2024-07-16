@@ -49,6 +49,16 @@ impl Verifier {
         }
     }
 
+    pub fn set_verified(&mut self) -> &mut Self {
+        self.is_verified = true;
+        self
+    }
+
+    pub fn set_did_verifier(&mut self, did_verifier: String) -> &mut Self {
+        self.did_verifier = did_verifier;
+        self
+    }
+
     pub async fn verify_vp(&self, account: impl AccountAPI) -> Result<Self, PresentationError> {
         let vp = {
             let internal = self.get_vp();
