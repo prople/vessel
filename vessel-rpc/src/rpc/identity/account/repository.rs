@@ -13,7 +13,7 @@ use prople_vessel_core::identity::account::types::{
 
 use prople_vessel_core::identity::account::Account;
 
-use crate::apps::types::AppError;
+use crate::rpc::types::AppError;
 
 const ACCOUNT_KEY_ID: &str = "account_id";
 const ACCOUNT_KEY_DID: &str = "account_did";

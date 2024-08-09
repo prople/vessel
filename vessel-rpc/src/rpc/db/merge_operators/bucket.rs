@@ -9,7 +9,7 @@ use prople_vessel_core::identity::verifiable::Credential;
 use prople_vessel_core::identity::verifiable::presentation::types::PresentationError;
 use prople_vessel_core::identity::verifiable::presentation::Verifier;
 
-use crate::apps::{DbBucket, DbError};
+use crate::rpc::{DbBucket, DbError};
 
 pub const MERGE_BUCKET_ID: &str = "merge_bucket";
 

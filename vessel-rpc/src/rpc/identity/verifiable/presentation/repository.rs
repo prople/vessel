@@ -10,7 +10,7 @@ use prople_vessel_core::identity::verifiable::presentation::types::{
 use prople_vessel_core::identity::verifiable::presentation::{Presentation, Verifier};
 use prople_vessel_core::identity::verifiable::types::VerifiableError;
 
-use crate::apps::{DbBucket, DbError};
+use crate::rpc::{DbBucket, DbError};
 
 const PRESENTATION_KEY_ID: &str = "presentation_id";
 const PRESENTATION_MERGE_KEY_DID: &str = "merge_presentation";

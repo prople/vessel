@@ -11,7 +11,7 @@ use prople_vessel_core::identity::verifiable::credential::types::{
 use prople_vessel_core::identity::verifiable::types::{PaginationParams, VerifiableError};
 use prople_vessel_core::identity::verifiable::{Credential, Holder};
 
-use crate::apps::{DbBucket, DbError};
+use crate::rpc::{DbBucket, DbError};
 
 const CREDENTIAL_KEY_ID: &str = "credential_id";
 const CREDENTIAL_KEY_DID: &str = "credential_did";
