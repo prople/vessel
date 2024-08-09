@@ -4,12 +4,10 @@ use rstdev_config::{types::ConfigError, Builder};
 
 use super::config::Config;
 
-#[allow(dead_code)]
 pub struct Parser {
     conf_file: String,
 }
 
-#[allow(dead_code)]
 impl Parser {
     pub fn new(conf_file: String) -> Self {
         Self { conf_file }

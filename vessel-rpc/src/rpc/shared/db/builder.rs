@@ -2,9 +2,9 @@ use rstdev_storage::engine::rocksdb::db::DB;
 use rstdev_storage::engine::rocksdb::executor::Executor;
 use rstdev_storage::engine::rocksdb::options::Options;
 
-use crate::rpc::shared::types::CommonError;
-use crate::config::database::{RocksDBCommon, RocksDBOptions};
 use crate::config::config::Config;
+use crate::config::database::{RocksDBCommon, RocksDBOptions};
+use crate::rpc::shared::types::CommonError;
 
 use super::merge_operators::bucket::{merge_bucket, MERGE_BUCKET_ID};
 

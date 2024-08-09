@@ -21,7 +21,6 @@ pub struct Repository {
     db: Executor,
 }
 
-#[allow(dead_code)]
 impl Repository {
     pub fn new(db: Executor) -> Self {
         Self { db }
@@ -82,7 +81,7 @@ impl Repository {
 impl RepoBuilder for Repository {
     type PresentationEntityAccessor = Presentation;
     type VerifierEntityAccessor = Verifier;
-   
+
     async fn save(&self, data: &Self::PresentationEntityAccessor) -> Result<(), PresentationError> {
         let presentation_bytes: Vec<u8> = data.to_owned().try_into().map_err(|_| {
             PresentationError::CommonError(VerifiableError::RepoError(
@@ -129,7 +128,7 @@ impl RepoBuilder for Repository {
             .map_err(|err| {
                 PresentationError::CommonError(VerifiableError::RepoError(err.to_string()))
             })?;
-        
+
         // before we're able to merge some values, we need to make sure that given bucket already exists or not
         let check_bucket_exists = self
             .check_merge_presentation_did_exists(verifier_merge_id_key.clone())
@@ -147,14 +146,14 @@ impl RepoBuilder for Repository {
                     .map_err(|err| {
                         PresentationError::CommonError(VerifiableError::RepoError(err.to_string()))
                     })?;
-            },
+            }
             false => {
                 let mut bucket = DbBucket::<Verifier>::new();
                 bucket.add(data.to_owned());
 
-                let bucket_bytes: Vec<u8> = bucket
-                    .try_into()
-                    .map_err(|err: DbError| PresentationError::GenerateJSONError(err.to_string()))?;
+                let bucket_bytes: Vec<u8> = bucket.try_into().map_err(|err: DbError| {
+                    PresentationError::GenerateJSONError(err.to_string())
+                })?;
 
                 let _ = self
                     .db
@@ -166,7 +165,7 @@ impl RepoBuilder for Repository {
                     .map_err(|err| {
                         PresentationError::CommonError(VerifiableError::RepoError(err.to_string()))
                     })?;
-            },
+            }
         }
 
         Ok(())
@@ -254,7 +253,7 @@ impl RepoBuilder for Repository {
         did_verifier: String,
     ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError> {
         let verifier_merge_key = self.build_verifier_merge_id_key(did_verifier);
-        
+
         let value_bucket = self
             .db
             .exec(DbInstruction::GetCf {
@@ -298,7 +297,7 @@ mod tests {
     use super::*;
 
     use multiaddr::{multiaddr, Multiaddr};
-   
+
     use crate::rpc::shared::helpers::testdb;
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
@@ -309,24 +308,24 @@ mod tests {
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
-    use prople_did_core::verifiable::objects::{VC, VP};
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
- 
+    use prople_did_core::verifiable::objects::{VC, VP};
+
     use prople_vessel_core::identity::verifiable::credential::types::CredentialEntityAccessor;
     use prople_vessel_core::identity::verifiable::proof::builder::Builder as ProofBuilder;
-    use prople_vessel_core::identity::verifiable::{Presentation, Credential};
     use prople_vessel_core::identity::verifiable::proof::types::Params as ProofParams;
+    use prople_vessel_core::identity::verifiable::{Credential, Presentation};
 
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
     struct FakeCredential {
         pub msg: String,
     }
-    
+
     fn generate_did() -> DID {
         DID::new()
     }
-    
+
     fn generate_credentials() -> Vec<Credential> {
         let mut creds = Vec::<Credential>::new();
 
@@ -367,7 +366,7 @@ mod tests {
         creds.push(cred2);
         creds
     }
-    
+
     fn generate_presentation() -> Presentation {
         let did = generate_did();
 
@@ -380,7 +379,7 @@ mod tests {
 
         Presentation::new(vp, doc_priv_keys)
     }
-     
+
     fn generate_verifier(
         addr: Multiaddr,
         password: String,
@@ -438,7 +437,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_get_presentation() {
         let presentation = generate_presentation();
-        
+
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
         let try_save = repo.save(&presentation).await;
@@ -446,14 +445,17 @@ mod tests {
 
         let presentation_from_db = repo.get_by_id(presentation.get_id()).await;
         assert!(!presentation_from_db.is_err());
-        assert_eq!(presentation.get_id(), presentation_from_db.unwrap().get_id())
+        assert_eq!(
+            presentation.get_id(),
+            presentation_from_db.unwrap().get_id()
+        )
     }
 
     #[tokio::test]
     async fn test_save_get_verifier() {
         let credentials = generate_credentials();
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        
+
         let (verifier, _) = generate_verifier(addr, "password".to_string(), credentials);
         assert!(!verifier.is_verified());
 
@@ -474,7 +476,7 @@ mod tests {
     async fn test_save_get_verifier_update_verified() {
         let credentials = generate_credentials();
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        
+
         let (verifier, _) = generate_verifier(addr, "password".to_string(), credentials);
         assert!(!verifier.is_verified());
 
@@ -488,13 +490,15 @@ mod tests {
 
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
-        
-        let try_updated = repo.set_presentation_verifier_verified(&verified_cloned).await;
+
+        let try_updated = repo
+            .set_presentation_verifier_verified(&verified_cloned)
+            .await;
         assert!(!try_updated.is_err());
-        
+
         let verifier_from_db = repo.get_verifier_by_id(verifier.get_id()).await;
         assert!(!verifier_from_db.is_err());
-        
+
         let verifier_out = verifier_from_db.unwrap();
         assert_eq!(verifier.get_id(), verifier_out.get_id());
         assert!(verifier_out.is_verified())
@@ -504,16 +508,19 @@ mod tests {
     async fn test_save_merge_list_verifiers() {
         let credentials = generate_credentials();
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        
-        let (verifier, _) = generate_verifier(addr.clone(), "password".to_string(), credentials.clone());
+
+        let (verifier, _) =
+            generate_verifier(addr.clone(), "password".to_string(), credentials.clone());
         assert!(!verifier.is_verified());
-        
-        let (mut verifier2, _) = generate_verifier(addr.clone(), "password".to_string(), credentials.clone());
+
+        let (mut verifier2, _) =
+            generate_verifier(addr.clone(), "password".to_string(), credentials.clone());
         assert!(!verifier2.is_verified());
 
         verifier2.set_did_verifier(verifier.get_did_verifier());
 
-        let (mut verifier3, _) = generate_verifier(addr.clone(), "password".to_string(), credentials.clone());
+        let (mut verifier3, _) =
+            generate_verifier(addr.clone(), "password".to_string(), credentials.clone());
         assert!(!verifier3.is_verified());
 
         verifier3.set_did_verifier(verifier.get_did_verifier());
@@ -523,14 +530,16 @@ mod tests {
 
         let try_save1 = repo.save_presentation_verifier(&verifier).await;
         assert!(!try_save1.is_err());
-        
+
         let try_save2 = repo.save_presentation_verifier(&verifier2).await;
         assert!(!try_save2.is_err());
-        
+
         let try_save3 = repo.save_presentation_verifier(&verifier3).await;
         assert!(!try_save3.is_err());
-        
-        let verifiers_finder = repo.list_vps_by_did_verifier(verifier.get_did_verifier()).await;
+
+        let verifiers_finder = repo
+            .list_vps_by_did_verifier(verifier.get_did_verifier())
+            .await;
         assert!(!verifiers_finder.is_err());
 
         let list_verifiers = verifiers_finder.unwrap();

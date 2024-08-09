@@ -13,17 +13,17 @@ pub mod testdb {
 
     use rstdev_storage::engine::rocksdb::executor::Executor;
 
-    use crate::config::parser::Parser as ConfigManager;
+    use crate::config::parser::Parser as ConfigParser;
     use crate::rpc::shared::db::Builder as DbBuilder;
 
-    pub fn global_db_parser() -> &'static ConfigManager {
-        static INSTANCE: OnceCell<ConfigManager> = OnceCell::new();
+    pub fn global_db_parser() -> &'static ConfigParser {
+        static INSTANCE: OnceCell<ConfigParser> = OnceCell::new();
         INSTANCE.get_or_init(|| {
             let mut path = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
             path.push("src/config/fixtures");
 
             let toml_file = format!("{}/config.toml", path.display());
-            let config_parser = ConfigManager::new(toml_file);
+            let config_parser = ConfigParser::new(toml_file);
 
             config_parser
         })
@@ -36,7 +36,7 @@ pub mod testdb {
             path.push("src/config/fixtures");
 
             let toml_file = format!("{}/config.toml", path.display());
-            let config_parser = ConfigManager::new(toml_file);
+            let config_parser = ConfigParser::new(toml_file);
             let config = config_parser.parse().unwrap();
 
             let mut db_builder = DbBuilder::new(config);

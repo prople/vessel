@@ -14,7 +14,6 @@ use prople_vessel_core::identity::verifiable::{Credential, Holder};
 use crate::rpc::shared::db::{Bucket as DbBucket, DbError};
 
 const CREDENTIAL_KEY_ID: &str = "credential_id";
-const CREDENTIAL_KEY_DID: &str = "credential_did";
 const CREDENTIAL_MERGE_KEY_DID: &str = "merge_credential";
 const HOLDER_KEY_ID: &str = "holder_id";
 
@@ -23,7 +22,6 @@ pub struct Repository {
     db: Executor,
 }
 
-#[allow(dead_code)]
 impl Repository {
     pub fn new(db: Executor) -> Self {
         Self { db }
@@ -31,10 +29,6 @@ impl Repository {
 
     fn build_credential_id_key(&self, val: String) -> String {
         format!("{}:{}", CREDENTIAL_KEY_ID.to_string(), val)
-    }
-
-    fn build_credential_did_key(&self, val: String) -> String {
-        format!("{}:{}", CREDENTIAL_KEY_DID.to_string(), val)
     }
 
     fn build_holder_key(&self, val: String) -> String {
@@ -390,7 +384,7 @@ mod tests {
     use super::*;
 
     use multiaddr::{multiaddr, Multiaddr};
-    
+
     use crate::rpc::shared::helpers::testdb;
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
@@ -400,13 +394,13 @@ mod tests {
     use prople_crypto::keysecure::types::ToKeySecure;
 
     use prople_did_core::did::{query::Params, DID};
-    use prople_did_core::doc::types::{ToDoc, Doc};
+    use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
-    use prople_did_core::verifiable::objects::VC;
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
+    use prople_did_core::verifiable::objects::VC;
 
-    use prople_vessel_core::identity::verifiable::proof::builder::Builder as ProofBuilder;
     use prople_vessel_core::identity::account::Account as AccountIdentity;
+    use prople_vessel_core::identity::verifiable::proof::builder::Builder as ProofBuilder;
     use prople_vessel_core::identity::verifiable::proof::types::Params as ProofParams;
 
     #[derive(Deserialize, Serialize)]
@@ -470,7 +464,7 @@ mod tests {
 
         credential_builder.unwrap()
     }
-    
+
     fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc) {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
@@ -566,13 +560,13 @@ mod tests {
     async fn test_save_get_holder() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let (holder, _) = generate_holder(addr, "password".to_string());
-        
+
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
-        
+
         let try_save = repo.save_credential_holder(&holder).await;
         assert!(!try_save.is_err());
-        
+
         let holder_value = repo.get_holder_by_id(holder.get_id()).await;
         assert!(!holder_value.is_err());
         assert_eq!(holder_value.unwrap().get_id(), holder.get_id())
@@ -582,17 +576,17 @@ mod tests {
     async fn test_save_update_holder() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let (mut holder, _) = generate_holder(addr, "password".to_string());
-        
+
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
-        
+
         let try_save = repo.save_credential_holder(&holder).await;
         assert!(!try_save.is_err());
 
         let holder_updated = holder.set_verified();
         let try_update = repo.set_credential_holder_verified(holder_updated).await;
         assert!(!try_update.is_err());
-        
+
         let holder_value = repo.get_holder_by_id(holder.get_id()).await;
         assert!(!holder_value.is_err());
 

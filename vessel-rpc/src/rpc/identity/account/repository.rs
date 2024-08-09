@@ -23,7 +23,6 @@ pub struct Repository {
     db: Executor,
 }
 
-#[allow(dead_code)]
 impl Repository {
     pub fn new(db: Executor) -> Self {
         Self { db }

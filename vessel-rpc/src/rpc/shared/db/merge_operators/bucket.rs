@@ -67,8 +67,7 @@ fn merge_bucket_presentation(existing: Option<&[u8]>, operands: &MergeOperands) 
 
     for op in operands {
         let op_presentation = {
-            let presentation_builder: Result<Verifier, PresentationError> =
-                op.to_vec().try_into();
+            let presentation_builder: Result<Verifier, PresentationError> = op.to_vec().try_into();
 
             match presentation_builder {
                 Ok(presentation) => Some(presentation),
