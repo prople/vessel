@@ -11,7 +11,7 @@ use prople_vessel_core::identity::verifiable::credential::types::{
 use prople_vessel_core::identity::verifiable::types::{PaginationParams, VerifiableError};
 use prople_vessel_core::identity::verifiable::{Credential, Holder};
 
-use crate::rpc::{DbBucket, DbError};
+use crate::rpc::shared::db::{Bucket as DbBucket, DbError};
 
 const CREDENTIAL_KEY_ID: &str = "credential_id";
 const CREDENTIAL_KEY_DID: &str = "credential_did";
@@ -391,7 +391,7 @@ mod tests {
 
     use multiaddr::{multiaddr, Multiaddr};
     
-    use crate::common::helpers::testdb;
+    use crate::rpc::shared::helpers::testdb;
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;

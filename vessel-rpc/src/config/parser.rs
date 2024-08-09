@@ -2,7 +2,7 @@ use rstdev_config::format::use_toml;
 use rstdev_config::parser::from_file;
 use rstdev_config::{types::ConfigError, Builder};
 
-use super::Config;
+use super::config::Config;
 
 #[allow(dead_code)]
 pub struct Parser {
@@ -32,7 +32,7 @@ impl Parser {
 #[cfg(test)]
 mod tests {
 
-    use crate::common::helpers::testdb;
+    use crate::rpc::shared::helpers::testdb;
 
     #[test]
     fn test_parse_config() {

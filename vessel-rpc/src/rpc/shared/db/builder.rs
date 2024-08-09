@@ -2,9 +2,9 @@ use rstdev_storage::engine::rocksdb::db::DB;
 use rstdev_storage::engine::rocksdb::executor::Executor;
 use rstdev_storage::engine::rocksdb::options::Options;
 
-use crate::common::types::CommonError;
-use crate::config::{RocksDBCommon, RocksDBOptions};
-use crate::Config;
+use crate::rpc::shared::types::CommonError;
+use crate::config::database::{RocksDBCommon, RocksDBOptions};
+use crate::config::config::Config;
 
 use super::merge_operators::bucket::{merge_bucket, MERGE_BUCKET_ID};
 
@@ -43,11 +43,11 @@ impl Builder {
                 opt
             });
 
-        let mut db = DB::new(db_opts).map_err(|err| CommonError::DBError(err.to_string()))?;
+        let mut db = DB::new(db_opts).map_err(|err| CommonError::DbError(err.to_string()))?;
 
         let db_instance = db
             .build()
-            .map_err(|err| CommonError::DBError(err.to_string()))?;
+            .map_err(|err| CommonError::DbError(err.to_string()))?;
 
         db.set_db(db_instance);
 

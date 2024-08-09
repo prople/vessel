@@ -1,6 +1,6 @@
 use rst_common::standard::serde::{self, Deserialize};
 
-use crate::common::types::{CommonError, ToValidate};
+use crate::rpc::shared::types::{CommonError, ToValidate};
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(crate = "self::serde")]
@@ -159,7 +159,7 @@ mod tests {
     use rstdev_config::parser::from_file;
     use rstdev_config::{types::ConfigError, Builder};
 
-    use crate::common::helpers;
+    use crate::rpc::shared::helpers;
 
     #[test]
     fn test_parse_database_config() -> Result<(), ConfigError> {

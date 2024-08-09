@@ -13,8 +13,8 @@ pub mod testdb {
 
     use rstdev_storage::engine::rocksdb::executor::Executor;
 
-    use crate::ConfigManager;
-    use crate::DbBuilder;
+    use crate::config::parser::Parser as ConfigManager;
+    use crate::rpc::shared::db::Builder as DbBuilder;
 
     pub fn global_db_parser() -> &'static ConfigManager {
         static INSTANCE: OnceCell<ConfigManager> = OnceCell::new();

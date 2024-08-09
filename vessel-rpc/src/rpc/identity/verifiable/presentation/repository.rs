@@ -10,7 +10,7 @@ use prople_vessel_core::identity::verifiable::presentation::types::{
 use prople_vessel_core::identity::verifiable::presentation::{Presentation, Verifier};
 use prople_vessel_core::identity::verifiable::types::VerifiableError;
 
-use crate::rpc::{DbBucket, DbError};
+use crate::rpc::shared::db::{Bucket as DbBucket, DbError};
 
 const PRESENTATION_KEY_ID: &str = "presentation_id";
 const PRESENTATION_MERGE_KEY_DID: &str = "merge_presentation";
@@ -299,7 +299,7 @@ mod tests {
 
     use multiaddr::{multiaddr, Multiaddr};
    
-    use crate::common::helpers::testdb;
+    use crate::rpc::shared::helpers::testdb;
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::with_tokio::tokio;

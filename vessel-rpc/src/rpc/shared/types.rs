@@ -1,12 +1,12 @@
 use rst_common::with_errors::thiserror::{self, Error};
 
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, Error, PartialEq)]
 pub enum CommonError {
+    #[error("dberror: {0}")]
+    DbError(String),
+    
     #[error("valdation error: {0}")]
     ValidationError(String),
-
-    #[error("db error: {0}")]
-    DBError(String),
 }
 
 pub trait ToValidate {

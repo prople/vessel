@@ -13,7 +13,7 @@ use prople_vessel_core::identity::account::types::{
 
 use prople_vessel_core::identity::account::Account;
 
-use crate::rpc::types::AppError;
+use crate::rpc::shared::types::CommonError;
 
 const ACCOUNT_KEY_ID: &str = "account_id";
 const ACCOUNT_KEY_DID: &str = "account_did";
@@ -40,7 +40,7 @@ impl Repository {
         format!("{}:{}", prefix, val)
     }
 
-    async fn get_id_by_did(&self, did: String) -> Result<String, AppError> {
+    async fn get_id_by_did(&self, did: String) -> Result<String, CommonError> {
         let account_key_did = self.build_account_key(ACCOUNT_KEY_DID.to_string(), did);
 
         let output = self
@@ -49,17 +49,17 @@ impl Repository {
                 key: account_key_did.clone(),
             })
             .await
-            .map_err(|err| AppError::DbError(err.to_string()))?;
+            .map_err(|err| CommonError::DbError(err.to_string()))?;
 
         let value_id = match output {
             DbOutput::SingleByte { value } => Ok(value),
-            _ => Err(AppError::DbError("unknown output type".to_string())),
+            _ => Err(CommonError::DbError("unknown output type".to_string())),
         }?
         .map(|val| val)
-        .ok_or(AppError::DbError("value was missing".to_string()))?;
+        .ok_or(CommonError::DbError("value was missing".to_string()))?;
 
         let str_id =
-            String::from_utf8(value_id).map_err(|err| AppError::DbError(err.to_string()))?;
+            String::from_utf8(value_id).map_err(|err| CommonError::DbError(err.to_string()))?;
 
         Ok(str_id)
     }
@@ -161,7 +161,7 @@ impl RepoBuilder for Repository {
 mod tests {
     use super::*;
 
-    use crate::common::helpers::testdb;
+    use crate::rpc::shared::helpers::testdb;
     use rst_common::with_tokio::tokio;
 
     #[tokio::test]

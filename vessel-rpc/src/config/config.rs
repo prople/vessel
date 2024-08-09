@@ -1,8 +1,9 @@
 use rst_common::standard::serde::{self, Deserialize};
 
-use crate::common::types::{CommonError, ToValidate};
+use crate::rpc::shared::types::{CommonError, ToValidate};
 
-use super::{App, Database};
+use super::app::App;
+use super::database::Database;
 
 #[derive(Deserialize, Debug, Clone)]
 #[serde(crate = "self::serde")]
@@ -46,8 +47,8 @@ impl ToValidate for Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::common::helpers;
-    use crate::common::types::CommonError;
+    use crate::rpc::shared::helpers;
+    use crate::rpc::shared::types::CommonError;
 
     #[test]
     fn test_validation_failed() {
