@@ -1,7 +1,7 @@
 pub mod common;
 
-mod apps;
-pub use apps::DbBuilder;
+mod rpc;
+pub use rpc::DbBuilder;
 
 mod config;
 use config::Config;
