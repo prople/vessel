@@ -24,6 +24,7 @@ prople-vessel-rpc = {version = "~0.1", path = "vessel-rpc"}
 # external prople libraries
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
+prople-jsonrpc-core = {version = "~0.1"}
 
 # rstdev and rst_common libraries
 rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
