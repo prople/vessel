@@ -1,8 +1,8 @@
 pub mod types;
 
-mod db;
-pub use db::Bucket as DbBucket;
-pub use db::Builder as DbBuilder;
-pub use db::DbError;
+mod shared;
+pub use shared::db::Bucket as DbBucket;
+pub use shared::db::Builder as DbBuilder;
+pub use shared::db::DbError;
 
 mod identity;
