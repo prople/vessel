@@ -166,7 +166,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_get() {
         let db_builder = testdb::global_db_builder().to_owned();
-        let account_builder = Account::generate("password".to_string(), None);
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();
@@ -185,7 +185,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_remove_get() {
         let db_builder = testdb::global_db_builder().to_owned();
-        let account_builder = Account::generate("password".to_string(), None);
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();

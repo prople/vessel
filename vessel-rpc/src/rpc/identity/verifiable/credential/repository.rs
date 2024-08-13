@@ -434,7 +434,6 @@ mod tests {
 
         AccountIdentity::new(
             did_vc_value_cloned.clone(),
-            "did-uri".to_string(),
             did_vc_doc,
             did_vc_doc_private_keys,
             did_vc_keysecure,
