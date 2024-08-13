@@ -18,7 +18,7 @@ authors = ["rstlix0x0 (@rstlix0x0)", "Vessel Contributors (@prople/vessel-contri
 
 [workspace.dependencies]
 # internal prople/vessel libraries
-prople-vessel-core = {version = "~0.2", path = "vessel-core"}
+prople-vessel-core = {version = "~0.3", path = "vessel-core"}
 prople-vessel-rpc = {version = "~0.1", path = "vessel-rpc"}
 
 # external prople libraries
