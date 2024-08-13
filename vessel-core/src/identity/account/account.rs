@@ -1,5 +1,3 @@
-use multiaddr::Multiaddr;
-
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::serde::{self, Deserialize, Serialize};
@@ -12,14 +10,12 @@ use rstdev_domain::BaseError;
 use prople_crypto::keysecure::types::ToKeySecure;
 use prople_crypto::keysecure::KeySecure;
 
-use prople_did_core::did::{query::Params, DID};
+use prople_did_core::did::DID;
 use prople_did_core::doc::types::{Doc, ToDoc};
-use prople_did_core::hashlink;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
 
 use super::types::{AccountEntityAccessor, AccountError};
-use super::URI;
 
 /// `Account` is main entity data structure
 ///
@@ -31,7 +27,6 @@ use super::URI;
 pub struct Account {
     pub(crate) id: String,
     pub(crate) did: String,
-    pub(crate) did_uri: String,
     pub(crate) doc: Doc,
     pub(crate) doc_private_keys: IdentityPrivateKeyPairs,
     pub(crate) keysecure: KeySecure,
@@ -46,7 +41,6 @@ pub struct Account {
 impl Account {
     pub fn new(
         did: String,
-        did_uri: String,
         doc: Doc,
         doc_private_keys: IdentityPrivateKeyPairs,
         keysecure: KeySecure,
@@ -54,7 +48,6 @@ impl Account {
         Self {
             id: Uuid::new_v4().to_string(),
             did,
-            did_uri,
             doc,
             doc_private_keys,
             keysecure,
@@ -67,7 +60,6 @@ impl Account {
     /// including for the `DID Doc Private Keys`, and then assigned it to the [`Account`] main entity object
     pub fn generate(
         password: String,
-        current_addr: Option<Multiaddr>,
     ) -> Result<Account, AccountError> {
         let did = DID::new();
         let mut identity = did
@@ -85,27 +77,11 @@ impl Account {
             .build_assertion_method()
             .to_doc();
 
-        let hl_doc = hashlink::generate_from_json(doc.clone())
-            .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
-
         let doc_private_keys = identity.build_private_keys(password.clone()).map_err(|_| {
             AccountError::GenerateIdentityError("unable to build private keys".to_string())
         })?;
 
-        let mut query_params = Params::default();
-        query_params.hl = Some(hl_doc);
-        query_params.address = current_addr.map(|addr| addr.to_string());
-
-        let did_uri = URI::build_with_raw(did, Some(query_params))
-            .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
-
-        let account = Account::new(
-            identity.value(),
-            did_uri,
-            doc,
-            doc_private_keys,
-            account_keysecure,
-        );
+        let account = Account::new(identity.value(), doc, doc_private_keys, account_keysecure);
 
         Ok(account)
     }
@@ -149,10 +125,6 @@ impl AccountEntityAccessor for Account {
         self.did.to_owned()
     }
 
-    fn get_did_uri(&self) -> String {
-        self.did_uri.to_owned()
-    }
-
     fn get_doc(&self) -> Doc {
         self.doc.to_owned()
     }
@@ -179,7 +151,7 @@ mod tests {
 
     #[test]
     fn test_build_json_str() {
-        let account_builder = Account::generate("password".to_string(), None);
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let json_str = account_builder.unwrap().to_json();
@@ -189,7 +161,7 @@ mod tests {
 
     #[test]
     fn test_build_json_bytes() {
-        let account_builder = Account::generate("password".to_string(), None);
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();
@@ -202,7 +174,7 @@ mod tests {
 
     #[test]
     fn test_unserialize_from_bytes() {
-        let account_builder = Account::generate("password".to_string(), None);
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();
@@ -215,37 +187,5 @@ mod tests {
 
         let account_new = account_regenerate.unwrap();
         assert_eq!(account.get_did(), account_new.get_did())
-    }
-
-    #[test]
-    fn test_generate_account_without_address() {
-        let account_builder = Account::generate("password".to_string(), None);
-        assert!(!account_builder.is_err());
-
-        let account = account_builder.unwrap();
-        let check_did_uri_params = URI::has_params(account.clone().did_uri);
-        assert!(!check_did_uri_params.is_err());
-        assert!(check_did_uri_params.unwrap());
-
-        let (_, uri_params, _) = URI::parse(account.did_uri).unwrap();
-        assert!(uri_params.hl.is_some());
-        assert!(uri_params.address.is_none())
-    }
-
-    #[test]
-    fn test_generate_account_with_address() {
-        let address = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap();
-
-        let account_builder = Account::generate("password".to_string(), Some(address));
-        assert!(!account_builder.is_err());
-
-        let account = account_builder.unwrap();
-        let check_did_uri_params = URI::has_params(account.clone().did_uri);
-        assert!(!check_did_uri_params.is_err());
-        assert!(check_did_uri_params.unwrap());
-
-        let (_, uri_params, _) = URI::parse(account.did_uri).unwrap();
-        assert!(uri_params.hl.is_some());
-        assert!(uri_params.address.is_some())
     }
 }

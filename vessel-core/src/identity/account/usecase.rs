@@ -1,9 +1,8 @@
-use multiaddr::Multiaddr;
 use rst_common::standard::async_trait::async_trait;
 
 use prople_did_core::did::query::Params;
 use prople_did_core::doc::types::Doc;
-use prople_did_core::hashlink::verify_from_json;
+use prople_did_core::hashlink::{self, verify_from_json};
 
 use super::types::{
     AccountAPI, AccountEntityAccessor, AccountError, RepoBuilder, RpcBuilder, UsecaseBuilder,
@@ -64,9 +63,8 @@ where
     async fn generate_did(
         &self,
         password: String,
-        current_addr: Option<Multiaddr>,
     ) -> Result<Account, AccountError> {
-        let account = Account::generate(password, current_addr)?;
+        let account = Account::generate(password)?;
         let _ = self
             .repo()
             .save_account(&account)
@@ -88,7 +86,16 @@ where
             .await
             .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
 
-        URI::build(account, password, params)
+        let hl_doc = hashlink::generate_from_json(account.get_doc())
+            .map_err(|err| AccountError::BuildURIError(err.to_string()))?;
+
+        let mut query_params = Params::default();
+        query_params.hl = Some(hl_doc);
+        query_params.address = params.map(|val| {
+            val.address
+        }).flatten();
+
+        URI::build(account, password, Some(query_params))
     }
 
     async fn resolve_did_uri(&self, uri: String) -> Result<Doc, AccountError> {
@@ -195,7 +202,7 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
 
         let uc = generate_usecase(repo, rpc);
-        let output = uc.generate_did("password".to_string(), None).await;
+        let output = uc.generate_did("password".to_string()).await;
         assert!(!output.is_err());
 
         let acc = output.unwrap();
@@ -222,7 +229,7 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
 
         let uc = generate_usecase(repo, rpc);
-        let output = uc.generate_did("password".to_string(), None).await;
+        let output = uc.generate_did("password".to_string()).await;
         assert!(output.is_err());
         assert!(matches!(
             output.unwrap_err(),
@@ -253,7 +260,6 @@ mod tests {
 
                 let account = Account::new(
                     identity_value.clone(),
-                    "did-uri".to_string(),
                     identity_doc.clone(),
                     identity_doc_private_keys.clone(),
                     keysecure,
@@ -269,8 +275,8 @@ mod tests {
         let uri = uc
             .build_did_uri(identity.clone().value(), "password".to_string(), None)
             .await;
+
         assert!(!uri.is_err());
-        assert_eq!(uri.unwrap(), identity.clone().value())
     }
 
     #[tokio::test]
@@ -295,7 +301,6 @@ mod tests {
                     .unwrap();
                 let account = Account::new(
                     identity_value.clone(),
-                    "did-uri".to_string(),
                     identity_doc.clone(),
                     identity_doc_private_keys.clone(),
                     keysecure,
@@ -369,7 +374,6 @@ mod tests {
                     .unwrap();
                 let account = Account::new(
                     identity_repo_clone.clone().value(),
-                    "did-uri".to_string(),
                     identity_repo_clone_doc.clone(),
                     identity_repo_clone_doc_private_keys.clone(),
                     keysecure,
@@ -396,7 +400,7 @@ mod tests {
         });
 
         let uc = generate_usecase(repo, rpc);
-        let account = uc.generate_did("password".to_string(), None).await;
+        let account = uc.generate_did("password".to_string()).await;
         assert!(!account.is_err());
 
         let doc_hl_result = generate_from_json(identity.clone().to_doc());
@@ -507,7 +511,6 @@ mod tests {
 
                 let account = Account::new(
                     identity_repo_clone.clone().value(),
-                    "did-uri".to_string(),
                     identity_repo_clone_doc.clone(),
                     identity_repo_clone_doc_private_keys.clone(),
                     keysecure,
@@ -534,7 +537,7 @@ mod tests {
         });
 
         let uc = generate_usecase(repo, rpc);
-        let account = uc.generate_did("password".to_string(), None).await;
+        let account = uc.generate_did("password".to_string()).await;
         assert!(!account.is_err());
 
         let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
@@ -543,15 +546,7 @@ mod tests {
             hl: Some("invalid-hl".to_string()),
         };
 
-        let uri = uc
-            .build_did_uri(
-                identity.clone().value(),
-                "password".to_string(),
-                Some(params),
-            )
-            .await;
-        assert!(!uri.is_err());
-
+        let uri = URI::build_with_raw(did, Some(params));
         let resolved = uc.resolve_did_uri(uri.unwrap()).await;
         assert!(resolved.is_err());
         assert!(resolved
@@ -588,7 +583,6 @@ mod tests {
 
                     let account = Account::new(
                         identity_repo_clone.clone().value(),
-                        "did-uri".to_string(),
                         identity_repo_clone_doc.clone(),
                         identity_repo_clone_doc_private_keys.clone(),
                         keysecure,

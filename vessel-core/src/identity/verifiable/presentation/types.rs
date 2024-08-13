@@ -35,10 +35,10 @@ pub enum PresentationError {
 
     #[error("presentation not found")]
     PresentationNotFound,
-    
+
     #[error("verifier not found")]
     VerifierNotFound,
-    
+
     #[error("list presentation error: {0}")]
     ListError(String),
 

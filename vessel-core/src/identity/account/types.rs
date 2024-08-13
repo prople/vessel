@@ -59,7 +59,6 @@ pub trait AccountEntityAccessor:
 {
     fn get_id(&self) -> String;
     fn get_did(&self) -> String;
-    fn get_did_uri(&self) -> String;
     fn get_doc(&self) -> Doc;
     fn get_doc_private_keys(&self) -> IdentityPrivateKeyPairs;
     fn get_keysecure(&self) -> KeySecure;
@@ -83,7 +82,6 @@ pub trait AccountAPI: Clone {
     async fn generate_did(
         &self,
         password: String,
-        current_addr: Option<Multiaddr>,
     ) -> Result<Self::EntityAccessor, AccountError>;
 
     /// `build_did_uri` used to generate the `DID URI`, a specific URI syntax for the DID

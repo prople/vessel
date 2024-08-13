@@ -345,7 +345,7 @@ mod tests {
         impl AccountAPI for FakeAccountUsecase {
             type EntityAccessor = Account;
 
-            async fn generate_did(&self, password: String, current_addr: Option<Multiaddr>) -> Result<AccountIdentity, AccountError>;
+            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
                 did: String,
@@ -376,7 +376,6 @@ mod tests {
                 did_issuer: String,
                 credential: Value,
                 proof_params: Option<ProofParams>,
-                current_addr: Option<Multiaddr>,
             ) -> Result<Credential, CredentialError>;
 
             async fn send_credential_to_holder(
@@ -506,7 +505,6 @@ mod tests {
 
         let did_verifier_account = Account::new(
             did_verifier_value,
-            "did-uri".to_string(),
             did_verifier_doc,
             did_verifier_doc_privkeys,
             did_verifier_keysecure,
@@ -626,7 +624,6 @@ mod tests {
 
                 let result = AccountIdentity::new(
                     did_issuer_mock.identity().unwrap().value(),
-                    "did-uri".to_string(),
                     did_issuer_mock_doc,
                     did_issuer_doc_private_keys,
                     did_issuer_mock_keysecure,
@@ -733,7 +730,6 @@ mod tests {
 
                 let result = AccountIdentity::new(
                     did_issuer_mock.identity().unwrap().value(),
-                    "did-uri".to_string(),
                     did_issuer_mock_doc,
                     did_issuer_mock_doc_private_keys,
                     did_issuer_mock_keysecure,

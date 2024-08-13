@@ -236,7 +236,7 @@ mod tests {
         impl AccountAPI for FakeAccountUsecase {
             type EntityAccessor = AccountIdentity;
 
-            async fn generate_did(&self, password: String, current_addr: Option<Multiaddr>) -> Result<AccountIdentity, AccountError>;
+            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
                 did: String,

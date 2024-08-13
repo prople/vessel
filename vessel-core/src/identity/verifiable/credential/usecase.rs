@@ -1,5 +1,3 @@
-use multiaddr::Multiaddr;
-
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::serde_json::Value;
 
@@ -75,10 +73,9 @@ where
     async fn generate_credential(
         &self,
         password: String,
-        did_issuer_uri: String,
+        did_issuer: String,
         claims: Value,
         proof_params: Option<ProofParams>,
-        current_addr: Option<Multiaddr>,
     ) -> Result<Credential, CredentialError> {
         if password.is_empty() {
             return Err(CredentialError::CommonError(
@@ -86,32 +83,20 @@ where
             ));
         }
 
-        if did_issuer_uri.is_empty() {
+        if did_issuer.is_empty() {
             return Err(CredentialError::CommonError(
                 VerifiableError::ValidationError("did_issuer_uri was missing".to_string()),
             ));
         }
 
-        let _ = URI::has_params(did_issuer_uri.clone())
-            .map(|uri| {
-                if !uri {
-                    return Err(CredentialError::GenerateError(
-                        "did_issuer_uri is not valid".to_string(),
-                    ));
-                }
-
-                Ok(())
-            })
-            .map_err(|err| CredentialError::GenerateError(err.to_string()))??;
-
         let account = self
             .account()
-            .generate_did(password.clone(), current_addr)
+            .generate_did(password.clone())
             .await
             .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
 
         let credential =
-            Credential::generate(account, password, did_issuer_uri, claims, proof_params).await?;
+            Credential::generate(account, password, did_issuer, claims, proof_params).await?;
 
         let _ = self
             .repo()
@@ -318,7 +303,7 @@ mod tests {
         impl AccountAPI for FakeAccountUsecase {
             type EntityAccessor = AccountIdentity;
 
-            async fn generate_did(&self, password: String, current_addr: Option<Multiaddr>) -> Result<AccountIdentity, AccountError>;
+            async fn generate_did(&self, password: String) -> Result<AccountIdentity, AccountError>;
             async fn build_did_uri(
                 &self,
                 did: String,
@@ -379,7 +364,6 @@ mod tests {
 
         let did_holder_account = Account::new(
             did_holder_value,
-            "did-uri".to_string(),
             did_holder_doc,
             did_holder_doc_privkeys,
             did_holder_keysecure,
@@ -444,7 +428,6 @@ mod tests {
     #[tokio::test]
     async fn test_generate_success_without_params() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let addr_cloned = addr.clone();
 
         let did_issuer = generate_did();
         let mut did_issuer_uri_params = Params::default();
@@ -452,8 +435,6 @@ mod tests {
 
         let did_issuer_uri_builder = did_issuer.build_uri(Some(did_issuer_uri_params));
         assert!(!did_issuer_uri_builder.is_err());
-
-        let did_issuer_uri = did_issuer_uri_builder.unwrap();
 
         let did_vc = generate_did();
         let did_vc_cloned = did_vc.clone();
@@ -474,8 +455,8 @@ mod tests {
             expected
                 .expect_generate_did()
                 .times(1)
-                .with(eq("password".to_string()), eq(Some(addr_cloned)))
-                .return_once(move |_, _| {
+                .with(eq("password".to_string()))
+                .return_once(move |_| {
                     let mut did_vc_identity = did_vc.identity().unwrap();
                     let did_vc_value_cloned = did_vc_identity.value();
 
@@ -497,7 +478,6 @@ mod tests {
                     Ok(AccountIdentity {
                         id: Uuid::new_v4().to_string(),
                         did: did_vc_value_cloned.clone(),
-                        did_uri: "did-uri".to_string(),
                         keysecure: did_vc_keysecure,
                         doc: did_vc_doc,
                         doc_private_keys: did_vc_doc_private_keys,
@@ -520,10 +500,9 @@ mod tests {
         let vc = uc
             .generate_credential(
                 "password".to_string(),
-                did_issuer_uri.clone(),
+                did_issuer.identity().unwrap().value(),
                 cred_value.clone(),
                 None,
-                Some(addr),
             )
             .await;
         assert!(!vc.is_err());
@@ -531,9 +510,9 @@ mod tests {
         let credential = vc.unwrap();
 
         assert!(credential.vc.proof.is_none());
-        assert_eq!(credential.did_issuer, did_issuer_uri.clone());
-        assert_eq!(credential.vc.issuer, did_issuer_uri.clone());
-        assert_eq!(credential.vc.id, "did-uri".to_string());
+        assert_eq!(credential.did_issuer, did_issuer.identity().unwrap().value());
+        assert_eq!(credential.vc.issuer, did_issuer.identity().unwrap().value());
+        assert_eq!(credential.vc.id, did_vc.identity().unwrap().value());
 
         let vc_types = credential.vc.types;
         assert_eq!(vc_types.len(), 1);
@@ -546,7 +525,6 @@ mod tests {
     #[tokio::test]
     async fn test_generate_success_with_params() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let addr_cloned = addr.clone();
 
         let did_issuer = generate_did();
         let mut did_issuer_uri_params = Params::default();
@@ -554,8 +532,6 @@ mod tests {
 
         let did_issuer_uri_builder = did_issuer.build_uri(Some(did_issuer_uri_params));
         assert!(!did_issuer_uri_builder.is_err());
-
-        let did_issuer_uri = did_issuer_uri_builder.unwrap();
 
         let did_vc = generate_did();
         let did_vc_cloned = did_vc.clone();
@@ -576,8 +552,8 @@ mod tests {
             expected
                 .expect_generate_did()
                 .times(1)
-                .with(eq("password".to_string()), eq(Some(addr_cloned)))
-                .return_once(move |_, _| {
+                .with(eq("password".to_string()))
+                .return_once(move |_| {
                     let mut did_vc_identity = did_vc.identity().unwrap();
                     let did_vc_value_cloned = did_vc_identity.value();
 
@@ -599,7 +575,6 @@ mod tests {
                     Ok(AccountIdentity {
                         id: Uuid::new_v4().to_string(),
                         did: did_vc_value_cloned.clone(),
-                        did_uri: "did-uri".to_string(),
                         keysecure: did_vc_keysecure,
                         doc: did_vc_doc,
                         doc_private_keys: did_vc_doc_private_keys,
@@ -632,19 +607,18 @@ mod tests {
         let vc = uc
             .generate_credential(
                 "password".to_string(),
-                did_issuer_uri.clone(),
+                did_issuer.identity().unwrap().value(),
                 cred_value.clone(),
                 Some(proof_params),
-                Some(addr.clone()),
             )
             .await;
         assert!(!vc.is_err());
 
         let credential = vc.unwrap();
         assert!(credential.vc.proof.is_some());
-        assert_eq!(credential.did_issuer, did_issuer_uri.clone());
-        assert_eq!(credential.vc.issuer, did_issuer_uri.clone());
-        assert_eq!(credential.vc.id, "did-uri".to_string());
+        assert_eq!(credential.did_issuer, did_issuer.identity().unwrap().value());
+        assert_eq!(credential.vc.issuer, did_issuer.identity().unwrap().value());
+        assert_eq!(credential.vc.id, did_vc.identity().unwrap().value());
 
         let vc = credential.vc;
         let vc_types = vc.clone().types;
@@ -719,7 +693,6 @@ mod tests {
                 "issuer".to_string(),
                 cred_value.clone(),
                 None,
-                None,
             )
             .await;
         assert!(generate_pass.is_err());
@@ -736,7 +709,6 @@ mod tests {
                 "password".to_string(),
                 "".to_string(),
                 cred_value,
-                None,
                 None,
             )
             .await;
@@ -756,7 +728,6 @@ mod tests {
     #[tokio::test]
     async fn test_generate_error_generate_did() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let addr_cloned = addr.clone();
 
         let mut did_issuer_uri_params = Params::default();
         did_issuer_uri_params.address = Some(addr.clone().to_string());
@@ -771,12 +742,11 @@ mod tests {
         let mut account = MockFakeAccountUsecase::new();
         account.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeAccountUsecase::new();
-            let addr_cloned = addr_cloned;
 
             expected
                 .expect_generate_did()
-                .with(eq("password".to_string()), eq(Some(addr_cloned)))
-                .return_once(move |_, _| {
+                .with(eq("password".to_string()))
+                .return_once(move |_| {
                     Err(AccountError::UnknownError("error generate".to_string()))
                 });
 
@@ -797,7 +767,6 @@ mod tests {
                 did_issuer_uri_builder.unwrap(),
                 cred_value.clone(),
                 None,
-                Some(addr),
             )
             .await;
         assert!(vc.is_err());
@@ -838,8 +807,8 @@ mod tests {
             let mut expected = MockFakeAccountUsecase::new();
             expected
                 .expect_generate_did()
-                .with(eq("password".to_string()), eq(None))
-                .return_once(move |_, _| {
+                .with(eq("password".to_string()))
+                .return_once(move |_| {
                     let did_vc_value_cloned = did_vc.identity().unwrap().value();
                     let did_vc_doc = did_vc.identity().unwrap().to_doc();
 
@@ -858,7 +827,6 @@ mod tests {
                     Ok(AccountIdentity {
                         id: Uuid::new_v4().to_string(),
                         did: did_vc_value_cloned.clone(),
-                        did_uri: "did-uri".to_string(),
                         keysecure: did_vc_keysecure,
                         doc: did_vc_doc,
                         doc_private_keys: did_vc_doc_private_keys,
@@ -883,7 +851,6 @@ mod tests {
                 "password".to_string(),
                 did_issuer_uri,
                 cred_value.clone(),
-                None,
                 None,
             )
             .await;

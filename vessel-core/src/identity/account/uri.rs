@@ -61,7 +61,7 @@ mod tests {
     #[test]
     fn test_build_uri() {
         let address = "/ip4/127.0.0.1/tcp/1234".parse::<Multiaddr>().unwrap();
-        let account_builder = Account::generate("password".to_string(), Some(address.clone()));
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();
@@ -123,7 +123,7 @@ mod tests {
 
     #[test]
     fn test_build_uri_invalid_password() {
-        let account_builder = Account::generate("password".to_string(), None);
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();
@@ -136,7 +136,7 @@ mod tests {
     fn test_parse_uri() {
         let input_addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(8080u16));
 
-        let account_builder = Account::generate("password".to_string(), Some(input_addr.clone()));
+        let account_builder = Account::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();

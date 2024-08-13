@@ -97,7 +97,6 @@ pub trait CredentialAPI: Clone {
         did_issuer: String,
         credential: Value,
         proof_params: Option<ProofParams>,
-        current_addr: Option<Multiaddr>,
     ) -> Result<Self::EntityAccessor, CredentialError>;
 
     /// `send_credential_to_holder` used to send a `VC` to some `Holder`, if there is no error it means the `VC`
