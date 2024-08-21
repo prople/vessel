@@ -25,3 +25,4 @@ multiaddr.workspace = true
 [dev-dependencies]
 mockall.workspace = true
 table-test.workspace = true
+toml.workspace = true

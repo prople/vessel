@@ -58,9 +58,7 @@ impl Account {
 
     /// `generate` used to generate the `DID` including for all of its components, an identity, a doc
     /// including for the `DID Doc Private Keys`, and then assigned it to the [`Account`] main entity object
-    pub fn generate(
-        password: String,
-    ) -> Result<Account, AccountError> {
+    pub fn generate(password: String) -> Result<Account, AccountError> {
         let did = DID::new();
         let mut identity = did
             .identity()

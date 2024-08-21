@@ -2,8 +2,8 @@ use std::fmt::Debug;
 
 use multiaddr::Multiaddr;
 
-use rst_common::standard::serde::{self, Serialize, Deserialize};
 use rst_common::standard::async_trait::async_trait;
+use rst_common::standard::serde::{self, Deserialize, Serialize};
 
 use prople_crypto::keysecure::KeySecure;
 use prople_did_core::doc::types::Doc;
@@ -16,8 +16,8 @@ use rstdev_domain::entity::ToJSON;
 
 /// `AccountError` provides all specific error types relate with entity account
 /// management
-#[derive(Debug, PartialEq, Error, Serialize, Deserialize)]
-#[serde(crate="self::serde")]
+#[derive(Debug, PartialEq, Error, Serialize, Deserialize, Clone)]
+#[serde(crate = "self::serde")]
 pub enum AccountError {
     #[error("unknown error: {0}")]
     UnknownError(String),
@@ -85,10 +85,7 @@ pub trait AccountAPI: Clone {
     /// storage data structure. This strategy following `Ethereum KeyStore` mechanism.
     /// This property will be used to generate hash that will be used as a key to encrypt
     /// and decrypt the generated private key
-    async fn generate_did(
-        &self,
-        password: String,
-    ) -> Result<Self::EntityAccessor, AccountError>;
+    async fn generate_did(&self, password: String) -> Result<Self::EntityAccessor, AccountError>;
 
     /// `build_did_uri` used to generate the `DID URI`, a specific URI syntax for the DID
     ///
@@ -136,7 +133,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
 /// `AccountRPCClientBuilder` is a trait behavior used as `JSON-RPC` client builder
 /// to calling other `Vessel` agents.
 #[async_trait]
-pub trait RpcBuilder: Clone + Sync + Send {
+pub trait RpcBuilder: Clone {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError>;
 }
 

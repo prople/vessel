@@ -38,7 +38,7 @@ where
 impl<TRepo, TRPCClient> UsecaseBuilder<Account> for Usecase<TRepo, TRPCClient>
 where
     TRepo: RepoBuilder<EntityAccessor = Account>,
-    TRPCClient: RpcBuilder,
+    TRPCClient: RpcBuilder + Send + Sync,
 {
     type RepoImplementer = TRepo;
     type RPCImplementer = TRPCClient;
@@ -56,14 +56,11 @@ where
 impl<TRepo, TRPCClient> AccountAPI for Usecase<TRepo, TRPCClient>
 where
     TRepo: RepoBuilder<EntityAccessor = Account>,
-    TRPCClient: RpcBuilder,
+    TRPCClient: RpcBuilder + Send + Sync,
 {
     type EntityAccessor = Account;
 
-    async fn generate_did(
-        &self,
-        password: String,
-    ) -> Result<Account, AccountError> {
+    async fn generate_did(&self, password: String) -> Result<Account, AccountError> {
         let account = Account::generate(password)?;
         let _ = self
             .repo()
@@ -91,9 +88,7 @@ where
 
         let mut query_params = Params::default();
         query_params.hl = Some(hl_doc);
-        query_params.address = params.map(|val| {
-            val.address
-        }).flatten();
+        query_params.address = params.map(|val| val.address).flatten();
 
         URI::build(account, password, Some(query_params))
     }

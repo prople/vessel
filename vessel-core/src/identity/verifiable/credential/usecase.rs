@@ -510,7 +510,10 @@ mod tests {
         let credential = vc.unwrap();
 
         assert!(credential.vc.proof.is_none());
-        assert_eq!(credential.did_issuer, did_issuer.identity().unwrap().value());
+        assert_eq!(
+            credential.did_issuer,
+            did_issuer.identity().unwrap().value()
+        );
         assert_eq!(credential.vc.issuer, did_issuer.identity().unwrap().value());
         assert_eq!(credential.vc.id, did_vc.identity().unwrap().value());
 
@@ -616,7 +619,10 @@ mod tests {
 
         let credential = vc.unwrap();
         assert!(credential.vc.proof.is_some());
-        assert_eq!(credential.did_issuer, did_issuer.identity().unwrap().value());
+        assert_eq!(
+            credential.did_issuer,
+            did_issuer.identity().unwrap().value()
+        );
         assert_eq!(credential.vc.issuer, did_issuer.identity().unwrap().value());
         assert_eq!(credential.vc.id, did_vc.identity().unwrap().value());
 
@@ -705,12 +711,7 @@ mod tests {
         }
 
         let generate_issuer = uc
-            .generate_credential(
-                "password".to_string(),
-                "".to_string(),
-                cred_value,
-                None,
-            )
+            .generate_credential("password".to_string(), "".to_string(), cred_value, None)
             .await;
         assert!(generate_issuer.is_err());
 
