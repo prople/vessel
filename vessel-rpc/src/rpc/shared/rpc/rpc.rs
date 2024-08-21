@@ -2,6 +2,8 @@ use multiaddr::{Multiaddr, Protocol};
 
 use rst_common::with_errors::thiserror::{self, Error};
 
+const RPC_PATH: &str = "/rpc";
+
 #[derive(Debug, Error)]
 pub enum EndpointError {
     #[error("rpc error: invalid addr: {0}")]
@@ -51,7 +53,7 @@ pub fn build_endpoint(addr: Multiaddr) -> Result<String, EndpointError> {
         }
     };
 
-    let endpoint = format!("{}:{}", host, port);
+    let endpoint = format!("{}:{}{}", host, port, RPC_PATH);
     Ok(endpoint)
 }
 
@@ -67,7 +69,6 @@ mod tests {
         let addr = multiaddr!(Udp(10500u16), QuicV1);
         let parsed = build_endpoint(addr);
         assert!(parsed.is_err());
-        println!("{}", parsed.unwrap_err())
     }
 
     #[test]
@@ -75,7 +76,7 @@ mod tests {
         let addr = multiaddr!(Dns("http://google.com"), Tcp(8080u16));
         let parsed = build_endpoint(addr);
         assert!(!parsed.is_err());
-        assert_eq!("http://google.com:8080", parsed.unwrap())
+        assert_eq!("http://google.com:8080/rpc", parsed.unwrap())
     }
 
     #[test]
@@ -83,7 +84,7 @@ mod tests {
         let addr = multiaddr!(Dns4("http://google.com"), Tcp(8080u16));
         let parsed = build_endpoint(addr);
         assert!(!parsed.is_err());
-        assert_eq!("http://google.com:8080", parsed.unwrap())
+        assert_eq!("http://google.com:8080/rpc", parsed.unwrap())
     }
 
     #[test]
@@ -91,6 +92,6 @@ mod tests {
         let addr = multiaddr!(Ip4(Ipv4Addr::new(127, 0, 0, 1)), Tcp(8080u16));
         let parsed = build_endpoint(addr);
         assert!(!parsed.is_err());
-        assert_eq!("http://127.0.0.1:8080", parsed.unwrap())
+        assert_eq!("http://127.0.0.1:8080/rpc", parsed.unwrap())
     }
 }

@@ -45,11 +45,104 @@ where
         let rpc_response = self
             .client
             .call(endpoint, rpc_param, rpc_method, None)
-            .await.map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
+            .await
+            .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
 
         match rpc_response.result {
             Some(doc) => Ok(doc),
-            None => Err(AccountError::ResolveDIDError(String::from("missing DID Doc")))
+            None => Err(AccountError::ResolveDIDError(String::from(
+                "missing DID Doc",
+            ))),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use mockito::{Matcher, Server};
+    use multiaddr::multiaddr;
+
+    use rst_common::standard::serde_json;
+    use rst_common::with_tokio::tokio;
+
+    use prople_did_core::did::DID;
+    use prople_did_core::doc::types::ToDoc;
+
+    use prople_jsonrpc_core::objects::RpcRequest;
+    use prople_jsonrpc_core::types::RpcId;
+
+    use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
+    use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
+
+    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<Doc, AccountError>> {
+        return RpcClient::new(ReqwestExecutor::new());
+    }
+
+    fn generate_doc() -> (Doc, DID) {
+        let did = DID::new();
+        let identity = did.identity().unwrap();
+
+        return (identity.to_doc(), did);
+    }
+
+    fn parse_url(url: String) -> (String, u16) {
+        let splitted = url.as_str().split(":").collect::<Vec<&str>>();
+        let port_str = splitted[2].parse::<u16>();
+        (format!("{}{}", splitted[0], splitted[1]), port_str.unwrap())
+    }
+
+    #[tokio::test]
+    async fn test_resolve_did_doc_success() {
+        let (doc, did) = generate_doc();
+
+        let did_str = did.identity().unwrap().value();
+        let mut server = Server::new_async().await;
+        let base_url = server.url();
+        let (_, port) = parse_url(base_url);
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
+
+        let param = RpcParam::ResolveDIDDoc {
+            did: did_str.clone(),
+        };
+
+        let param_value = param.build_serde_value().unwrap();
+
+        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc)
+            .build_path()
+            .path();
+
+        let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
+            id: Some(RpcId::IntegerVal(1)),
+            result: Some(doc),
+            error: None,
+            jsonrpc: String::from("2.0"),
+        };
+
+        let jsonresp_str_builder = serde_json::to_string(&jsonresp).unwrap();
+
+        let request_payload = RpcRequest {
+            jsonrpc: String::from("2.0"),
+            method: rpc_method.clone(),
+            params: param_value,
+            id: None,
+        };
+
+        let request_payload_value = serde_json::to_value(request_payload).unwrap();
+
+        let mock = server
+            .mock("POST", "/rpc")
+            .match_body(Matcher::Json(request_payload_value))
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(jsonresp_str_builder)
+            .create_async()
+            .await;
+
+        let client = generate_rpc_client();
+        let resp = client.resolve_did_doc(addr, did_str).await;
+
+        assert!(!resp.is_err());
+        mock.assert();
     }
 }

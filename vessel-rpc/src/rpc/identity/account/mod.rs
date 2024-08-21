@@ -15,7 +15,7 @@ pub use rpc_client::RpcClient;
 pub struct Account {
     db_executor: DbExecutor,
     repo: Option<Repository>,
-    rpc_client: Option<RpcClient<ReqwestExecutor<Doc, AccountError>>>
+    rpc_client: Option<RpcClient<ReqwestExecutor<Doc, AccountError>>>,
 }
 
 impl Account {
@@ -23,7 +23,7 @@ impl Account {
         Self {
             db_executor,
             repo: None,
-            rpc_client: None
+            rpc_client: None,
         }
     }
 }
