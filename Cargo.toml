@@ -34,9 +34,10 @@ rstdev-config = {version = "~0.1"}
 rstdev-storage = {version = "~0.3", features=["rocksdb"]}
 
 # third party libraries
-toml = {version = "~0.8"}
 clap = {version = "~4.5", features=["derive"]}
-mockall  = {version = "~0.12"}
 multiaddr = {version = "~0.18"}
-table-test = {version = "~0.2"} 
 once_cell = {version = "~1.19"}
+table-test = {version = "~0.2"} 
+mockall  = {version = "~0.12"}
+mockito = {version = "~1.5"}
+toml = {version = "~0.8"}
