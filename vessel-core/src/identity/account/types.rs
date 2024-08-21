@@ -1,6 +1,8 @@
 use std::fmt::Debug;
 
 use multiaddr::Multiaddr;
+
+use rst_common::standard::serde::{self, Serialize, Deserialize};
 use rst_common::standard::async_trait::async_trait;
 
 use prople_crypto::keysecure::KeySecure;
@@ -14,7 +16,8 @@ use rstdev_domain::entity::ToJSON;
 
 /// `AccountError` provides all specific error types relate with entity account
 /// management
-#[derive(Debug, PartialEq, Error)]
+#[derive(Debug, PartialEq, Error, Serialize, Deserialize)]
+#[serde(crate="self::serde")]
 pub enum AccountError {
     #[error("unknown error: {0}")]
     UnknownError(String),
@@ -45,6 +48,9 @@ pub enum AccountError {
 
     #[error("unable unserialize account: {0}")]
     UnserializeError(String),
+
+    #[error("invalid multiaddr: {0}")]
+    InvalidMultiAddr(String),
 
     #[error("unknown DID")]
     DIDNotFound,
