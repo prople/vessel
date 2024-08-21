@@ -1,20 +1,25 @@
 use rstdev_storage::engine::rocksdb::executor::Executor;
 
-use crate::rpc::shared::types::{RPCService, CommonError};
+use crate::rpc::shared::types::{CommonError, RPCService};
 
 pub mod account;
 pub mod verifiable;
 
 pub struct Identity {
     db: Executor,
-    account: Option<Box<dyn RPCService>>, 
+    account: Option<Box<dyn RPCService>>,
     vc: Option<Box<dyn RPCService>>,
-    vp: Option<Box<dyn RPCService>>
+    vp: Option<Box<dyn RPCService>>,
 }
 
 impl Identity {
     pub fn new(db: Executor) -> Self {
-        Self { db, account: None, vc: None, vp: None }
+        Self {
+            db,
+            account: None,
+            vc: None,
+            vp: None,
+        }
     }
 }
 

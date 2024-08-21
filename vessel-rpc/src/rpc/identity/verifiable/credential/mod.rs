@@ -11,7 +11,10 @@ pub struct Credential {
 
 impl Credential {
     pub fn new(executor: Executor) -> Self {
-        Self { executor, repo: None }
+        Self {
+            executor,
+            repo: None,
+        }
     }
 }
 

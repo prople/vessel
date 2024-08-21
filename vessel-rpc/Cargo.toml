@@ -10,6 +10,7 @@ publish = false
 prople-vessel-core.workspace = true
 prople-did-core.workspace = true
 prople-jsonrpc-core.workspace = true
+prople-jsonrpc-client.workspace = true
 prople-crypto.workspace = true
 rst-common.workspace = true
 rstdev-config.workspace = true

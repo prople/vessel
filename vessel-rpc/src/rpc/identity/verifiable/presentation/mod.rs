@@ -11,12 +11,15 @@ pub struct Presentation {
 
 impl Presentation {
     pub fn new(executor: Executor) -> Self {
-        Self { executor, repo: None }
+        Self {
+            executor,
+            repo: None,
+        }
     }
 }
 
 impl RPCService for Presentation {
-    fn build(&mut self) -> Result<(), CommonError> { 
+    fn build(&mut self) -> Result<(), CommonError> {
         self.repo = Some(repository::Repository::new(self.executor.to_owned()));
         Ok(())
     }

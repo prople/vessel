@@ -15,7 +15,7 @@ use rpc::identity::Identity;
 
 pub struct VesselRPC {
     config: Config,
-    identity: Option<Box<dyn RPCService>> 
+    identity: Option<Box<dyn RPCService>>,
 }
 
 impl VesselRPC {
@@ -24,7 +24,10 @@ impl VesselRPC {
             .parse()
             .map_err(|err| CommonError::DbError(err.to_string()))?;
 
-        Ok(Self { config, identity: None })
+        Ok(Self {
+            config,
+            identity: None,
+        })
     }
 
     pub fn build_app_config(&self) -> Result<ConfigApp, CommonError> {
@@ -57,6 +60,6 @@ impl VesselRPC {
         identity.build()?;
 
         self.identity = Some(Box::new(identity));
-        Ok(self) 
+        Ok(self)
     }
 }

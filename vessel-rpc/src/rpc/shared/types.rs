@@ -7,6 +7,9 @@ pub enum CommonError {
 
     #[error("valdation error: {0}")]
     ValidationError(String),
+
+    #[error("json error: {0}")]
+    JSONError(String),
 }
 
 pub trait ToValidate {
