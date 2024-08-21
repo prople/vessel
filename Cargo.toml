@@ -25,9 +25,10 @@ prople-vessel-rpc = {version = "~0.1", path = "vessel-rpc"}
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 prople-jsonrpc-core = {version = "~0.1"}
+prople-jsonrpc-client = {version = "~0.1"}
 
 # rstdev and rst_common libraries
-rst-common = {version = "~1", features=["with-errors", "with-tokio"]}
+rst-common = {version = "~1", features=["standard", "with-errors", "with-tokio"]}
 rstdev-domain = {version = "~0.1"}
 rstdev-config = {version = "~0.1"}
 rstdev-storage = {version = "~0.3", features=["rocksdb"]}
