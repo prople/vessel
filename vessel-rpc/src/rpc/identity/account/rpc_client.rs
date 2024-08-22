@@ -48,6 +48,17 @@ where
             .await
             .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
 
+        if rpc_response.is_error() {
+            let json_err = rpc_response
+                .extract_err()
+                .map(|val| {
+                    format!("code: {} | message: {}", val.code, val.message)
+                })
+                .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
+
+            return Err(AccountError::ResolveDIDError(json_err))
+        }
+
         match rpc_response.result {
             Some(doc) => Ok(doc),
             None => Err(AccountError::ResolveDIDError(String::from(
@@ -70,7 +81,7 @@ mod tests {
     use prople_did_core::doc::types::ToDoc;
 
     use prople_jsonrpc_core::objects::RpcRequest;
-    use prople_jsonrpc_core::types::RpcId;
+    use prople_jsonrpc_core::types::{RpcError, RpcErrorBuilder, RpcId, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE};
 
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
@@ -144,5 +155,85 @@ mod tests {
 
         assert!(!resp.is_err());
         mock.assert();
+    }
+
+    #[tokio::test]
+    async fn test_error_endpoint() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]));
+
+        let client = generate_rpc_client();
+        let resp = client
+            .resolve_did_doc(addr, "did:prople:anything".to_string())
+            .await;
+
+        assert!(resp.is_err());
+        assert!(matches!(
+            resp.unwrap_err(),
+            AccountError::InvalidMultiAddr(_)
+        ))
+    }
+
+    #[tokio::test]
+    async fn test_error_response() {
+        let (_, did) = generate_doc();
+        
+        let did_str = did.identity().unwrap().value();
+        let mut server = Server::new_async().await;
+        let base_url = server.url();
+        let (_, port) = parse_url(base_url);
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
+
+        let param = RpcParam::ResolveDIDDoc {
+            did: did_str.clone(),
+        };
+
+        let param_value = param.build_serde_value().unwrap();
+
+        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc)
+            .build_path()
+            .path();
+        
+        let response_err = RpcErrorBuilder::<AccountError>::build(RpcError::InvalidParams, None);
+        let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
+            id: Some(RpcId::IntegerVal(1)),
+            result: None,
+            error: Some(response_err),
+            jsonrpc: String::from("2.0"),
+        };
+        
+        let jsonresp_str_builder = serde_json::to_string(&jsonresp).unwrap();
+
+        let request_payload = RpcRequest {
+            jsonrpc: String::from("2.0"),
+            method: rpc_method.clone(),
+            params: param_value,
+            id: None,
+        };
+        
+        let request_payload_value = serde_json::to_value(request_payload).unwrap();
+
+        let mock = server
+            .mock("POST", "/rpc")
+            .match_body(Matcher::Json(request_payload_value))
+            .with_status(201)
+            .with_header("content-type", "application/json")
+            .with_body(jsonresp_str_builder)
+            .create_async()
+            .await;
+        
+        let client = generate_rpc_client();
+        let resp = client.resolve_did_doc(addr, did_str).await;
+
+        assert!(resp.is_err());
+        mock.assert();
+
+        let err_msg = resp.unwrap_err();
+        match err_msg {
+            AccountError::ResolveDIDError(msg) => {
+                assert!(msg.contains(INVALID_PARAMS_MESSAGE));
+                assert!(msg.contains(&INVALID_PARAMS_CODE.to_string()));
+            },
+            _ => panic!("unknown error enum") 
+        }
     }
 }
