@@ -1,8 +1,15 @@
 use multiaddr::{Multiaddr, Protocol};
 
-use rst_common::with_errors::thiserror::{self, Error};
+use rst_common::{
+    standard::serde::de::DeserializeOwned,
+    with_errors::thiserror::{self, Error},
+};
+
+use prople_jsonrpc_client::types::{Executor, ExecutorError, JSONResponse};
 
 const RPC_PATH: &str = "/rpc";
+
+use super::types::{RpcMethod, RpcParam};
 
 #[derive(Debug, Error)]
 pub enum EndpointError {
@@ -11,6 +18,49 @@ pub enum EndpointError {
 
     #[error("rpc error: empty addr")]
     EmptyMultiAddr,
+}
+
+#[derive(Debug, Error)]
+pub enum CallError {
+    #[error("endpoint error: {0}")]
+    EndpointError(#[from] EndpointError),
+
+    #[error("executor error: {0}")]
+    ExecutorError(#[from] ExecutorError),
+
+    #[error("response error: {0}")]
+    ResponseError(String),
+}
+
+pub async fn call<T, E, TExec>(
+    client: TExec,
+    addr: Multiaddr,
+    method: RpcMethod,
+    param: RpcParam,
+) -> Result<JSONResponse<T, E>, CallError>
+where
+    T: Clone + Send + Sync + DeserializeOwned,
+    E: Clone,
+    TExec: Executor<T, ErrorData = E>,
+{
+    let endpoint = build_endpoint(addr).map_err(|err| CallError::EndpointError(err))?;
+
+    let rpc_method = method.build_path().path();
+    let rpc_response = client
+        .call(endpoint, param, rpc_method, None)
+        .await
+        .map_err(|err| CallError::ExecutorError(err))?;
+
+    if rpc_response.is_error() {
+        let json_err = rpc_response
+            .extract_err()
+            .map(|val| format!("code: {} | message: {}", val.code, val.message))
+            .map_err(|err| CallError::ExecutorError(err))?;
+
+        return Err(CallError::ResponseError(json_err));
+    }
+
+    Ok(rpc_response)
 }
 
 /// build_endpoint used to parse given [`Multiaddr`] object into supported endpoint url

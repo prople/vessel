@@ -1,6 +1,7 @@
 use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json::{self, Value};
 
+use prople_did_core::verifiable::objects::VC;
 use prople_jsonrpc_client::types::{ExecutorError, RpcValue};
 
 const RPC_METHOD_PREFIX: &str = "prople.vessel";
@@ -16,6 +17,8 @@ impl RpcMethodPath {
 
 pub enum RpcMethodVesselAgent {
     ResolveDIDDoc,
+    SendCredentialToHolder,
+    VerifyCredentialToIssuer,
 }
 
 pub enum RpcMethod {
@@ -30,6 +33,14 @@ impl RpcMethod {
                     "{}.{}.resolve_did_docs",
                     RPC_METHOD_PREFIX, RPC_DOMAIN_DID
                 )),
+                RpcMethodVesselAgent::SendCredentialToHolder => RpcMethodPath(format!(
+                    "{}.{}.send_credential_to_holder",
+                    RPC_METHOD_PREFIX, RPC_DOMAIN_DID
+                )),
+                RpcMethodVesselAgent::VerifyCredentialToIssuer => RpcMethodPath(format!(
+                    "{}.{}.verify_credential_to_issuer",
+                    RPC_METHOD_PREFIX, RPC_DOMAIN_DID
+                )),
             },
         }
     }
@@ -40,6 +51,8 @@ impl RpcMethod {
 #[serde(tag = "method", content = "payload")]
 pub enum RpcParam {
     ResolveDIDDoc { did: String },
+    SendCredentialToHolder { did_holder: String, vc: VC },
+    VerifyCredentialToIssuer { vc: VC },
 }
 
 impl RpcValue for RpcParam {
@@ -79,6 +92,7 @@ mod tests {
             let param = try_rpc_param.unwrap();
             match param {
                 RpcParam::ResolveDIDDoc { did } => did,
+                _ => String::from(""),
             }
         };
 

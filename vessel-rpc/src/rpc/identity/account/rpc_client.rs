@@ -8,20 +8,20 @@ use prople_jsonrpc_client::types::Executor;
 use prople_vessel_core::identity::account::types::AccountError;
 use prople_vessel_core::identity::account::types::RpcBuilder;
 
-use crate::rpc::shared::rpc::build_endpoint;
 use crate::rpc::shared::rpc::types::{RpcMethod, RpcMethodVesselAgent, RpcParam};
+use crate::rpc::shared::rpc::{call, CallError};
 
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
 where
-    TExecutor: Executor<Doc, ErrorData = AccountError>,
+    TExecutor: Executor<Doc, ErrorData = AccountError> + Clone,
 {
     client: TExecutor,
 }
 
 impl<TExecutor> RpcClient<TExecutor>
 where
-    TExecutor: Executor<Doc, ErrorData = AccountError>,
+    TExecutor: Executor<Doc, ErrorData = AccountError> + Clone,
 {
     pub fn new(client: TExecutor) -> Self {
         Self { client }
@@ -34,30 +34,19 @@ where
     TExecutor: Executor<Doc, ErrorData = AccountError> + Send + Sync + Clone,
 {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError> {
-        let endpoint =
-            build_endpoint(addr).map_err(|err| AccountError::InvalidMultiAddr(err.to_string()))?;
-
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc)
-            .build_path()
-            .path();
-
         let rpc_param = RpcParam::ResolveDIDDoc { did };
-        let rpc_response = self
-            .client
-            .call(endpoint, rpc_param, rpc_method, None)
-            .await
-            .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
-
-        if rpc_response.is_error() {
-            let json_err = rpc_response
-                .extract_err()
-                .map(|val| {
-                    format!("code: {} | message: {}", val.code, val.message)
-                })
-                .map_err(|err| AccountError::ResolveDIDError(err.to_string()))?;
-
-            return Err(AccountError::ResolveDIDError(json_err))
-        }
+        let rpc_response = call(
+            self.client.clone(),
+            addr,
+            RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc),
+            rpc_param,
+        )
+        .await
+        .map_err(|err| match err {
+            CallError::EndpointError(e) => AccountError::InvalidMultiAddr(e.to_string()),
+            CallError::ExecutorError(e) => AccountError::ResolveDIDError(e.to_string()),
+            CallError::ResponseError(e) => AccountError::ResolveDIDError(e.to_string()),
+        })?;
 
         match rpc_response.result {
             Some(doc) => Ok(doc),
@@ -81,7 +70,9 @@ mod tests {
     use prople_did_core::doc::types::ToDoc;
 
     use prople_jsonrpc_core::objects::RpcRequest;
-    use prople_jsonrpc_core::types::{RpcError, RpcErrorBuilder, RpcId, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE};
+    use prople_jsonrpc_core::types::{
+        RpcError, RpcErrorBuilder, RpcId, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE,
+    };
 
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
@@ -176,7 +167,7 @@ mod tests {
     #[tokio::test]
     async fn test_error_response() {
         let (_, did) = generate_doc();
-        
+
         let did_str = did.identity().unwrap().value();
         let mut server = Server::new_async().await;
         let base_url = server.url();
@@ -192,7 +183,7 @@ mod tests {
         let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc)
             .build_path()
             .path();
-        
+
         let response_err = RpcErrorBuilder::<AccountError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
@@ -200,7 +191,7 @@ mod tests {
             error: Some(response_err),
             jsonrpc: String::from("2.0"),
         };
-        
+
         let jsonresp_str_builder = serde_json::to_string(&jsonresp).unwrap();
 
         let request_payload = RpcRequest {
@@ -209,7 +200,7 @@ mod tests {
             params: param_value,
             id: None,
         };
-        
+
         let request_payload_value = serde_json::to_value(request_payload).unwrap();
 
         let mock = server
@@ -220,7 +211,7 @@ mod tests {
             .with_body(jsonresp_str_builder)
             .create_async()
             .await;
-        
+
         let client = generate_rpc_client();
         let resp = client.resolve_did_doc(addr, did_str).await;
 
@@ -232,8 +223,8 @@ mod tests {
             AccountError::ResolveDIDError(msg) => {
                 assert!(msg.contains(INVALID_PARAMS_MESSAGE));
                 assert!(msg.contains(&INVALID_PARAMS_CODE.to_string()));
-            },
-            _ => panic!("unknown error enum") 
+            }
+            _ => panic!("unknown error enum"),
         }
     }
 }
