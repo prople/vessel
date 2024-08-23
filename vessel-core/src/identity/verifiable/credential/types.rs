@@ -4,6 +4,7 @@ use multiaddr::Multiaddr;
 
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
+use rst_common::standard::serde::{self, Serialize, Deserialize};
 use rst_common::standard::serde_json::value::Value;
 use rst_common::with_errors::thiserror::{self, Error};
 
@@ -17,7 +18,8 @@ use crate::identity::account::types::{AccountAPI, AccountEntityAccessor};
 use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
-#[derive(Debug, Error, Clone)]
+#[derive(Debug, Error, Clone, Serialize, Deserialize)]
+#[serde(crate="self::serde")]
 pub enum CredentialError {
     #[error("unable to generate credential: {0}")]
     GenerateError(String),
@@ -45,6 +47,9 @@ pub enum CredentialError {
 
     #[error("unable unserialize account: {0}")]
     UnserializeError(String),
+
+    #[error("invalid multiaddr: {0}")]
+    InvalidMultiAddr(String),
 
     #[error("common error: {0}")]
     CommonError(#[from] VerifiableError),

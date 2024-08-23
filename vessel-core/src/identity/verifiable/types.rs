@@ -1,8 +1,10 @@
 use rst_common::with_errors::thiserror::{self, Error};
+use rst_common::standard::serde::{self, Serialize, Deserialize};
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
-#[derive(Debug, Error, Clone)]
+#[derive(Debug, Error, Clone, Serialize, Deserialize)]
+#[serde(crate="self::serde")]
 pub enum VerifiableError {
     #[error("did error: {0}")]
     DIDError(String),
