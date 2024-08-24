@@ -121,20 +121,20 @@ where
             PresentationError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
         })?;
 
-        if uri_addr.is_none() {
-            return Err(PresentationError::CommonError(
-                VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
-            ));
-        }
+        let addr = uri_addr.ok_or(PresentationError::CommonError(
+            VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
+        ))?;
 
         let presentation = self.repo().get_by_id(id).await?;
-        self.rpc().send_to_verifier(uri_did, presentation.vp).await
+        self.rpc()
+            .send_to_verifier(addr, uri_did, presentation.vp)
+            .await
     }
 
     async fn generate(
         &self,
         password: String,
-        did_issuer_uri: String,
+        did_issuer: String,
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError> {
@@ -144,18 +144,9 @@ where
             ));
         }
 
-        if did_issuer_uri.is_empty() {
+        if did_issuer.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("did_issuer was missing".to_string()),
-            ));
-        }
-
-        let check_did_issuer_has_params = URI::has_params(did_issuer_uri.clone())
-            .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
-
-        if !check_did_issuer_has_params {
-            return Err(PresentationError::CommonError(
-                VerifiableError::ValidationError("did_issuer_uri is not valid".to_string()),
             ));
         }
 
@@ -165,19 +156,16 @@ where
             .await
             .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
-        let (_, _, did_issuer) = URI::parse(did_issuer_uri.clone())
-            .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
-
         let account = self
             .account()
-            .get_account_did(did_issuer)
+            .get_account_did(did_issuer.clone())
             .await
             .map_err(|err| {
                 PresentationError::CommonError(VerifiableError::DIDError(err.to_string()))
             })?;
 
         let presentation =
-            Presentation::generate(password, did_issuer_uri, account, vcs, proof_params)?;
+            Presentation::generate(password, did_issuer, account, vcs, proof_params)?;
 
         let _ = self.repo().save(&presentation.clone()).await?;
         Ok(presentation)
@@ -330,7 +318,7 @@ mod tests {
 
         #[async_trait]
         impl RpcBuilder for FakeRPCClient {
-            async fn send_to_verifier(&self, did_verifier: String, vp: VP) -> Result<(), PresentationError>;
+            async fn send_to_verifier(&self, addr: Multiaddr, did_verifier: String, vp: VP) -> Result<(), PresentationError>;
         }
     );
 
@@ -854,9 +842,9 @@ mod tests {
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_to_verifier()
-                .with(eq(verifier_did_value), eq(presentation.vp))
+                .with(eq(addr), eq(verifier_did_value), eq(presentation.vp))
                 .times(1)
-                .returning(|_, _| Ok(()));
+                .returning(|_, _, _| Ok(()));
 
             expected
         });

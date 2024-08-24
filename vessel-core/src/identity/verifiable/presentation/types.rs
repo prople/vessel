@@ -1,5 +1,7 @@
+use multiaddr::Multiaddr;
 use std::fmt::Debug;
 
+use rst_common::standard::serde::{self, Serialize, Deserialize};
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::with_errors::thiserror::{self, Error};
@@ -16,7 +18,8 @@ use crate::identity::verifiable::types::VerifiableError;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
-#[derive(Debug, Error, Clone)]
+#[derive(Debug, Error, Clone, Serialize, Deserialize)]
+#[serde(crate="self::serde")]
 pub enum PresentationError {
     #[error("unable to generate vp: {0}")]
     GenerateError(String),
@@ -142,8 +145,12 @@ pub trait RepoBuilder: Clone + Sync + Send {
 /// `RpcBuilder` it's an abstraction to cover Presentation's RPC needs
 #[async_trait]
 pub trait RpcBuilder: Clone + Sync + Send {
-    async fn send_to_verifier(&self, did_verifier: String, vp: VP)
-        -> Result<(), PresentationError>;
+    async fn send_to_verifier(
+        &self,
+        addr: Multiaddr,
+        did_verifier: String,
+        vp: VP,
+    ) -> Result<(), PresentationError>;
 }
 
 /// `UsecaseBuilder` is a main abstraction that should be used by application level controller for the Presentation

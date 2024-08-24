@@ -4,7 +4,7 @@ use multiaddr::Multiaddr;
 
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
-use rst_common::standard::serde::{self, Serialize, Deserialize};
+use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json::value::Value;
 use rst_common::with_errors::thiserror::{self, Error};
 
@@ -19,7 +19,7 @@ use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
 #[derive(Debug, Error, Clone, Serialize, Deserialize)]
-#[serde(crate="self::serde")]
+#[serde(crate = "self::serde")]
 pub enum CredentialError {
     #[error("unable to generate credential: {0}")]
     GenerateError(String),

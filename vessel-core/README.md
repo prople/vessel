@@ -17,5 +17,5 @@ The main purpose of this package is to provide a domain abstraction for the `pro
 
 ```toml
 [dependencies]
-prople-vessel-core = {version = "0.3.1"}
+prople-vessel-core = {version = "0.3.3"}
 ```
