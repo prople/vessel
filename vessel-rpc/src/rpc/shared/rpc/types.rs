@@ -1,7 +1,7 @@
 use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json::{self, Value};
 
-use prople_did_core::verifiable::objects::VC;
+use prople_did_core::verifiable::objects::{VC, VP};
 use prople_jsonrpc_client::types::{ExecutorError, RpcValue};
 
 const RPC_METHOD_PREFIX: &str = "prople.vessel";
@@ -19,6 +19,7 @@ pub enum RpcMethodVesselAgent {
     ResolveDIDDoc,
     SendCredentialToHolder,
     VerifyCredentialToIssuer,
+    SendToVerifier
 }
 
 pub enum RpcMethod {
@@ -41,6 +42,10 @@ impl RpcMethod {
                     "{}.{}.verify_credential_to_issuer",
                     RPC_METHOD_PREFIX, RPC_DOMAIN_DID
                 )),
+                RpcMethodVesselAgent::SendToVerifier => RpcMethodPath(format!(
+                    "{}.{}.send_to_verifier",
+                    RPC_METHOD_PREFIX, RPC_DOMAIN_DID
+                )),
             },
         }
     }
@@ -53,6 +58,7 @@ pub enum RpcParam {
     ResolveDIDDoc { did: String },
     SendCredentialToHolder { did_holder: String, vc: VC },
     VerifyCredentialToIssuer { vc: VC },
+    SendToVerifier { did_verifier: String, vp: VP }
 }
 
 impl RpcValue for RpcParam {
