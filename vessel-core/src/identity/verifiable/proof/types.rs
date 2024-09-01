@@ -1,4 +1,5 @@
 use rst_common::with_errors::thiserror::{self, Error};
+use rst_common::standard::serde::{self, Serialize, Deserialize};
 
 use prople_did_core::verifiable::objects::Proof;
 
@@ -8,6 +9,9 @@ pub enum ProofError {
     BuildError(String),
 }
 
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(crate = "self::serde")]
 /// `ProofParams` used to build our `Verifiable Credential Proof` data object or [`Proof`]
 /// This object will be optional used at [`VerifiableUsecaseBuilder::vc_generate`]
 pub struct Params {

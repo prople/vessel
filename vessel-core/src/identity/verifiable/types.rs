@@ -25,6 +25,8 @@ pub enum VerifiableError {
     MethodNotImplemented,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(crate = "self::serde")]
 /// `PaginationParams` used when we need to load a list of something from persistent storage
 /// it assumed using common pagination params contains of page, limit and skip
 pub struct PaginationParams {
