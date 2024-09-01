@@ -5,11 +5,10 @@ use rst_common::{
     with_errors::thiserror::{self, Error},
 };
 
-use prople_jsonrpc_client::types::{Executor, ExecutorError, JSONResponse};
+use prople_jsonrpc_client::types::{Executor, ExecutorError, JSONResponse, RpcValue};
+use prople_jsonrpc_core::types::RpcMethod;
 
 const RPC_PATH: &str = "/rpc";
-
-use super::types::{RpcMethod, RpcParam};
 
 #[derive(Debug, Error)]
 pub enum EndpointError {
@@ -36,7 +35,7 @@ pub async fn call<T, E, TExec>(
     client: TExec,
     addr: Multiaddr,
     method: RpcMethod,
-    param: RpcParam,
+    param: impl RpcValue,
 ) -> Result<JSONResponse<T, E>, CallError>
 where
     T: Clone + Send + Sync + DeserializeOwned,
@@ -45,7 +44,7 @@ where
 {
     let endpoint = build_endpoint(addr).map_err(|err| CallError::EndpointError(err))?;
 
-    let rpc_method = method.build_path().path();
+    let rpc_method = method.to_string();
     let rpc_response = client
         .call(endpoint, param, rpc_method, None)
         .await

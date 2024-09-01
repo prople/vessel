@@ -7,8 +7,11 @@ use prople_jsonrpc_client::types::Executor;
 
 use prople_vessel_core::identity::verifiable::credential::types::{CredentialError, RpcBuilder};
 
+use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::rpc::{call, CallError};
-use crate::rpc::shared::rpc::types::{RpcMethod, RpcMethodVesselAgent, RpcParam};
+
+use super::rpc_method::{Method, Vessel as VesselMethod};
+use super::rpc_param::{Param, Vessel as VesselParam};
 
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
@@ -38,20 +41,18 @@ where
         addr: Multiaddr,
         vc: VC,
     ) -> Result<(), CredentialError> {
-        let rpc_param = RpcParam::SendCredentialToHolder { did_holder, vc };
+        let rpc_param = Param::Vessel(VesselParam::ReceiveCredentialByHolder { did_holder, vc });
         let _ = call(
             self.client.clone(),
             addr,
-            RpcMethod::VesselAgent(RpcMethodVesselAgent::SendCredentialToHolder),
+            build_rpc_method(Method::Vessel(VesselMethod::ReceiveCredentialByHolder)),
             rpc_param,
         )
         .await
-        .map_err(|err| {
-            match err {
-                CallError::EndpointError(e) => CredentialError::InvalidMultiAddr(e.to_string()),
-                CallError::ExecutorError(e) => CredentialError::SendError(e.to_string()),
-                CallError::ResponseError(e) => CredentialError::SendError(e.to_string())
-            }
+        .map_err(|err| match err {
+            CallError::EndpointError(e) => CredentialError::InvalidMultiAddr(e.to_string()),
+            CallError::ExecutorError(e) => CredentialError::SendError(e.to_string()),
+            CallError::ResponseError(e) => CredentialError::SendError(e.to_string()),
         })?;
 
         Ok(())
@@ -62,20 +63,18 @@ where
         addr: Multiaddr,
         vc: VC,
     ) -> Result<(), CredentialError> {
-        let rpc_param = RpcParam::VerifyCredentialToIssuer { vc };
+        let rpc_param = Param::Vessel(VesselParam::VerifyCredentialToIssuer { vc });
         let _ = call(
             self.client.clone(),
             addr,
-            RpcMethod::VesselAgent(RpcMethodVesselAgent::VerifyCredentialToIssuer),
+            build_rpc_method(Method::Vessel(VesselMethod::VerifyCredentialToIssuer)),
             rpc_param,
         )
         .await
-        .map_err(|err| {
-            match err {
-                CallError::EndpointError(e) => CredentialError::InvalidMultiAddr(e.to_string()),
-                CallError::ExecutorError(e) => CredentialError::SendError(e.to_string()),
-                CallError::ResponseError(e) => CredentialError::SendError(e.to_string())
-            }
+        .map_err(|err| match err {
+            CallError::EndpointError(e) => CredentialError::InvalidMultiAddr(e.to_string()),
+            CallError::ExecutorError(e) => CredentialError::SendError(e.to_string()),
+            CallError::ResponseError(e) => CredentialError::SendError(e.to_string()),
         })?;
 
         Ok(())
@@ -94,11 +93,13 @@ mod tests {
     use prople_did_core::verifiable::objects::VC;
 
     use prople_jsonrpc_core::objects::RpcRequest;
-    use prople_jsonrpc_core::types::{RpcId, RpcErrorBuilder, RpcError, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE};
+    use prople_jsonrpc_core::types::{
+        RpcError, RpcErrorBuilder, RpcId, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE,
+    };
 
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
-    
+
     fn generate_rpc_client() -> RpcClient<ReqwestExecutor<(), CredentialError>> {
         return RpcClient::new(ReqwestExecutor::new());
     }
@@ -106,7 +107,7 @@ mod tests {
     fn generate_vc(id: String, issuer: String) -> VC {
         VC::new(id, issuer)
     }
-    
+
     fn parse_url(url: String) -> (String, u16) {
         let splitted = url.as_str().split(":").collect::<Vec<&str>>();
         let port_str = splitted[2].parse::<u16>();
@@ -121,31 +122,31 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("id"), String::from("issuer"));
-        let param = RpcParam::SendCredentialToHolder { did_holder: String::from("did-holder"), vc: vc.clone()  };
+        let param = Param::Vessel(VesselParam::ReceiveCredentialByHolder {
+            did_holder: String::from("did-holder"),
+            vc: vc.clone(),
+        });
         let param_value = param.build_serde_value().unwrap();
-        
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::SendCredentialToHolder)
-            .build_path()
-            .path();
 
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::ReceiveCredentialByHolder));
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: None,
             jsonrpc: String::from("2.0"),
         };
-        
+
         let jsonresp_str_builder = serde_json::to_string(&jsonresp).unwrap();
-        
+
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };
-        
+
         let request_payload_value = serde_json::to_value(request_payload).unwrap();
-        
+
         let mock = server
             .mock("POST", "/rpc")
             .match_body(Matcher::Json(request_payload_value))
@@ -154,9 +155,11 @@ mod tests {
             .with_body(jsonresp_str_builder)
             .create_async()
             .await;
-        
+
         let client = generate_rpc_client();
-        let resp = client.send_credential_to_holder(String::from("did-holder"), addr, vc).await;
+        let resp = client
+            .send_credential_to_holder(String::from("did-holder"), addr, vc)
+            .await;
 
         assert!(!resp.is_err());
         mock.assert();
@@ -170,31 +173,28 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("id"), String::from("issuer"));
-        let param = RpcParam::VerifyCredentialToIssuer { vc: vc.clone() };
+        let param = Param::Vessel(VesselParam::VerifyCredentialToIssuer { vc: vc.clone() });
         let param_value = param.build_serde_value().unwrap();
-        
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::VerifyCredentialToIssuer)
-            .build_path()
-            .path();
 
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredentialToIssuer));
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: None,
             jsonrpc: String::from("2.0"),
         };
-        
+
         let jsonresp_str_builder = serde_json::to_string(&jsonresp).unwrap();
-        
+
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };
-        
+
         let request_payload_value = serde_json::to_value(request_payload).unwrap();
-        
+
         let mock = server
             .mock("POST", "/rpc")
             .match_body(Matcher::Json(request_payload_value))
@@ -203,13 +203,13 @@ mod tests {
             .with_body(jsonresp_str_builder)
             .create_async()
             .await;
-        
+
         let client = generate_rpc_client();
         let resp = client.verify_credential_to_issuer(addr, vc).await;
 
         assert!(!resp.is_err());
         mock.assert();
-    }   
+    }
 
     #[tokio::test]
     async fn test_error_endpoint_send_credential_to_holder() {
@@ -217,7 +217,9 @@ mod tests {
 
         let vc = generate_vc(String::from("id"), String::from("issuer"));
         let client = generate_rpc_client();
-        let resp = client.send_credential_to_holder(String::from("did-holder"), addr, vc).await;
+        let resp = client
+            .send_credential_to_holder(String::from("did-holder"), addr, vc)
+            .await;
 
         assert!(resp.is_err());
         assert!(matches!(
@@ -240,7 +242,7 @@ mod tests {
             CredentialError::InvalidMultiAddr(_)
         ))
     }
-    
+
     #[tokio::test]
     async fn test_error_response_send_credential_to_holder() {
         let mut server = Server::new_async().await;
@@ -249,14 +251,14 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("did-holder"), String::from("issuer"));
-        let param = RpcParam::SendCredentialToHolder { did_holder: String::from("did-holder"), vc: vc.clone() };
+        let param = Param::Vessel(VesselParam::ReceiveCredentialByHolder {
+            did_holder: String::from("did-holder"),
+            vc: vc.clone(),
+        });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::SendCredentialToHolder)
-            .build_path()
-            .path();
-
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::ReceiveCredentialByHolder));
         let response_err = RpcErrorBuilder::<CredentialError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
@@ -269,7 +271,7 @@ mod tests {
 
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };
@@ -286,7 +288,9 @@ mod tests {
             .await;
 
         let client = generate_rpc_client();
-        let resp = client.send_credential_to_holder(String::from("did-holder"), addr, vc).await;
+        let resp = client
+            .send_credential_to_holder(String::from("did-holder"), addr, vc)
+            .await;
 
         assert!(resp.is_err());
         mock.assert();
@@ -309,14 +313,11 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("did-holder"), String::from("issuer"));
-        let param = RpcParam::VerifyCredentialToIssuer { vc: vc.clone() };
+        let param = Param::Vessel(VesselParam::VerifyCredentialToIssuer { vc: vc.clone() });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::VerifyCredentialToIssuer)
-            .build_path()
-            .path();
-
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredentialToIssuer));
         let response_err = RpcErrorBuilder::<CredentialError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
@@ -329,7 +330,7 @@ mod tests {
 
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };

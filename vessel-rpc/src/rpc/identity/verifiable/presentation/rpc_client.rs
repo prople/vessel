@@ -5,10 +5,14 @@ use rst_common::standard::async_trait::async_trait;
 use prople_did_core::verifiable::objects::VP;
 use prople_jsonrpc_client::types::Executor;
 
-use prople_vessel_core::identity::verifiable::presentation::types::{PresentationError, RpcBuilder};
+use prople_vessel_core::identity::verifiable::presentation::types::{
+    PresentationError, RpcBuilder,
+};
 
+use super::rpc_method::{Method, Vessel as VesselMethod};
+use super::rpc_param::{Param, Vessel as VesselParam};
 use crate::rpc::shared::rpc::call;
-use crate::rpc::shared::rpc::types::{RpcMethod, RpcMethodVesselAgent, RpcParam};
+use crate::rpc::shared::rpc::method::build_rpc_method;
 
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
@@ -38,11 +42,12 @@ where
         did_verifier: String,
         vp: VP,
     ) -> Result<(), PresentationError> {
-        let rpc_param = RpcParam::SendToVerifier { did_verifier, vp };
+        let rpc_param =
+            Param::Vessel(VesselParam::ReceivePresentationByVerifier { did_verifier, vp });
         let _ = call(
             self.client.clone(),
             addr,
-            RpcMethod::VesselAgent(RpcMethodVesselAgent::SendToVerifier),
+            build_rpc_method(Method::Vessel(VesselMethod::ReceivePresentationByVerifier)),
             rpc_param,
         )
         .await
@@ -64,11 +69,13 @@ mod tests {
     use prople_did_core::verifiable::objects::VP;
 
     use prople_jsonrpc_core::objects::RpcRequest;
-    use prople_jsonrpc_core::types::{RpcId, RpcErrorBuilder, RpcError, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE};
+    use prople_jsonrpc_core::types::{
+        RpcError, RpcErrorBuilder, RpcId, INVALID_PARAMS_CODE, INVALID_PARAMS_MESSAGE,
+    };
 
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
-    
+
     fn generate_rpc_client() -> RpcClient<ReqwestExecutor<(), PresentationError>> {
         return RpcClient::new(ReqwestExecutor::new());
     }
@@ -76,7 +83,7 @@ mod tests {
     fn generate_vp() -> VP {
         VP::new()
     }
-    
+
     fn parse_url(url: String) -> (String, u16) {
         let splitted = url.as_str().split(":").collect::<Vec<&str>>();
         let port_str = splitted[2].parse::<u16>();
@@ -91,31 +98,32 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vp = generate_vp();
-        let param = RpcParam::SendToVerifier { did_verifier: "did-verifier".to_string(), vp: vp.clone() };
+        let param = Param::Vessel(VesselParam::ReceivePresentationByVerifier {
+            did_verifier: String::from("did:verifier"),
+            vp: vp.clone(),
+        });
         let param_value = param.build_serde_value().unwrap();
-        
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::SendToVerifier)
-            .build_path()
-            .path();
 
+        let rpc_method =
+            build_rpc_method(Method::Vessel(VesselMethod::ReceivePresentationByVerifier));
         let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: None,
             jsonrpc: String::from("2.0"),
         };
-        
+
         let jsonresp_str_builder = serde_json::to_string(&jsonresp).unwrap();
-        
+
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };
-        
+
         let request_payload_value = serde_json::to_value(request_payload).unwrap();
-        
+
         let mock = server
             .mock("POST", "/rpc")
             .match_body(Matcher::Json(request_payload_value))
@@ -124,9 +132,11 @@ mod tests {
             .with_body(jsonresp_str_builder)
             .create_async()
             .await;
-        
+
         let client = generate_rpc_client();
-        let resp = client.send_to_verifier(addr, String::from("did-verifier"), vp).await;
+        let resp = client
+            .send_to_verifier(addr, String::from("did:verifier"), vp)
+            .await;
 
         assert!(!resp.is_err());
         mock.assert();
@@ -138,7 +148,9 @@ mod tests {
 
         let vp = generate_vp();
         let client = generate_rpc_client();
-        let resp = client.send_to_verifier(addr, String::from("did-verifier"), vp).await;
+        let resp = client
+            .send_to_verifier(addr, String::from("did-verifier"), vp)
+            .await;
 
         assert!(resp.is_err());
         assert!(matches!(
@@ -146,7 +158,7 @@ mod tests {
             PresentationError::VerifyError(_)
         ))
     }
- 
+
     #[tokio::test]
     async fn test_error_response_send_to_verifier() {
         let mut server = Server::new_async().await;
@@ -155,15 +167,17 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vp = generate_vp();
-        let param = RpcParam::SendToVerifier { did_verifier: "did-verifier".to_string(), vp: vp.clone() };
+        let param = Param::Vessel(VesselParam::ReceivePresentationByVerifier {
+            did_verifier: String::from("did:verifier"),
+            vp: vp.clone(),
+        });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::SendToVerifier)
-            .build_path()
-            .path();
-
-        let response_err = RpcErrorBuilder::<PresentationError>::build(RpcError::InvalidParams, None);
+        let rpc_method =
+            build_rpc_method(Method::Vessel(VesselMethod::ReceivePresentationByVerifier));
+        let response_err =
+            RpcErrorBuilder::<PresentationError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
@@ -175,7 +189,7 @@ mod tests {
 
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };
@@ -192,7 +206,9 @@ mod tests {
             .await;
 
         let client = generate_rpc_client();
-        let resp = client.send_to_verifier(addr, String::from("did-verifier"), vp).await;
+        let resp = client
+            .send_to_verifier(addr, String::from("did:verifier"), vp)
+            .await;
 
         assert!(resp.is_err());
         mock.assert();

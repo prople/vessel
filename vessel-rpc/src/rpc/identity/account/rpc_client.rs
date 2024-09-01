@@ -3,13 +3,17 @@ use multiaddr::Multiaddr;
 use rst_common::standard::async_trait::async_trait;
 
 use prople_did_core::doc::types::Doc;
+
 use prople_jsonrpc_client::types::Executor;
 
 use prople_vessel_core::identity::account::types::AccountError;
 use prople_vessel_core::identity::account::types::RpcBuilder;
 
-use crate::rpc::shared::rpc::types::{RpcMethod, RpcMethodVesselAgent, RpcParam};
+use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::rpc::{call, CallError};
+
+use super::rpc_method::Method;
+use super::rpc_param::{Param, Vessel};
 
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
@@ -34,11 +38,11 @@ where
     TExecutor: Executor<Doc, ErrorData = AccountError> + Send + Sync + Clone,
 {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError> {
-        let rpc_param = RpcParam::ResolveDIDDoc { did };
+        let rpc_param = Param::Vessel(Vessel::ResolveDIDDoc { did });
         let rpc_response = call(
             self.client.clone(),
             addr,
-            RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc),
+            build_rpc_method(Method::ResolveDIDDoc),
             rpc_param,
         )
         .await
@@ -104,16 +108,13 @@ mod tests {
         let (_, port) = parse_url(base_url);
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
-        let param = RpcParam::ResolveDIDDoc {
+        let param = Param::Vessel(Vessel::ResolveDIDDoc {
             did: did_str.clone(),
-        };
+        });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc)
-            .build_path()
-            .path();
-
+        let rpc_method = build_rpc_method(Method::ResolveDIDDoc);
         let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: Some(doc),
@@ -125,7 +126,7 @@ mod tests {
 
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };
@@ -174,16 +175,13 @@ mod tests {
         let (_, port) = parse_url(base_url);
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
-        let param = RpcParam::ResolveDIDDoc {
+        let param = Param::Vessel(Vessel::ResolveDIDDoc {
             did: did_str.clone(),
-        };
+        });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = RpcMethod::VesselAgent(RpcMethodVesselAgent::ResolveDIDDoc)
-            .build_path()
-            .path();
-
+        let rpc_method = build_rpc_method(Method::ResolveDIDDoc);
         let response_err = RpcErrorBuilder::<AccountError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
@@ -196,7 +194,7 @@ mod tests {
 
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
-            method: rpc_method.clone(),
+            method: rpc_method.to_string(),
             params: param_value,
             id: None,
         };

@@ -1,4 +1,4 @@
 mod rpc;
 
-pub mod types;
+pub mod method;
 pub use rpc::{call, CallError};
