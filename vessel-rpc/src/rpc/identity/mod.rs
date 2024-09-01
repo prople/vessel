@@ -50,6 +50,21 @@ impl RPCService for Identity {
     }
 
     fn setup_rpc(&mut self) -> Result<(), CommonError> {
+        if self.account.is_some() {
+            let account_routes = self.account.as_ref().unwrap().routes();
+            self.routes.extend(account_routes);
+        }
+
+        if self.vc.is_some() {
+            let vc_routes = self.vc.as_ref().unwrap().routes();
+            self.routes.extend(vc_routes);
+        }
+
+        if self.vp.is_some() {
+            let vp_routes = self.vp.as_ref().unwrap().routes();
+            self.routes.extend(vp_routes);
+        }
+
         Ok(())
     }
 
