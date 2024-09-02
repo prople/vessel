@@ -1,4 +1,4 @@
-use rstdev_storage::engine::rocksdb::executor::Executor;
+use prople_jsonrpc_core::objects::RpcProcessor;
 
 mod config;
 mod rpc;
@@ -7,15 +7,14 @@ use config::app::App as ConfigApp;
 use config::config::Config;
 use config::parser::Parser as ConfigParser;
 
-use rpc::shared::db::Builder as DbBuilder;
 use rpc::shared::helpers::validate;
-use rpc::shared::types::{CommonError, RPCService};
+use rpc::shared::types::CommonError;
 
-use rpc::identity::Identity;
+use rpc::Manager;
 
 pub struct VesselRPC {
     config: Config,
-    identity: Option<Box<dyn RPCService>>,
+    manager: Manager,
 }
 
 impl VesselRPC {
@@ -24,9 +23,11 @@ impl VesselRPC {
             .parse()
             .map_err(|err| CommonError::DbError(err.to_string()))?;
 
+        let manager = Manager::new();
+
         Ok(Self {
             config,
-            identity: None,
+            manager,
         })
     }
 
@@ -37,29 +38,14 @@ impl VesselRPC {
         Ok(config_app.to_owned())
     }
 
-    pub fn build_db_executor(&self) -> Result<Executor, CommonError> {
-        let executor = {
-            let _ = validate(self.config.clone())?;
-            DbBuilder::new(self.config.clone()).build(|opts| {
-                let opts_db = opts.db();
-                let opts_db_identity = opts_db.identity.clone();
+    pub fn build_rpc_identity(&mut self) -> Result<&mut Self, CommonError> {
+        let _ = validate(self.config.db().to_owned())?;
 
-                let opts_db_common = opts_db_identity.clone().get_common().clone();
-                let opts_db_main = opts_db_identity.clone().get_db_options().clone();
-
-                (opts_db_common, opts_db_main)
-            })?
-        };
-
-        Ok(executor)
+        let _ = self.manager.build_identity_service(self.config.clone())?;
+        Ok(self)
     }
 
-    pub fn build_rpc_identity(&mut self) -> Result<&mut Self, CommonError> {
-        let executor = self.build_db_executor()?;
-        let mut identity = Identity::new(executor);
-        identity.build()?;
-
-        self.identity = Some(Box::new(identity));
-        Ok(self)
+    pub fn processor(&self) -> RpcProcessor {
+        self.manager.processor()
     }
 }

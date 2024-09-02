@@ -17,6 +17,12 @@ pub enum CommonError {
 
     #[error("method error: {0}")]
     MethodError(String),
+
+    #[error("config error: {0}")]
+    ConfigError(String),
+
+    #[error("rpc error: {0}")]
+    RpcError(String)
 }
 
 pub trait ToValidate {
