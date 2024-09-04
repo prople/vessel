@@ -6,4 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+prople-vessel-rpc.workspace = true
+prople-jsonrpc-core.workspace = true
+rst-common.workspace = true
 clap.workspace = true

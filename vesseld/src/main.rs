@@ -1,20 +1,39 @@
-use std::path::PathBuf;
+use clap::{Parser, Subcommand};
+use rst_common::with_tokio::tokio;
 
-use clap::Parser;
+use vesseld::errors::VesselError;
+use vesseld::svc::rpc::Rpc;
 
 #[derive(Parser)]
 #[command(name = "vesseld")]
 #[command(version = "1.0")]
 #[command(long_about = None)]
 struct Cli {
-    #[arg(short, long, value_name = "FILE")]
-    config: Option<PathBuf>
+    #[command(subcommand)]
+    command: Commands,
 }
 
-fn main() {
+#[derive(Subcommand)]
+enum Commands {
+    #[command(name = "rpc")]
+    #[command(about = "Running JSON-RPC server")]
+    Rpc {
+        #[arg(short, long, value_name = "FILE")]
+        #[arg(required = true)]
+        config: Option<String>,
+    },
+}
+
+#[tokio::main]
+async fn main() -> Result<(), VesselError> {
     let cli = Cli::parse();
-    if let Some(conf) = cli.config.as_deref() {
-        let out = conf.to_str();
-        println!("config value: {}", out.unwrap())
+    match &cli.command {
+        Commands::Rpc { config } => {
+            let rpc_server = Rpc::new(config.to_owned().unwrap());
+            let svc = rpc_server.svc()?;
+            let _ = svc.serve().await?;
+        }
     }
+
+    Ok(())
 }
