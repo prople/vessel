@@ -3,8 +3,9 @@ use prople_jsonrpc_core::objects::RpcProcessor;
 mod config;
 mod rpc;
 
-use config::app::App as ConfigApp;
-use config::config::Config;
+pub use config::app::App as ConfigApp;
+pub use config::config::Config;
+
 use config::parser::Parser as ConfigParser;
 
 use rpc::shared::helpers::validate;

@@ -35,12 +35,15 @@ impl RPCService for Identity {
     fn build(&mut self) -> Result<(), CommonError> {
         let mut account = RpcAccount::new(self.db.to_owned());
         account.build()?;
+        account.setup_rpc()?;
 
         let mut vc = RpcCredential::new(self.db.to_owned());
         vc.build()?;
+        vc.setup_rpc()?;
 
         let mut vp = RpcPresentation::new(self.db.to_owned());
         vp.build()?;
+        vp.setup_rpc()?;
 
         self.account = Some(Box::new(account));
         self.vc = Some(Box::new(vc));
