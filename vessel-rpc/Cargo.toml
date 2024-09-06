@@ -1,8 +1,17 @@
 [package]
 name = "prople-vessel-rpc"
 version = "0.1.0"
-edition = "2021"
-publish = false
+description = "Prople Vessel RPC provides core RPC processor"
+readme = "README.md"
+keywords = ["prople", "vessel", "did", "decentralized", "identity"]
+categories = ["api-bindings"]
+documentation = "https://docs.rs/prople-vessel-rpc"
+authors.workspace = true
+rust-version.workspace = true
+edition.workspace = true
+repository.workspace = true
+homepage.workspace = true
+license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
