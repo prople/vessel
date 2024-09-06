@@ -9,6 +9,7 @@ use rst_common::with_http_tokio::axum::{self, Router};
 use rst_common::with_http_tokio::tower_http::timeout::TimeoutLayer;
 use rst_common::with_http_tokio::tower_http::trace::TraceLayer;
 use rst_common::with_tokio::tokio::net::TcpListener;
+use rst_common::with_tokio::tokio::{self, signal};
 use rst_common::with_tracing::tracing;
 use rst_common::with_tracing::tracing_subscriber::{
     self, layer::SubscriberExt, util::SubscriberInitExt,
@@ -85,6 +86,25 @@ impl Svc {
             .with_state(Arc::new(self.state.clone()));
 
         let _ = axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                let ctrl_c = async { signal::ctrl_c().await.expect("error Ctrl-C handler") };
+
+                #[cfg(unix)]
+                let terminate = async {
+                    signal::unix::signal(signal::unix::SignalKind::terminate())
+                        .expect("failed to install signal handler")
+                        .recv()
+                        .await;
+                };
+
+                #[cfg(not(unix))]
+                let terminate = std::future::pending::<()>();
+
+                tokio::select! {
+                    _ = ctrl_c => {},
+                    _ = terminate => {},
+                }
+            })
             .await
             .map_err(|err| VesselError::RpcError(err.to_string()))?;
 
