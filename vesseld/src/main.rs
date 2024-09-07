@@ -1,8 +1,8 @@
 use clap::{Parser, Subcommand};
 use rst_common::with_tokio::tokio;
 
-use prople_vesseld::errors::VesselError;
 use prople_vesseld::svc::rpc::Rpc;
+use prople_jsonrpc_axum::rpc::RpcError;
 
 #[derive(Parser)]
 #[command(name = "vesseld")]
@@ -25,7 +25,7 @@ enum Commands {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), VesselError> {
+async fn main() -> Result<(), RpcError> {
     let cli = Cli::parse();
     match &cli.command {
         Commands::Rpc { config } => {

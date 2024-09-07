@@ -6,7 +6,7 @@
 
 ```toml
 [dependencies]
-prople-vesseld = {version = "0.1.0"}
+prople-vesseld = {version = "0.1.1"}
 ```
 
 Install binary

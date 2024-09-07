@@ -1,6 +1,6 @@
 [package]
 name = "prople-vesseld"
-version = "0.1.0"
+version = "0.1.1"
 description = "Prople Vessel daemon provides RPC and P2P servers"
 readme = "README.md"
 keywords = ["prople", "vessel", "did", "decentralized", "identity"]
@@ -18,5 +18,6 @@ license.workspace = true
 [dependencies]
 prople-vessel-rpc.workspace = true
 prople-jsonrpc-core.workspace = true
+prople-jsonrpc-axum.workspace = true
 rst-common.workspace = true
 clap.workspace = true
