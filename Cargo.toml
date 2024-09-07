@@ -27,6 +27,7 @@ prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 prople-jsonrpc-core = {version = "~0.4"}
 prople-jsonrpc-client = {version = "~0.1"}
+prople-jsonrpc-axum = {version = "~0.2"}
 
 # rstdev and rst_common libraries
 rst-common = {version = "~1", features=["standard", "with-errors", "with-tokio", "with-tracing", "with-http-tokio"]}
