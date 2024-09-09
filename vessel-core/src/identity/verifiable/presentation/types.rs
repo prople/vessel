@@ -87,16 +87,16 @@ pub trait PresentationAPI: Clone {
         proof_params: Option<ProofParams>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
-    async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
+    async fn send_presentation(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
 
-    async fn verify_presentation_by_verifier(&self, id: String) -> Result<(), PresentationError>;
+    async fn verify_presentation(&self, id: String) -> Result<(), PresentationError>;
 
     async fn get_by_id(
         &self,
         id: String,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
-    async fn receive_presentation_by_verifier(
+    async fn post_presentation(
         &self,
         did_verifier: String,
         vp: VP,

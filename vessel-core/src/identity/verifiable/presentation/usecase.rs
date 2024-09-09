@@ -104,7 +104,7 @@ where
         self.repo().get_by_id(id).await
     }
 
-    async fn send_to_verifier(&self, id: String, did_uri: String) -> Result<(), PresentationError> {
+    async fn send_presentation(&self, id: String, did_uri: String) -> Result<(), PresentationError> {
         if id.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
@@ -171,7 +171,7 @@ where
         Ok(presentation)
     }
 
-    async fn receive_presentation_by_verifier(
+    async fn post_presentation(
         &self,
         did_verifier: String,
         vp: VP,
@@ -194,7 +194,7 @@ where
             .await
     }
 
-    async fn verify_presentation_by_verifier(&self, id: String) -> Result<(), PresentationError> {
+    async fn verify_presentation(&self, id: String) -> Result<(), PresentationError> {
         if id.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
@@ -366,19 +366,19 @@ mod tests {
                 proof_params: Option<ProofParams>,
             ) -> Result<Credential, CredentialError>;
 
-            async fn send_credential_to_holder(
+            async fn send_credential(
                 &self,
                 id: String,
                 did_uri: String,
             ) -> Result<(), CredentialError>;
 
-            async fn receive_credential_by_holder(
+            async fn post_credential(
                 &self,
                 did_holder: String,
                 vc: VC,
             ) -> Result<(), CredentialError>;
 
-            async fn verify_credential_by_holder(&self, id: String) -> Result<(), CredentialError>;
+            async fn verify_credential(&self, id: String) -> Result<(), CredentialError>;
 
             async fn list_credentials_by_did(
                 &self,
@@ -853,7 +853,7 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let send_output = uc.send_to_verifier("id1".to_string(), did_holder_uri).await;
+        let send_output = uc.send_presentation("id1".to_string(), did_holder_uri).await;
         assert!(!send_output.is_err())
     }
 
@@ -880,7 +880,7 @@ mod tests {
         )
         .unwrap();
 
-        let send_output = uc.send_to_verifier("".to_string(), did_holder_uri).await;
+        let send_output = uc.send_presentation("".to_string(), did_holder_uri).await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -929,7 +929,7 @@ mod tests {
         )
         .unwrap();
 
-        let send_output = uc.send_to_verifier("id1".to_string(), did_holder_uri).await;
+        let send_output = uc.send_presentation("id1".to_string(), did_holder_uri).await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -937,7 +937,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_receive_by_verifier() {
+    async fn test_receive() {
         let (verifier_account, verifier_did) = generate_verifier_account();
         let verifier_did_value = verifier_did.identity().unwrap().value();
 
@@ -971,7 +971,7 @@ mod tests {
         let uc = generate_usecase(repo, rpc, account, credential);
 
         let output = uc
-            .receive_presentation_by_verifier(verifier_did_value, presentation.vp)
+            .post_presentation(verifier_did_value, presentation.vp)
             .await;
 
         assert!(!output.is_err());
@@ -989,7 +989,7 @@ mod tests {
 
         let vp = presentation.vp;
         let output = uc
-            .receive_presentation_by_verifier("".to_string(), vp.clone())
+            .post_presentation("".to_string(), vp.clone())
             .await;
         assert!(output.is_err());
 
@@ -1103,7 +1103,7 @@ mod tests {
 
         let uc = generate_usecase(repo, rpc, account, credential);
         let verify_vp_checker = uc
-            .verify_presentation_by_verifier("id-holder".to_string())
+            .verify_presentation("id-holder".to_string())
             .await;
 
         assert!(!verify_vp_checker.is_err());
@@ -1152,7 +1152,7 @@ mod tests {
 
         let uc = generate_usecase(repo, rpc, account, credential);
         let verify_vc_checker = uc
-            .verify_presentation_by_verifier("id-holder".to_string())
+            .verify_presentation("id-holder".to_string())
             .await;
 
         assert!(verify_vc_checker.is_err());

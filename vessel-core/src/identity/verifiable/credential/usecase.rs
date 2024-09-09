@@ -124,7 +124,7 @@ where
         self.repo().list_credentials_by_ids(ids).await
     }
 
-    async fn receive_credential_by_holder(
+    async fn post_credential(
         &self,
         did_holder: String,
         vc: VC,
@@ -140,7 +140,7 @@ where
         self.repo().save_credential_holder(&cred_holder).await
     }
 
-    async fn send_credential_to_holder(
+    async fn send_credential(
         &self,
         id: String,
         did_uri: String,
@@ -171,7 +171,7 @@ where
             .await
     }
 
-    async fn verify_credential_by_holder(&self, id: String) -> Result<(), CredentialError> {
+    async fn verify_credential(&self, id: String) -> Result<(), CredentialError> {
         if id.is_empty() {
             return Err(CredentialError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
@@ -933,7 +933,7 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("cred-id".to_string(), did_holder_uri)
+            .send_credential("cred-id".to_string(), did_holder_uri)
             .await;
         assert!(!send_output.is_err())
     }
@@ -946,7 +946,7 @@ mod tests {
 
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("".to_string(), "".to_string())
+            .send_credential("".to_string(), "".to_string())
             .await;
         assert!(send_output.is_err());
 
@@ -996,7 +996,7 @@ mod tests {
 
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("cred-id".to_string(), did_holder_uri)
+            .send_credential("cred-id".to_string(), did_holder_uri)
             .await;
 
         assert!(send_output.clone().is_err());
@@ -1081,7 +1081,7 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential_to_holder("cred-id".to_string(), did_holder_uri)
+            .send_credential("cred-id".to_string(), did_holder_uri)
             .await;
         assert!(send_output.is_err());
         assert!(matches!(
@@ -1122,7 +1122,7 @@ mod tests {
 
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
 
-        let receive = uc.receive_credential_by_holder("".to_string(), vc).await;
+        let receive = uc.post_credential("".to_string(), vc).await;
         assert!(!receive.is_err());
     }
 
@@ -1167,7 +1167,7 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account);
         let verify_vc_checker = uc
-            .verify_credential_by_holder("id-holder".to_string())
+            .verify_credential("id-holder".to_string())
             .await;
 
         assert!(!verify_vc_checker.is_err());
@@ -1212,7 +1212,7 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account);
         let verify_vc_checker = uc
-            .verify_credential_by_holder("id-holder".to_string())
+            .verify_credential("id-holder".to_string())
             .await;
 
         assert!(verify_vc_checker.is_err());
