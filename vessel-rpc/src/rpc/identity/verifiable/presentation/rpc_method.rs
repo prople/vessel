@@ -3,25 +3,25 @@ use prople_jsonrpc_core::types::RpcMethod;
 use crate::rpc::shared::rpc::method::RpcMethodBuilder;
 use crate::rpc::shared::types::CommonError;
 
-const METHOD_VESSEL_RECEIVE_PRESENTATION_BY_VERIFIER: &str =
-    "identity.vp.receive_presentation_by_verifier";
+const METHOD_VESSEL_POST_PRESENTATION: &str =
+    "identity.vp.post_presentation";
 
 const METHOD_DOMAIN_GENERATE: &str = "identity.vp.generate";
-const METHOD_DOMAIN_SEND_TO_VERIFIER: &str = "identity.vp.send_to_verifier";
+const METHOD_DOMAIN_SEND_PRESENTATION: &str = "identity.vp.send_presentation";
 const METHOD_DOMAIN_GET_BY_ID: &str = "identity.vp.get_by_id";
-const METHOD_DOMAIN_VERIFY_PRESENTATION_BY_VERIFIER: &str =
-    "identity.vp.verify_presentation_by_verifier";
+const METHOD_DOMAIN_VERIFY_PRESENTATION: &str =
+    "identity.vp.verify_presentation";
 const METHOD_DOMAIN_LIST_VPS_BY_DID_VERIFIER: &str = "identity.vp.list_vps_by_did_verifier";
 
 #[derive(Clone)]
 pub(crate) enum Vessel {
-    ReceivePresentationByVerifier,
+    PostPresentation,
 }
 
 impl RpcMethodBuilder for Vessel {
     fn build_path(&self) -> &str {
         match self {
-            Vessel::ReceivePresentationByVerifier => METHOD_VESSEL_RECEIVE_PRESENTATION_BY_VERIFIER,
+            Vessel::PostPresentation => METHOD_VESSEL_POST_PRESENTATION,
         }
     }
 }
@@ -29,9 +29,9 @@ impl RpcMethodBuilder for Vessel {
 #[derive(Clone)]
 pub(crate) enum Domain {
     Generate,
-    SendToVerifier,
+    SendPresentation,
     GetByID,
-    VerifyPersentationByVerifier,
+    VerifyPersentation,
     ListVPsByDIDVerifier,
 }
 
@@ -39,9 +39,9 @@ impl RpcMethodBuilder for Domain {
     fn build_path(&self) -> &str {
         match self {
             Domain::Generate => METHOD_DOMAIN_GENERATE,
-            Domain::SendToVerifier => METHOD_DOMAIN_SEND_TO_VERIFIER,
+            Domain::SendPresentation => METHOD_DOMAIN_SEND_PRESENTATION,
             Domain::GetByID => METHOD_DOMAIN_GET_BY_ID,
-            Domain::VerifyPersentationByVerifier => METHOD_DOMAIN_VERIFY_PRESENTATION_BY_VERIFIER,
+            Domain::VerifyPersentation => METHOD_DOMAIN_VERIFY_PRESENTATION,
             Domain::ListVPsByDIDVerifier => METHOD_DOMAIN_LIST_VPS_BY_DID_VERIFIER,
         }
     }
@@ -70,9 +70,9 @@ impl TryFrom<RpcMethod> for Method {
         match given.as_str() {
             _ if given
                 .as_str()
-                .contains(METHOD_VESSEL_RECEIVE_PRESENTATION_BY_VERIFIER) =>
+                .contains(METHOD_VESSEL_POST_PRESENTATION) =>
             {
-                Ok(Self::Vessel(Vessel::ReceivePresentationByVerifier))
+                Ok(Self::Vessel(Vessel::PostPresentation))
             }
             _ if given.as_str().contains(METHOD_DOMAIN_GENERATE) => {
                 Ok(Self::Domain(Domain::Generate))
@@ -86,14 +86,14 @@ impl TryFrom<RpcMethod> for Method {
             {
                 Ok(Self::Domain(Domain::ListVPsByDIDVerifier))
             }
-            _ if given.as_str().contains(METHOD_DOMAIN_SEND_TO_VERIFIER) => {
-                Ok(Self::Domain(Domain::SendToVerifier))
+            _ if given.as_str().contains(METHOD_DOMAIN_SEND_PRESENTATION) => {
+                Ok(Self::Domain(Domain::SendPresentation))
             }
             _ if given
                 .as_str()
-                .contains(METHOD_DOMAIN_VERIFY_PRESENTATION_BY_VERIFIER) =>
+                .contains(METHOD_DOMAIN_VERIFY_PRESENTATION) =>
             {
-                Ok(Self::Domain(Domain::VerifyPersentationByVerifier))
+                Ok(Self::Domain(Domain::VerifyPersentation))
             }
             _ => Err(CommonError::MethodError(format!(
                 "unknown method: {}",

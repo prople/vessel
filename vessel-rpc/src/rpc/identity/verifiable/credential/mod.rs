@@ -90,7 +90,7 @@ impl RPCService for Credential<CredentialAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Vessel(Vessel::ReceiveCredentialByHolder)),
+            build_rpc_method(Method::Vessel(Vessel::PostCredential)),
             controller.clone(),
         ));
 
@@ -110,12 +110,12 @@ impl RPCService for Credential<CredentialAPIImplementer> {
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::SendCredentialToHolder)),
+            build_rpc_method(Method::Domain(Domain::SendCredential)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::VerifyCredentialByHolder)),
+            build_rpc_method(Method::Domain(Domain::VerifyCredential)),
             controller.clone(),
         ));
 

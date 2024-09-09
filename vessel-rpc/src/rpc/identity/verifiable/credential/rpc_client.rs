@@ -41,11 +41,11 @@ where
         addr: Multiaddr,
         vc: VC,
     ) -> Result<(), CredentialError> {
-        let rpc_param = Param::Vessel(VesselParam::ReceiveCredentialByHolder { did_holder, vc });
+        let rpc_param = Param::Vessel(VesselParam::PostCredential { did_holder, vc });
         let _ = call(
             self.client.clone(),
             addr,
-            build_rpc_method(Method::Vessel(VesselMethod::ReceiveCredentialByHolder)),
+            build_rpc_method(Method::Vessel(VesselMethod::PostCredential)),
             rpc_param,
         )
         .await
@@ -63,11 +63,11 @@ where
         addr: Multiaddr,
         vc: VC,
     ) -> Result<(), CredentialError> {
-        let rpc_param = Param::Vessel(VesselParam::VerifyCredentialToIssuer { vc });
+        let rpc_param = Param::Vessel(VesselParam::VerifyCredential { vc });
         let _ = call(
             self.client.clone(),
             addr,
-            build_rpc_method(Method::Vessel(VesselMethod::VerifyCredentialToIssuer)),
+            build_rpc_method(Method::Vessel(VesselMethod::VerifyCredential)),
             rpc_param,
         )
         .await
@@ -122,13 +122,13 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("id"), String::from("issuer"));
-        let param = Param::Vessel(VesselParam::ReceiveCredentialByHolder {
+        let param = Param::Vessel(VesselParam::PostCredential {
             did_holder: String::from("did-holder"),
             vc: vc.clone(),
         });
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::ReceiveCredentialByHolder));
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostCredential));
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
@@ -173,10 +173,10 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("id"), String::from("issuer"));
-        let param = Param::Vessel(VesselParam::VerifyCredentialToIssuer { vc: vc.clone() });
+        let param = Param::Vessel(VesselParam::VerifyCredential { vc: vc.clone() });
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredentialToIssuer));
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredential));
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
@@ -251,14 +251,14 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("did-holder"), String::from("issuer"));
-        let param = Param::Vessel(VesselParam::ReceiveCredentialByHolder {
+        let param = Param::Vessel(VesselParam::PostCredential {
             did_holder: String::from("did-holder"),
             vc: vc.clone(),
         });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::ReceiveCredentialByHolder));
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostCredential));
         let response_err = RpcErrorBuilder::<CredentialError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
@@ -313,11 +313,11 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vc = generate_vc(String::from("did-holder"), String::from("issuer"));
-        let param = Param::Vessel(VesselParam::VerifyCredentialToIssuer { vc: vc.clone() });
+        let param = Param::Vessel(VesselParam::VerifyCredential { vc: vc.clone() });
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredentialToIssuer));
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredential));
         let response_err = RpcErrorBuilder::<CredentialError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),

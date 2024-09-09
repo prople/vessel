@@ -57,10 +57,10 @@ where
     async fn send_to_verifier(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Domain(domain) => match domain {
-                Domain::SendToVerifier { id, did_uri } => {
+                Domain::SendPresentation { id, did_uri } => {
                     let _ = self
                         .presentation_api
-                        .send_to_verifier(id, did_uri)
+                        .send_presentation(id, did_uri)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -75,10 +75,10 @@ where
     async fn verify_presentation_by_verifier(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Domain(domain) => match domain {
-                Domain::VerifyPresentationByVerifier { id } => {
+                Domain::VerifyPresentation { id } => {
                     let _ = self
                         .presentation_api
-                        .verify_presentation_by_verifier(id)
+                        .verify_presentation(id)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -111,10 +111,10 @@ where
     async fn receive_presentation_by_verifier(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Vessel(vessel) => match vessel {
-                VesselParam::ReceivePresentationByVerifier { did_verifier, vp } => {
+                VesselParam::PostPresentation { did_verifier, vp } => {
                     let _ = self
                         .presentation_api
-                        .receive_presentation_by_verifier(did_verifier, vp)
+                        .post_presentation(did_verifier, vp)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -159,7 +159,7 @@ where
 
         match rpc_method {
             Method::Vessel(vessel) => match vessel {
-                VesselMethod::ReceivePresentationByVerifier => {
+                VesselMethod::PostPresentation => {
                     self.receive_presentation_by_verifier(rpc_param).await
                 }
             },
@@ -169,8 +169,8 @@ where
                 DomainMethod::ListVPsByDIDVerifier => {
                     self.list_vps_by_did_verifier(rpc_param).await
                 }
-                DomainMethod::SendToVerifier => self.send_to_verifier(rpc_param).await,
-                DomainMethod::VerifyPersentationByVerifier => {
+                DomainMethod::SendPresentation => self.send_to_verifier(rpc_param).await,
+                DomainMethod::VerifyPersentation => {
                     self.verify_presentation_by_verifier(rpc_param).await
                 }
             },

@@ -11,7 +11,7 @@ use crate::rpc::shared::types::CommonError;
 #[serde(crate = "self::serde")]
 #[serde(tag = "param", content = "payload")]
 pub(crate) enum Vessel {
-    ReceivePresentationByVerifier { did_verifier: String, vp: VP },
+    PostPresentation { did_verifier: String, vp: VP },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -24,11 +24,11 @@ pub(crate) enum Domain {
         credentials: Vec<String>,
         proof_params: Option<ProofParams>,
     },
-    SendToVerifier {
+    SendPresentation {
         id: String,
         did_uri: String,
     },
-    VerifyPresentationByVerifier {
+    VerifyPresentation {
         id: String,
     },
     GetByID {

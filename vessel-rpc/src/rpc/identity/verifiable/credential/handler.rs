@@ -51,10 +51,10 @@ where
     async fn send_credential_to_holder(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Domain(domain) => match domain {
-                Domain::SendCredentialToHolder { id, did_uri } => {
+                Domain::SendCredential { id, did_uri } => {
                     let _ = self
                         .credential_api
-                        .send_credential_to_holder(id, did_uri)
+                        .send_credential(id, did_uri)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -69,10 +69,10 @@ where
     async fn receive_credential_by_holder(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Vessel(vessel) => match vessel {
-                VesselParam::ReceiveCredentialByHolder { did_holder, vc } => {
+                VesselParam::PostCredential { did_holder, vc } => {
                     let _ = self
                         .credential_api
-                        .receive_credential_by_holder(did_holder, vc)
+                        .post_credential(did_holder, vc)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -87,10 +87,10 @@ where
     async fn verify_credential_by_holder(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Domain(domain) => match domain {
-                Domain::VerifyCredentialByHolder { id } => {
+                Domain::VerifyCredential { id } => {
                     let _ = self
                         .credential_api
-                        .verify_credential_by_holder(id)
+                        .verify_credential(id)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -153,7 +153,7 @@ where
 
         match rpc_method {
             Method::Vessel(vessel) => match vessel {
-                VesselMethod::ReceiveCredentialByHolder => {
+                VesselMethod::PostCredential => {
                     self.receive_credential_by_holder(rpc_param).await
                 }
                 _ => Err(RpcError::MethodNotFound),
@@ -162,10 +162,10 @@ where
                 DomainMethod::GenerateCredential => self.generate_credential(rpc_param).await,
                 DomainMethod::ListCredentialsByDID => self.list_credentials_by_did(rpc_param).await,
                 DomainMethod::ListCredentialsByIDs => self.list_credentials_by_ids(rpc_param).await,
-                DomainMethod::SendCredentialToHolder => {
+                DomainMethod::SendCredential => {
                     self.send_credential_to_holder(rpc_param).await
                 }
-                DomainMethod::VerifyCredentialByHolder => {
+                DomainMethod::VerifyCredential => {
                     self.verify_credential_by_holder(rpc_param).await
                 }
             },

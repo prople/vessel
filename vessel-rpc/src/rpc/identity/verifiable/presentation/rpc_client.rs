@@ -43,11 +43,11 @@ where
         vp: VP,
     ) -> Result<(), PresentationError> {
         let rpc_param =
-            Param::Vessel(VesselParam::ReceivePresentationByVerifier { did_verifier, vp });
+            Param::Vessel(VesselParam::PostPresentation { did_verifier, vp });
         let _ = call(
             self.client.clone(),
             addr,
-            build_rpc_method(Method::Vessel(VesselMethod::ReceivePresentationByVerifier)),
+            build_rpc_method(Method::Vessel(VesselMethod::PostPresentation)),
             rpc_param,
         )
         .await
@@ -98,14 +98,14 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vp = generate_vp();
-        let param = Param::Vessel(VesselParam::ReceivePresentationByVerifier {
+        let param = Param::Vessel(VesselParam::PostPresentation {
             did_verifier: String::from("did:verifier"),
             vp: vp.clone(),
         });
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method =
-            build_rpc_method(Method::Vessel(VesselMethod::ReceivePresentationByVerifier));
+            build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
         let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
@@ -167,7 +167,7 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
         let vp = generate_vp();
-        let param = Param::Vessel(VesselParam::ReceivePresentationByVerifier {
+        let param = Param::Vessel(VesselParam::PostPresentation {
             did_verifier: String::from("did:verifier"),
             vp: vp.clone(),
         });
@@ -175,7 +175,7 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method =
-            build_rpc_method(Method::Vessel(VesselMethod::ReceivePresentationByVerifier));
+            build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
         let response_err =
             RpcErrorBuilder::<PresentationError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {

@@ -3,26 +3,26 @@ use prople_jsonrpc_core::types::RpcMethod;
 use crate::rpc::shared::rpc::method::RpcMethodBuilder;
 use crate::rpc::shared::types::CommonError;
 
-const METHOD_VESSEL_RECEIVE_CREDENTIAL_BY_HOLDER: &str = "identity.vc.receive_credential_by_holder";
-const METHOD_VESSEL_VERIFY_CREDENTIAL_TO_ISSUER: &str = "identity.vc.verify_credential_to_issuer";
+const METHOD_VESSEL_POST_CREDENTIAL: &str = "identity.vc.post_credential";
+const METHOD_VESSEL_VERIFY_CREDENTIAL: &str = "identity.vc.verify_credential";
 
 const METHOD_DOMAIN_GENERATE_CREDENTIAL: &str = "identity.vc.generate_credential";
-const METHOD_DOMAIN_SEND_CREDENTIAL_TO_HOLDER: &str = "identity.vc.send_credential_to_holder";
-const METHOD_DOMAIN_VERIFY_CREDENTIAL_BY_HOLDER: &str = "identity.vc.verify_credential_by_holder";
+const METHOD_DOMAIN_SEND_CREDENTIAL: &str = "identity.vc.send_credential";
+const METHOD_DOMAIN_VERIFY_CREDENTIAL: &str = "identity.vc.verify_credential";
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID: &str = "identity.vc.list_credentials_by_did";
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS: &str = "identity.vc.list_credential_by_ids";
 
 #[derive(Clone)]
 pub(crate) enum Vessel {
-    ReceiveCredentialByHolder,
-    VerifyCredentialToIssuer,
+    PostCredential,
+    VerifyCredential,
 }
 
 impl RpcMethodBuilder for Vessel {
     fn build_path(&self) -> &str {
         match self {
-            Vessel::ReceiveCredentialByHolder => METHOD_VESSEL_RECEIVE_CREDENTIAL_BY_HOLDER,
-            Vessel::VerifyCredentialToIssuer => METHOD_VESSEL_VERIFY_CREDENTIAL_TO_ISSUER,
+            Vessel::PostCredential => METHOD_VESSEL_POST_CREDENTIAL,
+            Vessel::VerifyCredential => METHOD_VESSEL_VERIFY_CREDENTIAL,
         }
     }
 }
@@ -30,8 +30,8 @@ impl RpcMethodBuilder for Vessel {
 #[derive(Clone)]
 pub(crate) enum Domain {
     GenerateCredential,
-    SendCredentialToHolder,
-    VerifyCredentialByHolder,
+    SendCredential,
+    VerifyCredential,
     ListCredentialsByDID,
     ListCredentialsByIDs,
 }
@@ -42,8 +42,8 @@ impl RpcMethodBuilder for Domain {
             Domain::GenerateCredential => METHOD_DOMAIN_GENERATE_CREDENTIAL,
             Domain::ListCredentialsByDID => METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID,
             Domain::ListCredentialsByIDs => METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS,
-            Domain::SendCredentialToHolder => METHOD_DOMAIN_SEND_CREDENTIAL_TO_HOLDER,
-            Domain::VerifyCredentialByHolder => METHOD_DOMAIN_VERIFY_CREDENTIAL_BY_HOLDER,
+            Domain::SendCredential => METHOD_DOMAIN_SEND_CREDENTIAL,
+            Domain::VerifyCredential => METHOD_DOMAIN_VERIFY_CREDENTIAL,
         }
     }
 }
@@ -71,15 +71,15 @@ impl TryFrom<RpcMethod> for Method {
         match given.as_str() {
             _ if given
                 .as_str()
-                .contains(METHOD_VESSEL_RECEIVE_CREDENTIAL_BY_HOLDER) =>
+                .contains(METHOD_VESSEL_POST_CREDENTIAL) =>
             {
-                Ok(Self::Vessel(Vessel::ReceiveCredentialByHolder))
+                Ok(Self::Vessel(Vessel::PostCredential))
             }
             _ if given
                 .as_str()
-                .contains(METHOD_VESSEL_VERIFY_CREDENTIAL_TO_ISSUER) =>
+                .contains(METHOD_VESSEL_VERIFY_CREDENTIAL) =>
             {
-                Ok(Self::Vessel(Vessel::VerifyCredentialToIssuer))
+                Ok(Self::Vessel(Vessel::VerifyCredential))
             }
             _ if given.as_str().contains(METHOD_DOMAIN_GENERATE_CREDENTIAL) => {
                 Ok(Self::Domain(Domain::GenerateCredential))
@@ -98,15 +98,15 @@ impl TryFrom<RpcMethod> for Method {
             }
             _ if given
                 .as_str()
-                .contains(METHOD_DOMAIN_SEND_CREDENTIAL_TO_HOLDER) =>
+                .contains(METHOD_DOMAIN_SEND_CREDENTIAL) =>
             {
-                Ok(Self::Domain(Domain::SendCredentialToHolder))
+                Ok(Self::Domain(Domain::SendCredential))
             }
             _ if given
                 .as_str()
-                .contains(METHOD_DOMAIN_VERIFY_CREDENTIAL_BY_HOLDER) =>
+                .contains(METHOD_DOMAIN_VERIFY_CREDENTIAL) =>
             {
-                Ok(Self::Domain(Domain::VerifyCredentialByHolder))
+                Ok(Self::Domain(Domain::VerifyCredential))
             }
             _ => Err(CommonError::MethodError(format!(
                 "unknown method: {}",

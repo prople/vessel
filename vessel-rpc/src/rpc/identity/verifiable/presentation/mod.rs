@@ -119,7 +119,7 @@ impl RPCService for Presentation<PresentationAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Vessel(Vessel::ReceivePresentationByVerifier)),
+            build_rpc_method(Method::Vessel(Vessel::PostPresentation)),
             controller.clone(),
         ));
 
@@ -139,12 +139,12 @@ impl RPCService for Presentation<PresentationAPIImplementer> {
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::SendToVerifier)),
+            build_rpc_method(Method::Domain(Domain::SendPresentation)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::VerifyPersentationByVerifier)),
+            build_rpc_method(Method::Domain(Domain::VerifyPersentation)),
             controller.clone(),
         ));
 
