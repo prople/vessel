@@ -1,0 +1,21 @@
+[env]
+CARGO_MAKE = true
+
+[config]
+default_to_workspace = false
+skip_core_tasks = true
+
+[tasks.vesseld]
+description = "Prople Vesseld Flows"
+command = "cargo"
+args = ["make", "--env", "PROPLE_CRATE_NAME=prople-vesseld", "--makefile", "./vesseld/make.toml", "${@}"]
+
+[tasks.vessel-rpc]
+description = "Prople Vessel RPC Flows"
+command = "cargo"
+args = ["make", "--env", "PROPLE_CRATE_NAME=prople-vessel-rpc", "--makefile", "./vessel-rpc/make.toml", "${@}"]
+
+[tasks.vessel-core]
+description = "Prople Vessel Core Flows"
+command = "cargo"
+args = ["make", "--env", "PROPLE_CRATE_NAME=prople-vessel-core", "--makefile", "./vessel-core/make.toml", "${@}"]
