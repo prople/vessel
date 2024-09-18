@@ -69,16 +69,10 @@ impl TryFrom<RpcMethod> for Method {
     fn try_from(value: RpcMethod) -> Result<Self, Self::Error> {
         let given = value.to_string();
         match given.as_str() {
-            _ if given
-                .as_str()
-                .contains(METHOD_VESSEL_POST_CREDENTIAL) =>
-            {
+            _ if given.as_str().contains(METHOD_VESSEL_POST_CREDENTIAL) => {
                 Ok(Self::Vessel(Vessel::PostCredential))
             }
-            _ if given
-                .as_str()
-                .contains(METHOD_VESSEL_VERIFY_CREDENTIAL) =>
-            {
+            _ if given.as_str().contains(METHOD_VESSEL_VERIFY_CREDENTIAL) => {
                 Ok(Self::Vessel(Vessel::VerifyCredential))
             }
             _ if given.as_str().contains(METHOD_DOMAIN_GENERATE_CREDENTIAL) => {
@@ -96,16 +90,10 @@ impl TryFrom<RpcMethod> for Method {
             {
                 Ok(Self::Domain(Domain::ListCredentialsByIDs))
             }
-            _ if given
-                .as_str()
-                .contains(METHOD_DOMAIN_SEND_CREDENTIAL) =>
-            {
+            _ if given.as_str().contains(METHOD_DOMAIN_SEND_CREDENTIAL) => {
                 Ok(Self::Domain(Domain::SendCredential))
             }
-            _ if given
-                .as_str()
-                .contains(METHOD_DOMAIN_VERIFY_CREDENTIAL) =>
-            {
+            _ if given.as_str().contains(METHOD_DOMAIN_VERIFY_CREDENTIAL) => {
                 Ok(Self::Domain(Domain::VerifyCredential))
             }
             _ => Err(CommonError::MethodError(format!(

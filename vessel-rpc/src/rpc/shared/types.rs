@@ -22,7 +22,7 @@ pub enum CommonError {
     ConfigError(String),
 
     #[error("rpc error: {0}")]
-    RpcError(String)
+    RpcError(String),
 }
 
 pub trait ToValidate {

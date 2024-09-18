@@ -26,10 +26,7 @@ impl VesselRPC {
 
         let manager = Manager::new();
 
-        Ok(Self {
-            config,
-            manager,
-        })
+        Ok(Self { config, manager })
     }
 
     pub fn build_app_config(&self) -> Result<ConfigApp, CommonError> {

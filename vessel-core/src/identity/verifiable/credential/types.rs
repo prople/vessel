@@ -112,19 +112,11 @@ pub trait CredentialAPI: Clone {
     ///
     /// The `VC` that need to send to the `Holder` should be loaded from our persistent storage
     /// based on given `id` which is the id of [`Credential`]
-    async fn send_credential(
-        &self,
-        id: String,
-        did_uri: String,
-    ) -> Result<(), CredentialError>;
+    async fn send_credential(&self, id: String, did_uri: String) -> Result<(), CredentialError>;
 
     /// `receive_credential_by_holder` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
     /// to the persistent storage through `CredentialHolder`
-    async fn post_credential(
-        &self,
-        did_holder: String,
-        vc: VC,
-    ) -> Result<(), CredentialError>;
+    async fn post_credential(&self, did_holder: String, vc: VC) -> Result<(), CredentialError>;
 
     /// `verify_credential_by_holder` used by `Holder` to verify its received `VC`
     async fn verify_credential(&self, id: String) -> Result<(), CredentialError>;

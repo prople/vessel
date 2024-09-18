@@ -2,9 +2,9 @@ use prople_jsonrpc_core::objects::RpcProcessor;
 
 use crate::config::config::Config;
 
+use super::shared::types::RPCService;
 use crate::rpc::shared::db::Builder as DbBuilder;
 use crate::rpc::shared::types::CommonError;
-use super::shared::types::RPCService;
 
 use crate::rpc::identity::Identity;
 
@@ -15,9 +15,7 @@ pub struct Manager {
 impl Manager {
     pub fn new() -> Self {
         let processor = RpcProcessor::default();
-        Self {
-            processor,
-        }
+        Self { processor }
     }
 
     pub fn build_identity_service(&mut self, conf: Config) -> Result<&mut Self, CommonError> {
@@ -39,7 +37,9 @@ impl Manager {
         let routes = identity_rpc.routes();
 
         if routes.len() < 1 {
-            return Err(CommonError::RpcError(String::from("identity doesn't have any routes")))
+            return Err(CommonError::RpcError(String::from(
+                "identity doesn't have any routes",
+            )));
         }
 
         for route in routes.iter() {

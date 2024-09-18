@@ -153,21 +153,15 @@ where
 
         match rpc_method {
             Method::Vessel(vessel) => match vessel {
-                VesselMethod::PostCredential => {
-                    self.receive_credential_by_holder(rpc_param).await
-                }
+                VesselMethod::PostCredential => self.receive_credential_by_holder(rpc_param).await,
                 _ => Err(RpcError::MethodNotFound),
             },
             Method::Domain(domain) => match domain {
                 DomainMethod::GenerateCredential => self.generate_credential(rpc_param).await,
                 DomainMethod::ListCredentialsByDID => self.list_credentials_by_did(rpc_param).await,
                 DomainMethod::ListCredentialsByIDs => self.list_credentials_by_ids(rpc_param).await,
-                DomainMethod::SendCredential => {
-                    self.send_credential_to_holder(rpc_param).await
-                }
-                DomainMethod::VerifyCredential => {
-                    self.verify_credential_by_holder(rpc_param).await
-                }
+                DomainMethod::SendCredential => self.send_credential_to_holder(rpc_param).await,
+                DomainMethod::VerifyCredential => self.verify_credential_by_holder(rpc_param).await,
             },
         }
     }

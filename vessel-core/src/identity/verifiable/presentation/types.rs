@@ -1,9 +1,9 @@
 use multiaddr::Multiaddr;
 use std::fmt::Debug;
 
-use rst_common::standard::serde::{self, Serialize, Deserialize};
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::chrono::{DateTime, Utc};
+use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::with_errors::thiserror::{self, Error};
 
 use rstdev_domain::entity::ToJSON;
@@ -19,7 +19,7 @@ use crate::identity::verifiable::types::VerifiableError;
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
 #[derive(Debug, Error, Clone, Serialize, Deserialize)]
-#[serde(crate="self::serde")]
+#[serde(crate = "self::serde")]
 pub enum PresentationError {
     #[error("unable to generate vp: {0}")]
     GenerateError(String),
@@ -87,7 +87,8 @@ pub trait PresentationAPI: Clone {
         proof_params: Option<ProofParams>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
-    async fn send_presentation(&self, id: String, did_uri: String) -> Result<(), PresentationError>;
+    async fn send_presentation(&self, id: String, did_uri: String)
+        -> Result<(), PresentationError>;
 
     async fn verify_presentation(&self, id: String) -> Result<(), PresentationError>;
 

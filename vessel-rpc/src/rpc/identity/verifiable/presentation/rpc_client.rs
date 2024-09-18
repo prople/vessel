@@ -42,8 +42,7 @@ where
         did_verifier: String,
         vp: VP,
     ) -> Result<(), PresentationError> {
-        let rpc_param =
-            Param::Vessel(VesselParam::PostPresentation { did_verifier, vp });
+        let rpc_param = Param::Vessel(VesselParam::PostPresentation { did_verifier, vp });
         let _ = call(
             self.client.clone(),
             addr,
@@ -104,8 +103,7 @@ mod tests {
         });
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method =
-            build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
         let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
@@ -174,8 +172,7 @@ mod tests {
 
         let param_value = param.build_serde_value().unwrap();
 
-        let rpc_method =
-            build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
+        let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
         let response_err =
             RpcErrorBuilder::<PresentationError>::build(RpcError::InvalidParams, None);
         let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {

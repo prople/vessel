@@ -124,11 +124,7 @@ where
         self.repo().list_credentials_by_ids(ids).await
     }
 
-    async fn post_credential(
-        &self,
-        did_holder: String,
-        vc: VC,
-    ) -> Result<(), CredentialError> {
+    async fn post_credential(&self, did_holder: String, vc: VC) -> Result<(), CredentialError> {
         // used to make sure that given `did_holder` is belongs to the user
         let _ = self
             .account()
@@ -140,11 +136,7 @@ where
         self.repo().save_credential_holder(&cred_holder).await
     }
 
-    async fn send_credential(
-        &self,
-        id: String,
-        did_uri: String,
-    ) -> Result<(), CredentialError> {
+    async fn send_credential(&self, id: String, did_uri: String) -> Result<(), CredentialError> {
         if id.is_empty() {
             return Err(CredentialError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
@@ -945,9 +937,7 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc
-            .send_credential("".to_string(), "".to_string())
-            .await;
+        let send_output = uc.send_credential("".to_string(), "".to_string()).await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -1166,9 +1156,7 @@ mod tests {
 
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account);
-        let verify_vc_checker = uc
-            .verify_credential("id-holder".to_string())
-            .await;
+        let verify_vc_checker = uc.verify_credential("id-holder".to_string()).await;
 
         assert!(!verify_vc_checker.is_err());
     }
@@ -1211,9 +1199,7 @@ mod tests {
 
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account);
-        let verify_vc_checker = uc
-            .verify_credential("id-holder".to_string())
-            .await;
+        let verify_vc_checker = uc.verify_credential("id-holder".to_string()).await;
 
         assert!(verify_vc_checker.is_err());
 

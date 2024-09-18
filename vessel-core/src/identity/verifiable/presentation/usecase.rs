@@ -104,7 +104,11 @@ where
         self.repo().get_by_id(id).await
     }
 
-    async fn send_presentation(&self, id: String, did_uri: String) -> Result<(), PresentationError> {
+    async fn send_presentation(
+        &self,
+        id: String,
+        did_uri: String,
+    ) -> Result<(), PresentationError> {
         if id.is_empty() {
             return Err(PresentationError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
@@ -853,7 +857,9 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let send_output = uc.send_presentation("id1".to_string(), did_holder_uri).await;
+        let send_output = uc
+            .send_presentation("id1".to_string(), did_holder_uri)
+            .await;
         assert!(!send_output.is_err())
     }
 
@@ -929,7 +935,9 @@ mod tests {
         )
         .unwrap();
 
-        let send_output = uc.send_presentation("id1".to_string(), did_holder_uri).await;
+        let send_output = uc
+            .send_presentation("id1".to_string(), did_holder_uri)
+            .await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -988,9 +996,7 @@ mod tests {
         let uc = generate_usecase(repo, rpc, account, credential);
 
         let vp = presentation.vp;
-        let output = uc
-            .post_presentation("".to_string(), vp.clone())
-            .await;
+        let output = uc.post_presentation("".to_string(), vp.clone()).await;
         assert!(output.is_err());
 
         let send_output_err = output.unwrap_err();
@@ -1102,9 +1108,7 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let verify_vp_checker = uc
-            .verify_presentation("id-holder".to_string())
-            .await;
+        let verify_vp_checker = uc.verify_presentation("id-holder".to_string()).await;
 
         assert!(!verify_vp_checker.is_err());
     }
@@ -1151,9 +1155,7 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let verify_vc_checker = uc
-            .verify_presentation("id-holder".to_string())
-            .await;
+        let verify_vc_checker = uc.verify_presentation("id-holder".to_string()).await;
 
         assert!(verify_vc_checker.is_err());
 

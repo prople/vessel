@@ -1,0 +1,34 @@
+[config]
+default_to_workspace = false
+
+[tasks.clean]
+command = "cargo"
+args = ["clean", "-p", "${PROPLE_CRATE_NAME}"]
+
+[tasks.format]
+command = "cargo"
+args = ["fmt", "-p", "${PROPLE_CRATE_NAME}"]
+
+[tasks.test]
+command = "cargo"
+args = ["test", "-p", "${PROPLE_CRATE_NAME}", "--", "--show-output"]
+
+[tasks.pre-build]
+dependencies = ["format", "clean", "test"]
+
+[tasks.build-release]
+command = "cargo"
+args = ["build", "-p", "${PROPLE_CRATE_NAME}", "--release"]
+dependencies = ["pre-build"]
+
+[tasks.publish-dry]
+command = "cargo"
+args = ["publish", "-p", "${PROPLE_CRATE_NAME}", "--dry-run", "--allow-dirty"]
+
+[tasks.publish]
+command = "cargo"
+args = ["publish", "-p", "${PROPLE_CRATE_NAME}", "--no-verify"]
+
+[tasks.publish-flow]
+private = true
+dependencies = ["publish-dry"]
