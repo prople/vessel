@@ -8,8 +8,8 @@ use rst_common::with_tracing::tracing_subscriber::{
     self, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
+use prople_jsonrpc_axum::rpc::{Rpc as RpcAxum, RpcConfig, RpcError, RpcHandlerFn, RpcState};
 use prople_vessel_rpc::VesselRPC;
-use prople_jsonrpc_axum::rpc::{RpcState, RpcConfig, RpcError, Rpc as RpcAxum, RpcHandlerFn};
 
 pub struct Rpc {
     config: String,
