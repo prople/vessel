@@ -12,6 +12,8 @@ FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y libssl-dev pkg-config && rm -rf /var/lib/apt/lists/*
 
+VOLUME [ "/data" ]
+
 COPY --from=builder /prople/target/release/prople-vesseld . 
 
 # Run the binary
