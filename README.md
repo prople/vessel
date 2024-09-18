@@ -1,5 +1,7 @@
 # vessel
 
+[![Built with cargo-make](https://sagiegurari.github.io/cargo-make/assets/badges/cargo-make.svg)](https://sagiegurari.github.io/cargo-make)
+
 `Prople Vessel` is a personal container that will manage three core domains:
 
 - `Identity`
