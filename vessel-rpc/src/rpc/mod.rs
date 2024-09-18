@@ -1,4 +1,4 @@
-pub(crate) mod identity;
+pub mod identity;
 pub(crate) mod shared;
 
 mod manager;

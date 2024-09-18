@@ -6,10 +6,14 @@ mod rpc;
 pub use config::app::App as ConfigApp;
 pub use config::config::Config;
 
+pub use rpc::identity::account::Method;
+pub use rpc::identity::account::{Param, ParamDomain, ParamVessel};
+
 use config::parser::Parser as ConfigParser;
 
-use rpc::shared::helpers::validate;
-use rpc::shared::types::CommonError;
+pub use rpc::shared::helpers::validate;
+pub use rpc::shared::rpc::method::build_rpc_method;
+pub use rpc::shared::types::CommonError;
 
 use rpc::Manager;
 

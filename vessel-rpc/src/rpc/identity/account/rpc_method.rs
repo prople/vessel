@@ -11,7 +11,7 @@ const METHOD_REMOVE_DID: &str = "identity.did.remove_did";
 const METHOD_GET_ACCOUNT_DID: &str = "identity.did.get_account_did";
 
 #[derive(Clone, Debug, PartialEq)]
-pub(crate) enum Method {
+pub enum Method {
     GenerateDID,
     BuildDIDURI,
     ResolveDIDURI,

@@ -10,8 +10,6 @@ use prople_vessel_core::identity::account::usecase::Usecase;
 use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::types::{CommonError, RPCService};
 
-use super::account::rpc_method::Method;
-
 mod handler;
 mod repository;
 mod rpc_client;
@@ -20,7 +18,10 @@ mod rpc_param;
 
 pub use handler::AccountHandler;
 pub use repository::Repository;
+
 pub use rpc_client::RpcClient;
+pub use rpc_method::Method;
+pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
 
 type AccountRpcClient = RpcClient<ReqwestExecutor<Doc, AccountError>>;
 type AccountAPIImplementer = Usecase<Repository, AccountRpcClient>;
