@@ -31,7 +31,7 @@ prople-jsonrpc-client = {version = "~0.1"}
 prople-jsonrpc-axum = {version = "~0.2"}
 
 # rstdev and rst_common libraries
-rst-common = {version = "~1", features=["standard", "with-errors", "with-tokio", "with-tracing", "with-http-tokio"]}
+rst-common = {version = "~1", features=["standard", "with-errors", "with-tokio", "with-tracing", "with-http-tokio", "with-logging"]}
 rstdev-domain = {version = "~0.1"}
 rstdev-config = {version = "~0.1"}
 rstdev-storage = {version = "~0.3", features=["rocksdb"]}
@@ -44,3 +44,4 @@ table-test = {version = "~0.2"}
 mockall  = {version = "~0.12"}
 mockito = {version = "~1.5"}
 toml = {version = "~0.8"}
+homedir = {version = "~0.3"}
