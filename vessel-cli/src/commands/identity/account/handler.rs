@@ -1,9 +1,13 @@
+use rst_common::with_logging::log::debug;
+
 use super::AccountCommands;
 
 pub fn handle_commands(commands: AccountCommands) {
+    debug!("account command handler triggered...");
+
     match commands {
         AccountCommands::GenerateDID { password } => {
-            println!("password: {}", password)
+            debug!("given password: {password}")
         }
 
         AccountCommands::BuildDIDURI(args) => {
@@ -17,11 +21,11 @@ pub fn handle_commands(commands: AccountCommands) {
         AccountCommands::ResolveDIDDoc { uri } => {
             println!("uri: {}", uri)
         }
-        
+
         AccountCommands::RemoveDID { did } => {
             println!("did: {}", did)
         }
-        
+
         AccountCommands::GetAccountDID { did } => {
             println!("did: {}", did)
         }

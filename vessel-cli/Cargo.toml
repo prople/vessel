@@ -27,3 +27,4 @@ rstdev-storage.workspace = true
 
 # third-party libraries
 clap.workspace = true
+homedir.workspace = true

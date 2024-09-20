@@ -9,5 +9,5 @@ pub use account::{AccountArgs, AccountCommands};
 #[command(subcommand_help_heading = "Identity")]
 pub enum IdentityCommands {
     /// Used to manage Identity DID Account
-    Account(AccountArgs)
+    Account(AccountArgs),
 }
