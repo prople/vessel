@@ -11,12 +11,19 @@ license.workspace = true
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+# internal prople/vessel libraries
 prople-vessel-core.workspace = true
 prople-vessel-rpc.workspace = true
+
+# internal prople libraries
 prople-jsonrpc-core.workspace = true
 prople-jsonrpc-client.workspace = true
 prople-did-core.workspace = true
+
+# rst-common & #rstdev-* specific libraries
 rst-common.workspace = true
 rstdev-config.workspace = true
 rstdev-storage.workspace = true
+
+# third-party libraries
 clap.workspace = true
