@@ -6,8 +6,9 @@ use rst_common::with_tokio::tokio;
 
 use prople_vessel_cli::commands::identity::account_handler;
 use prople_vessel_cli::commands::identity::IdentityCommands;
+use prople_vessel_cli::types::{CliError, VESSEL_DEFAULT_DIR, VESSEL_DATA_DIR, VESSEL_CF_NAME};
 use prople_vessel_cli::utils::homedir::setup_homedir;
-use prople_vessel_cli::types::{CliError, VESSEL_DEFAULT_DIR};
+use prople_vessel_cli::utils::db::setup_database;
 
 #[derive(Parser)]
 #[command(name = "prople-vessel-cli")]
@@ -36,7 +37,10 @@ async fn main() -> Result<(), CliError> {
     Builder::from_env(Env::default().default_filter_or(level)).init();
 
     // setup homedir
-    let _ = setup_homedir(VESSEL_DEFAULT_DIR)?;
+    let vessel_dir = setup_homedir(VESSEL_DEFAULT_DIR)?;
+
+    // setup database directory
+    let _ = setup_database(format!("{}/{}", vessel_dir, VESSEL_DATA_DIR), String::from(VESSEL_CF_NAME))?;
 
     match &cli.identity {
         IdentityCommands::Account(args) => account_handler(args.commands.clone()),

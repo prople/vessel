@@ -1,14 +1,13 @@
-use std::path::Path;
 use std::fs;
+use std::path::Path;
 
 use homedir::my_home;
 use rst_common::with_logging::log::debug;
 
 use crate::types::CliError;
 
-pub fn setup_homedir(dir: &str) -> Result<(), CliError> {
-    let current_homedir =
-        my_home().map_err(|err| CliError::HomeDirError(err.to_string()))?;
+pub fn setup_homedir(dir: &str) -> Result<String, CliError> {
+    let current_homedir = my_home().map_err(|err| CliError::HomeDirError(err.to_string()))?;
 
     match current_homedir {
         Some(current_dir) => {
@@ -17,14 +16,15 @@ pub fn setup_homedir(dir: &str) -> Result<(), CliError> {
 
             if !vessel_path.exists() {
                 debug!("vessel directory still not exists");
-                let _ = fs::create_dir_all(vessel_path.clone()).map_err(|err| CliError::HomeDirError(err.to_string()))?;
+                let _ = fs::create_dir_all(vessel_path.clone())
+                    .map_err(|err| CliError::HomeDirError(err.to_string()))?;
             }
 
             debug!("vessel home directory: {}", vessel_path.display());
-            Ok(())
-        },
-        None => {
-            Err(CliError::HomeDirError("unknown home directory path".to_string()))
+            Ok(vessel_path.display().to_string())
         }
+        None => Err(CliError::HomeDirError(
+            "unknown home directory path".to_string(),
+        )),
     }
 }
