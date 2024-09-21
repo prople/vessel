@@ -37,7 +37,7 @@ async fn main() -> Result<(), CliError> {
     }
 
     // setup logging configurations
-    Builder::from_env(Env::default().default_filter_or(level)).init();
+    Builder::from_env(Env::default().default_filter_or(level)).format_timestamp(None).init();
 
     // setup homedir
     let vessel_dir = setup_homedir(VESSEL_DEFAULT_DIR)?;
@@ -46,7 +46,8 @@ async fn main() -> Result<(), CliError> {
     let db_executor = setup_database(format!("{}/{}", vessel_dir, VESSEL_DATA_DIR), String::from(VESSEL_CF_NAME))?;
 
     // setup handler
-    let ctx = ContextHandler::new(level.to_string(), vessel_dir, db_executor);
+    let mut ctx = ContextHandler::new(db_executor);
+    ctx.build_config(level.to_string(), vessel_dir);
 
     match &cli.identity {
         IdentityCommands::Account(args) => account_handler(&ctx, args.commands.clone()),
