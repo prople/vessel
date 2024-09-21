@@ -14,14 +14,25 @@ use prople_vessel_cli::commands::identity::IdentityCommands;
 struct Cli {
     #[command(subcommand)]
     identity: IdentityCommands,
+
+    #[arg(long, global(true))]
+    enable_debug: Option<bool>
 }
 
 #[tokio::main]
 async fn main() {
-    // setup logging configurations
-    Builder::from_env(Env::default().default_filter_or(Level::Info.as_str())).init();
 
     let cli = Cli::parse();
+    let mut level = Level::Info.as_str();
+
+    if let Some(val) = &cli.enable_debug {
+        if val.to_owned() {
+            level = Level::Debug.as_str();
+        }
+    }
+
+    // setup logging configurations
+    Builder::from_env(Env::default().default_filter_or(level)).init();
     match &cli.identity {
         IdentityCommands::Account(args) => account_handler(args.commands.clone()),
     }
