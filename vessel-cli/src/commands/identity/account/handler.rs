@@ -1,8 +1,9 @@
 use rst_common::with_logging::log::debug;
 
 use super::AccountCommands;
+use crate::commands::handler::ContextHandler;
 
-pub fn handle_commands(commands: AccountCommands) {
+pub fn handle_commands(_ctx: &ContextHandler, commands: AccountCommands) {
     debug!("account command handler triggered...");
 
     match commands {

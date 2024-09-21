@@ -4,11 +4,14 @@ use rst_common::with_logging::env_logger::{Builder, Env};
 use rst_common::with_logging::log::Level;
 use rst_common::with_tokio::tokio;
 
-use prople_vessel_cli::commands::identity::account_handler;
-use prople_vessel_cli::commands::identity::IdentityCommands;
-use prople_vessel_cli::types::{CliError, VESSEL_DEFAULT_DIR, VESSEL_DATA_DIR, VESSEL_CF_NAME};
 use prople_vessel_cli::utils::homedir::setup_homedir;
 use prople_vessel_cli::utils::db::setup_database;
+
+use prople_vessel_cli::commands::handler::ContextHandler;
+use prople_vessel_cli::commands::identity::account_handler;
+use prople_vessel_cli::commands::identity::IdentityCommands;
+
+use prople_vessel_cli::types::{CliError, VESSEL_DEFAULT_DIR, VESSEL_DATA_DIR, VESSEL_CF_NAME};
 
 #[derive(Parser)]
 #[command(name = "prople-vessel-cli")]
@@ -40,10 +43,13 @@ async fn main() -> Result<(), CliError> {
     let vessel_dir = setup_homedir(VESSEL_DEFAULT_DIR)?;
 
     // setup database directory
-    let _ = setup_database(format!("{}/{}", vessel_dir, VESSEL_DATA_DIR), String::from(VESSEL_CF_NAME))?;
+    let db_executor = setup_database(format!("{}/{}", vessel_dir, VESSEL_DATA_DIR), String::from(VESSEL_CF_NAME))?;
+
+    // setup handler
+    let ctx = ContextHandler::new(level.to_string(), vessel_dir, db_executor);
 
     match &cli.identity {
-        IdentityCommands::Account(args) => account_handler(args.commands.clone()),
+        IdentityCommands::Account(args) => account_handler(&ctx, args.commands.clone()),
     }
 
     Ok(())
