@@ -11,4 +11,7 @@ pub enum CliError {
 
     #[error("database error: {0}")]
     DBError(String),
+
+    #[error("toml error: {0}")]
+    TomlError(String),
 }

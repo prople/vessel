@@ -4,12 +4,15 @@ use rstdev_storage::engine::rocksdb::executor::Executor;
 #[derive(Clone)]
 pub struct Config {
     log_level: String,
-    vessel_dir: String
+    vessel_dir: String,
 }
 
 impl Config {
     fn new(log_level: String, vessel_dir: String) -> Self {
-        Self { log_level, vessel_dir }
+        Self {
+            log_level,
+            vessel_dir,
+        }
     }
 
     pub fn log_level(&self) -> String {
@@ -23,12 +26,15 @@ impl Config {
 
 pub struct ContextHandler {
     db_executor: Executor,
-    config: Option<Config> 
+    config: Option<Config>,
 }
 
 impl ContextHandler {
     pub fn new(db_executor: Executor) -> Self {
-        Self { db_executor, config: None }
+        Self {
+            db_executor,
+            config: None,
+        }
     }
 
     pub fn build_config(&mut self, log_level: String, vessel_dir: String) -> &mut Self {

@@ -19,7 +19,9 @@ pub fn setup_database(path: String, cf_name: String) -> Result<Executor, CliErro
     });
 
     let mut db = DB::new(db_opts).map_err(|err| CliError::DBError(err.to_string()))?;
-    let db_instance = db.build().map_err(|err| CliError::DBError(err.to_string()))?;
+    let db_instance = db
+        .build()
+        .map_err(|err| CliError::DBError(err.to_string()))?;
 
     db.set_db(db_instance);
     Ok(Executor::new(db, cf_name))
