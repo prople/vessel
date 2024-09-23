@@ -10,22 +10,22 @@ pub struct AccountArgs {
 
 #[derive(Clone, Subcommand)]
 pub enum AccountCommands {
-    #[command(name = "did-generate")]
+    #[command(name = "generate")]
     GenerateDID { password: String },
 
-    #[command(name = "did-build-uri")]
+    #[command(name = "build-uri")]
     BuildDIDURI(BuildDIDURIArgs),
 
-    #[command(name = "did-resolve-uri")]
+    #[command(name = "resolve-uri")]
     ResolveDIDURI { uri: String },
 
-    #[command(name = "did-resolve-doc")]
+    #[command(name = "resolve-doc")]
     ResolveDIDDoc { uri: String },
 
-    #[command(name = "did-remove-did")]
+    #[command(name = "remove-did")]
     RemoveDID { did: String },
 
-    #[command(name = "did-get")]
+    #[command(name = "get")]
     GetAccountDID { did: String },
 }
 
