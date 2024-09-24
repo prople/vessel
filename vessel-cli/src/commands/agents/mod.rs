@@ -14,13 +14,14 @@ pub struct AgentArgs {
 #[command(subcommand_help_heading = "Agent")]
 pub enum AgentCommands {
     Add(AgentAddArgs),
+    List,
 }
 
 #[derive(Args, Clone)]
 pub struct AgentAddArgs {
     #[arg(long, required(true))]
     name: String,
-    
+
     #[arg(long, required(true))]
-    addr: String
+    addr: String,
 }

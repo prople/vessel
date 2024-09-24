@@ -14,4 +14,7 @@ pub enum CliError {
 
     #[error("toml error: {0}")]
     TomlError(String),
+
+    #[error("toml error: {0}")]
+    AgentError(String),
 }

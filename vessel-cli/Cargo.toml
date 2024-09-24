@@ -29,3 +29,4 @@ rstdev-storage.workspace = true
 clap.workspace = true
 homedir.workspace = true
 toml.workspace = true
+cli-table.workspace = true
