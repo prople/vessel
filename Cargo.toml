@@ -45,3 +45,4 @@ mockall  = {version = "~0.12"}
 mockito = {version = "~1.5"}
 toml = {version = "~0.8"}
 homedir = {version = "~0.3"}
+cli-table = {version = "0.4"} 
