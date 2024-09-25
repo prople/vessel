@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use cli_table::{print_stdout, Table, WithTitle};
 
 use rst_common::standard::serde::{self, Deserialize, Serialize};
-use rst_common::with_logging::log::debug;
+use rst_common::with_logging::log::{debug, info};
 
 use crate::commands::handler::ContextHandler;
 use crate::types::CliError;
@@ -13,6 +13,7 @@ use crate::types::CliError;
 use super::AgentCommands;
 
 const AGENT_FILE: &str = "agent.toml";
+const AGENT_SESSION: &str = "agent.session";
 
 #[derive(Serialize, Deserialize, Table)]
 #[serde(crate = "self::serde")]
@@ -66,11 +67,10 @@ pub fn handle_commands(ctx: &ContextHandler, commands: AgentCommands) -> Result<
                     agent_toml.add(name, addr);
 
                     let _ = save_agent_config(agent_config_path.clone(), agent_toml)?;
-                    Ok(())
                 }
                 _ => {
                     let agent_toml = AgentToml::new(name, addr);
-                    save_agent_config(agent_config_path, agent_toml)
+                    let _ = save_agent_config(agent_config_path, agent_toml)?;
                 }
             }
         }
@@ -88,11 +88,61 @@ pub fn handle_commands(ctx: &ContextHandler, commands: AgentCommands) -> Result<
             agent_table.append(&mut agent_toml.agents);
 
             let _ = print_stdout(agent_table.with_title())
-                .map_err(|err| CliError::TomlError(err.to_string()))?;
+                .map_err(|err| CliError::AgentError(err.to_string()))?;
+        }
+        AgentCommands::Session(args) => {
+            debug!("[agent:session] triggered...");
+            
+            let agent_config_path = build_agent_config_path(ctx)?;
+            debug!(
+                "[agent:session] agent config path: {}",
+                agent_config_path.display()
+            );
+            
+            let agent_toml = read_agent_config(agent_config_path)?;
+            let mut selected_agent = String::from("");
 
-            Ok(())
+            for agent in agent_toml.agents {
+                if args.name.eq(&agent.name) {
+                    selected_agent = agent.name
+                }
+            }
+
+            if selected_agent.is_empty() {
+                return Err(CliError::AgentError(String::from("unknown agent name")))
+            }
+
+            let _ = create_agent_session(ctx, selected_agent.clone());
+            info!("[agent:session] Agent session already been set: {}", selected_agent)
         }
     }
+            
+    Ok(())
+}
+
+fn create_agent_session(ctx: &ContextHandler, name: String) -> Result<(), CliError> {
+    let vessel_dir = ctx
+        .config()
+        .ok_or(CliError::HomeDirError(String::from("missing directory")))?
+        .vessel_dir();
+    
+    debug!("[agent:session] vessel_dir: {vessel_dir}");
+    
+    let path_builder = format!("{}/{}", vessel_dir, AGENT_SESSION);
+    let path_str = path_builder.as_str();
+    
+    let mut agent_file = fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(Path::new(path_str).to_path_buf())
+        .map_err(|err| CliError::AgentError(err.to_string()))?;
+
+    let _ = agent_file
+        .write_all(name.as_bytes())
+        .map_err(|err| CliError::AgentError(err.to_string()))?;
+
+    Ok(())
 }
 
 fn build_agent_config_path(ctx: &ContextHandler) -> Result<PathBuf, CliError> {
