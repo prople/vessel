@@ -26,6 +26,9 @@ struct Cli {
 
     #[arg(long, global(true))]
     enable_debug: Option<bool>,
+
+    #[arg(long, global(true))]
+    agent: Option<String>
 }
 
 #[derive(Subcommand)]
@@ -59,9 +62,10 @@ async fn main() -> Result<(), CliError> {
         String::from(VESSEL_CF_NAME),
     )?;
 
-    // setup handler
+    // setup context handler
     let mut ctx = ContextHandler::new(db_executor);
     ctx.build_config(level.to_string(), vessel_dir);
+    ctx.set_agent(cli.agent);
 
     match &cli.commands {
         Commands::Identity(args) => match &args.commands {

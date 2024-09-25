@@ -1,6 +1,8 @@
 use clap::{Args, Subcommand};
 
 mod handler;
+mod utils;
+mod types;
 
 pub use handler::handle_commands as agent_handler;
 

@@ -1,4 +1,4 @@
-use rst_common::with_logging::log::debug;
+use rst_common::with_logging::log::{debug, warn};
 use rstdev_storage::engine::rocksdb::executor::Executor;
 
 #[derive(Clone)]
@@ -27,6 +27,7 @@ impl Config {
 pub struct ContextHandler {
     db_executor: Executor,
     config: Option<Config>,
+    agent: Option<String>
 }
 
 impl ContextHandler {
@@ -34,6 +35,7 @@ impl ContextHandler {
         Self {
             db_executor,
             config: None,
+            agent: None
         }
     }
 
@@ -45,11 +47,26 @@ impl ContextHandler {
         self
     }
 
+    pub fn set_agent(&mut self, agent_name: Option<String>) -> &mut Self {
+        if agent_name.is_none() {
+            warn!("[ctx:set_agent] empty agent name")
+        } else {
+            debug!("[ctx:set_agent] agent name: {}", agent_name.clone().unwrap_or(String::from("empty agent")))
+        }
+
+        self.agent = agent_name;
+        self
+    }
+
     pub fn db(&self) -> Executor {
         self.db_executor.to_owned()
     }
 
     pub fn config(&self) -> Option<Config> {
         self.config.clone()
+    }
+
+    pub fn agent(&self) -> Option<String> {
+        self.agent.clone()
     }
 }
