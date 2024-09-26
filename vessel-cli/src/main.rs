@@ -11,6 +11,10 @@ use prople_vessel_cli::commands::handler::ContextHandler;
 
 use prople_vessel_cli::commands::agents::agent_handler;
 use prople_vessel_cli::commands::agents::AgentArgs;
+
+use prople_vessel_cli::commands::ping::ping_handler;
+use prople_vessel_cli::commands::ping::PingArgs;
+
 use prople_vessel_cli::commands::identity::account_handler;
 use prople_vessel_cli::commands::identity::{IdentityArgs, IdentityCommands};
 
@@ -28,13 +32,14 @@ struct Cli {
     enable_debug: Option<bool>,
 
     #[arg(long, global(true))]
-    agent: Option<String>
+    agent: Option<String>,
 }
 
 #[derive(Subcommand)]
 enum Commands {
     Identity(IdentityArgs),
     Agent(AgentArgs),
+    Ping(PingArgs),
 }
 
 #[tokio::main]
@@ -65,13 +70,14 @@ async fn main() -> Result<(), CliError> {
     // setup context handler
     let mut ctx = ContextHandler::new(db_executor);
     ctx.build_config(level.to_string(), vessel_dir);
-    ctx.set_agent(cli.agent);
+    let _ = ctx.set_agent(cli.agent)?;
 
     match &cli.commands {
         Commands::Identity(args) => match &args.commands {
             IdentityCommands::Account(args) => account_handler(&ctx, args.commands.clone()),
         },
         Commands::Agent(args) => agent_handler(&ctx, args.commands.clone())?,
+        Commands::Ping(args) => ping_handler(&ctx, args.commands.clone()).await?,
     }
 
     Ok(())

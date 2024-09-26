@@ -58,13 +58,13 @@ pub fn handle_commands(ctx: &ContextHandler, commands: AgentCommands) -> Result<
         }
         AgentCommands::Session(args) => {
             debug!("[agent:session] triggered...");
-            
+
             let agent_config_path = build_agent_config_path(ctx)?;
             debug!(
                 "[agent:session] agent config path: {}",
                 agent_config_path.display()
             );
-            
+
             let agent_toml = read_agent_config(agent_config_path)?;
             let mut selected_agent = String::from("");
 
@@ -75,13 +75,16 @@ pub fn handle_commands(ctx: &ContextHandler, commands: AgentCommands) -> Result<
             }
 
             if selected_agent.is_empty() {
-                return Err(CliError::AgentError(String::from("unknown agent name")))
+                return Err(CliError::AgentError(String::from("unknown agent name")));
             }
 
             let _ = create_agent_session(ctx, selected_agent.clone());
-            info!("[agent:session] Agent session already been set: {}", selected_agent)
+            info!(
+                "[agent:session] Agent session already been set: {}",
+                selected_agent
+            )
         }
     }
-            
+
     Ok(())
 }

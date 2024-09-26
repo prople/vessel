@@ -18,6 +18,10 @@ impl AgentConfig {
     pub(crate) fn name(&self) -> String {
         self.name.to_owned()
     }
+
+    pub(crate) fn addr(&self) -> String {
+        self.addr.to_owned()
+    }
 }
 
 #[derive(Serialize, Deserialize)]

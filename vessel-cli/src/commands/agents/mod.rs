@@ -1,9 +1,10 @@
 use clap::{Args, Subcommand};
 
 mod handler;
-mod utils;
 mod types;
+mod utils;
 
+pub use utils::{get_agent_address, read_agent_session};
 pub use handler::handle_commands as agent_handler;
 
 #[derive(Args, Clone)]
@@ -23,7 +24,7 @@ pub enum AgentCommands {
 #[derive(Args, Clone)]
 pub struct AgentSessionArgs {
     #[arg(long, required(true))]
-    name: String
+    name: String,
 }
 
 #[derive(Args, Clone)]

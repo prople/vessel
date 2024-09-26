@@ -1,5 +1,7 @@
-use rst_common::with_logging::log::{debug, warn};
+use rst_common::with_logging::log::debug;
 use rstdev_storage::engine::rocksdb::executor::Executor;
+
+use crate::{commands::agents::read_agent_session, types::CliError};
 
 #[derive(Clone)]
 pub struct Config {
@@ -27,7 +29,7 @@ impl Config {
 pub struct ContextHandler {
     db_executor: Executor,
     config: Option<Config>,
-    agent: Option<String>
+    agent: Option<String>,
 }
 
 impl ContextHandler {
@@ -35,7 +37,7 @@ impl ContextHandler {
         Self {
             db_executor,
             config: None,
-            agent: None
+            agent: None,
         }
     }
 
@@ -47,15 +49,23 @@ impl ContextHandler {
         self
     }
 
-    pub fn set_agent(&mut self, agent_name: Option<String>) -> &mut Self {
-        if agent_name.is_none() {
-            warn!("[ctx:set_agent] empty agent name")
-        } else {
-            debug!("[ctx:set_agent] agent name: {}", agent_name.clone().unwrap_or(String::from("empty agent")))
+    pub fn set_agent(&mut self, agent_name: Option<String>) -> Result<&mut Self, CliError> {
+        match agent_name {
+            Some(name) => {
+                debug!(
+                    "[ctx:set_agent] agent name: {}",
+                    name
+                );
+
+                self.agent = Some(name) 
+            },
+            None => {
+                let agent = read_agent_session(self)?;
+                self.agent = Some(agent);
+            }
         }
 
-        self.agent = agent_name;
-        self
+        Ok(self)
     }
 
     pub fn db(&self) -> Executor {
