@@ -47,7 +47,7 @@ where
             self.client.clone(),
             addr,
             build_rpc_method(Method::Vessel(VesselMethod::PostPresentation)),
-            rpc_param,
+            Some(rpc_param),
         )
         .await
         .map_err(|err| PresentationError::VerifyError(err.to_string()))?;
@@ -116,7 +116,7 @@ mod tests {
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
             method: rpc_method.to_string(),
-            params: param_value,
+            params: Some(param_value),
             id: None,
         };
 
@@ -187,7 +187,7 @@ mod tests {
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
             method: rpc_method.to_string(),
-            params: param_value,
+            params: Some(param_value),
             id: None,
         };
 

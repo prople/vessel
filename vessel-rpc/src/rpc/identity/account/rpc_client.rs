@@ -43,7 +43,7 @@ where
             self.client.clone(),
             addr,
             build_rpc_method(Method::ResolveDIDDoc),
-            rpc_param,
+            Some(rpc_param),
         )
         .await
         .map_err(|err| match err {
@@ -127,7 +127,7 @@ mod tests {
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
             method: rpc_method.to_string(),
-            params: param_value,
+            params: Some(param_value),
             id: None,
         };
 
@@ -195,7 +195,7 @@ mod tests {
         let request_payload = RpcRequest {
             jsonrpc: String::from("2.0"),
             method: rpc_method.to_string(),
-            params: param_value,
+            params: Some(param_value),
             id: None,
         };
 

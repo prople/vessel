@@ -153,9 +153,10 @@ where
         > + Send
         + Sync,
 {
-    async fn call(&self, method: RpcMethod, params: Value) -> RpcHandlerOutput {
+    async fn call(&self, method: RpcMethod, params: Option<Value>) -> RpcHandlerOutput {
         let rpc_method = Method::try_from(method).map_err(|_| RpcError::InternalError)?;
-        let rpc_param = Param::try_from(params).map_err(|_| RpcError::ParseError)?;
+        let param_value = params.ok_or(RpcError::InvalidParams)?;
+        let rpc_param = Param::try_from(param_value).map_err(|_| RpcError::ParseError)?;
 
         match rpc_method {
             Method::Vessel(vessel) => match vessel {

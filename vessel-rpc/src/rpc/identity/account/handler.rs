@@ -142,9 +142,10 @@ impl<TAccount> RpcHandler for AccountHandler<TAccount>
 where
     TAccount: AccountAPI<EntityAccessor = Account> + Send + Sync,
 {
-    async fn call(&self, method: RpcMethod, params: Value) -> RpcHandlerOutput {
+    async fn call(&self, method: RpcMethod, params: Option<Value>) -> RpcHandlerOutput {
+        let param_value = params.ok_or(RpcError::InvalidParams)?;
+        let rpc_param = Param::try_from(param_value).map_err(|_| RpcError::ParseError)?;
         let rpc_method = Method::try_from(method).map_err(|_| RpcError::InternalError)?;
-        let rpc_param = Param::try_from(params).map_err(|_| RpcError::ParseError)?;
 
         match rpc_method {
             Method::GenerateDID => self.generate_did(rpc_param).await,

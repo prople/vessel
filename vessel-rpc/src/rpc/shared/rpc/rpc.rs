@@ -35,7 +35,7 @@ pub async fn call<T, E, TExec>(
     client: TExec,
     addr: Multiaddr,
     method: RpcMethod,
-    param: impl RpcValue,
+    param: Option<impl RpcValue>,
 ) -> Result<JSONResponse<T, E>, CallError>
 where
     T: Clone + Send + Sync + DeserializeOwned,
