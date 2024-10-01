@@ -7,8 +7,8 @@ use prople_jsonrpc_client::types::Executor;
 use prople_jsonrpc_client::types::NullValue;
 use prople_jsonrpc_core::handlers::{AgentPingResponse, PING_RPC_METHOD};
 
-use crate::commands::handler::ContextHandler;
 use crate::commands::agents::get_agent_address;
+use crate::commands::handler::ContextHandler;
 use crate::types::CliError;
 use crate::utils::rpc::build_client;
 

@@ -4,8 +4,8 @@ mod handler;
 mod types;
 mod utils;
 
-pub use utils::{get_agent_address, read_agent_session};
 pub use handler::handle_commands as agent_handler;
+pub use utils::{get_agent_address, read_agent_session};
 
 #[derive(Args, Clone)]
 pub struct AgentArgs {

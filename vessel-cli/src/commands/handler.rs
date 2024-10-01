@@ -52,13 +52,10 @@ impl ContextHandler {
     pub fn set_agent(&mut self, agent_name: Option<String>) -> Result<&mut Self, CliError> {
         match agent_name {
             Some(name) => {
-                debug!(
-                    "[ctx:set_agent] agent name: {}",
-                    name
-                );
+                debug!("[ctx:set_agent] agent name: {}", name);
 
-                self.agent = Some(name) 
-            },
+                self.agent = Some(name)
+            }
             None => {
                 let agent = read_agent_session(self)?;
                 self.agent = Some(agent);

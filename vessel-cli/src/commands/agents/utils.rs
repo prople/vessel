@@ -12,12 +12,17 @@ use super::types::*;
 pub fn get_agent_address(ctx: &ContextHandler) -> Result<String, CliError> {
     debug!("[agent:get_agent_address] get agent address...");
 
-    let agent_name = ctx.agent().ok_or(CliError::AgentError("missing agent name".to_string()))?;
+    let agent_name = ctx
+        .agent()
+        .ok_or(CliError::AgentError("missing agent name".to_string()))?;
     let vessel_dir = ctx
         .config()
         .ok_or(CliError::HomeDirError(String::from("missing directory")))?
         .vessel_dir();
-    debug!("[agent:get_agent_address] agent name? {} | vessel_dir? {}", agent_name, vessel_dir);
+    debug!(
+        "[agent:get_agent_address] agent name? {} | vessel_dir? {}",
+        agent_name, vessel_dir
+    );
 
     let path_builder = format!("{}/{}", vessel_dir, AGENT_FILE);
     let path_str = path_builder.as_str();
@@ -51,12 +56,12 @@ pub fn read_agent_session(ctx: &ContextHandler) -> Result<String, CliError> {
         .vessel_dir();
 
     debug!("[agent:read_agent_session] vessel_dir: {vessel_dir}");
-    
+
     let path_builder = format!("{}/{}", vessel_dir, AGENT_SESSION);
     let path_str = path_builder.as_str();
-    
-    let agent_name = fs::read_to_string(path_str)
-        .map_err(|err| CliError::TomlError(err.to_string()))?;
+
+    let agent_name =
+        fs::read_to_string(path_str).map_err(|err| CliError::TomlError(err.to_string()))?;
 
     Ok(agent_name)
 }
