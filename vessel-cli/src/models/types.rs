@@ -7,6 +7,9 @@ pub enum ModelError {
 
     #[error("error deserialize: {0}")]
     DeserializeError(String),
+
+    #[error("error database: {0}")]
+    DatabaseError(String),
 }
 
 #[derive(Clone, Debug)]
@@ -30,6 +33,16 @@ pub struct Key(Vec<u8>);
 impl From<String> for Key {
     fn from(value: String) -> Self {
         Key(value.as_bytes().to_vec())
+    }
+}
+
+impl TryInto<String> for Key {
+    type Error = ModelError;
+
+    fn try_into(self) -> Result<String, Self::Error> {
+        let str = String::from_utf8(self.0)
+            .map_err(|err| ModelError::DeserializeError(err.to_string()))?;
+        Ok(str)
     }
 }
 

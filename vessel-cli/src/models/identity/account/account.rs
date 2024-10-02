@@ -171,7 +171,10 @@ mod tests {
         let key = account.key_name(AgentName::from("agent_test"));
         let try_key_str = String::from_utf8(key.to_vec());
         assert!(!try_key_str.is_err());
-        assert_eq!(try_key_str.unwrap(), "agent_test_account_did:prople:testing")
+        assert_eq!(
+            try_key_str.unwrap(),
+            "agent_test_account_did:prople:testing"
+        )
     }
 
     #[test]
@@ -188,11 +191,14 @@ mod tests {
         assert!(!try_model.is_err());
 
         let (key, value) = try_model.unwrap();
-        
+
         let try_key_str = String::from_utf8(key.to_vec());
         assert!(!try_key_str.is_err());
-        assert_eq!(try_key_str.unwrap(), "agent_test_account_did:prople:testing");
-        
+        assert_eq!(
+            try_key_str.unwrap(),
+            "agent_test_account_did:prople:testing"
+        );
+
         let try_reaccount = Account::try_from(value.to_vec());
         assert!(!try_reaccount.is_err());
 

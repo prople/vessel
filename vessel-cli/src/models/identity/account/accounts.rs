@@ -1,4 +1,4 @@
-use rst_common::standard::serde::{self, Serialize, Deserialize};
+use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json;
 
 use crate::models::types::{AgentName, Key, KeyIdentifier, Model, ModelError, Value, ValueBuilder};
@@ -18,7 +18,7 @@ impl Default for Accounts {
 impl TryFrom<Vec<u8>> for Accounts {
     type Error = ModelError;
 
-    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {     
+    fn try_from(value: Vec<u8>) -> Result<Self, Self::Error> {
         let jsonstr = String::from_utf8(value)
             .map_err(|err| ModelError::DeserializeError(err.to_string()))?;
 
@@ -88,11 +88,11 @@ mod tests {
         let accounts = Accounts::default();
         let try_value = accounts.build_value();
         assert!(!try_value.is_err());
-        
+
         let value = try_value.unwrap();
         let try_reaccounts = Accounts::try_from(value.to_vec());
         assert!(!try_reaccounts.is_err());
-        
+
         let reaccounts = try_reaccounts.unwrap();
         let revalue = reaccounts.build_value().unwrap();
         assert_eq!(revalue.to_bytes(), value.to_bytes())
@@ -105,14 +105,14 @@ mod tests {
         assert!(!try_model.is_err());
 
         let (key, value) = try_model.unwrap();
-        
+
         let try_key_str = String::from_utf8(key.to_vec());
         assert!(!try_key_str.is_err());
         assert_eq!("agent_test_accounts", try_key_str.unwrap());
-        
+
         let try_reaccounts = Accounts::try_from(value.to_vec());
         assert!(!try_reaccounts.is_err());
-        
+
         let reaccounts = try_reaccounts.unwrap();
         let revalue = reaccounts.build_value().unwrap();
         assert_eq!(revalue.to_bytes(), value.to_bytes())
