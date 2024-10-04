@@ -20,14 +20,14 @@ authors = ["rstlix0x0 (@rstlix0x0)", "Vessel Contributors (@prople/vessel-contri
 # internal prople/vessel libraries
 prople-vesseld = {version = "~0.2", path = "vesseld"}
 prople-vessel-core = {version = "~0.4", path = "vessel-core"}
-prople-vessel-rpc = {version = "~0.2", path = "vessel-rpc"}
+prople-vessel-rpc = {version = "~0.3", path = "vessel-rpc"}
 prople-vessel-cli = {version = "~0.1", path = "vessel-cli"}
 
 # external prople libraries
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
-prople-jsonrpc-core = {version = "~0.4"}
-prople-jsonrpc-client = {version = "~0.1"}
+prople-jsonrpc-core = {version = "~0.5"}
+prople-jsonrpc-client = {version = "~0.2"}
 prople-jsonrpc-axum = {version = "~0.2"}
 
 # rstdev and rst_common libraries
