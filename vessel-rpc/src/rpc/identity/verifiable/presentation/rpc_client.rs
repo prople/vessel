@@ -17,14 +17,14 @@ use crate::rpc::shared::rpc::method::build_rpc_method;
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
 where
-    TExecutor: Executor<(), ErrorData = PresentationError>,
+    TExecutor: Executor<()>,
 {
     client: TExecutor,
 }
 
 impl<TExecutor> RpcClient<TExecutor>
 where
-    TExecutor: Executor<(), ErrorData = PresentationError>,
+    TExecutor: Executor<()>,
 {
     pub fn new(client: TExecutor) -> Self {
         Self { client }
@@ -34,7 +34,7 @@ where
 #[async_trait]
 impl<TExecutor> RpcBuilder for RpcClient<TExecutor>
 where
-    TExecutor: Executor<(), ErrorData = PresentationError> + Send + Sync + Clone,
+    TExecutor: Executor<()> + Send + Sync + Clone,
 {
     async fn send_to_verifier(
         &self,
@@ -75,7 +75,7 @@ mod tests {
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
 
-    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<(), PresentationError>> {
+    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<()>> {
         return RpcClient::new(ReqwestExecutor::new());
     }
 
@@ -104,7 +104,7 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
-        let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {
+        let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: None,
@@ -174,8 +174,8 @@ mod tests {
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
         let response_err =
-            RpcErrorBuilder::<PresentationError>::build(RpcError::InvalidParams, None);
-        let jsonresp: JSONResponse<(), PresentationError> = JSONResponse {
+            RpcErrorBuilder::build(RpcError::InvalidParams);
+        let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: Some(response_err),

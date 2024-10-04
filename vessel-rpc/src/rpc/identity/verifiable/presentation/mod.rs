@@ -5,23 +5,17 @@ use prople_jsonrpc_core::types::RpcRoute;
 
 use prople_did_core::doc::types::Doc;
 
-use prople_vessel_core::identity::account::types::AccountError;
 use prople_vessel_core::identity::account::usecase::Usecase as AccountUsecase;
 
-use prople_vessel_core::identity::verifiable::credential::types::CredentialError;
 use prople_vessel_core::identity::verifiable::credential::Usecase as CredentialUsecase;
 
-use prople_vessel_core::identity::verifiable::presentation::types::{
-    PresentationAPI, PresentationError,
-};
+use prople_vessel_core::identity::verifiable::presentation::types::PresentationAPI;
 use prople_vessel_core::identity::verifiable::presentation::usecase::Usecase as PresentationUsecase;
 
 use crate::rpc::identity::account::{Repository as AccountRepo, RpcClient as AccountRpc};
 use crate::rpc::identity::verifiable::credential::{
     Repository as CredentialRepo, RpcClient as CredentialRpc,
 };
-
-use super::presentation::rpc_method::{Domain, Method, Vessel};
 
 use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::types::{CommonError, RPCService};
@@ -36,14 +30,23 @@ pub use handler::PresentationHandler;
 pub use repository::Repository;
 pub use rpc_client::RpcClient;
 
-type AccountRpcClient = AccountRpc<ReqwestExecutor<Doc, AccountError>>;
+pub mod components {
+    use super::*;
+
+    pub use prople_vessel_core::identity::verifiable::presentation::{Presentation, Verifier};
+
+    pub use rpc_method::{Domain as MethodDomain, Vessel as MethodVessel, Method};
+    pub use rpc_param::{Domain as ParamDomain, Vessel as ParamVessel, Param};
+}
+
+type AccountRpcClient = AccountRpc<ReqwestExecutor<Doc>>;
 type AccountAPIImplementer = AccountUsecase<AccountRepo, AccountRpcClient>;
 
-type CredentialRpcClient = CredentialRpc<ReqwestExecutor<(), CredentialError>>;
+type CredentialRpcClient = CredentialRpc<ReqwestExecutor<()>>;
 type CredentialAPIImplementer =
     CredentialUsecase<CredentialRpcClient, CredentialRepo, AccountAPIImplementer>;
 
-type PresentationRpcClient = RpcClient<ReqwestExecutor<(), PresentationError>>;
+type PresentationRpcClient = RpcClient<ReqwestExecutor<()>>;
 type PresentationAPIImplementer = PresentationUsecase<
     PresentationRpcClient,
     Repository,
@@ -119,32 +122,32 @@ impl RPCService for Presentation<PresentationAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Vessel(Vessel::PostPresentation)),
+            build_rpc_method(components::Method::Vessel(components::MethodVessel::PostPresentation)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::Generate)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::Generate)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::GetByID)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::GetByID)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::ListVPsByDIDVerifier)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::ListVPsByDIDVerifier)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::SendPresentation)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::SendPresentation)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::VerifyPersentation)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::VerifyPersentation)),
             controller.clone(),
         ));
 

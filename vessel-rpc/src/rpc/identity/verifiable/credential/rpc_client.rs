@@ -16,14 +16,14 @@ use super::rpc_param::{Param, Vessel as VesselParam};
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
 where
-    TExecutor: Executor<(), ErrorData = CredentialError>,
+    TExecutor: Executor<()>,
 {
     client: TExecutor,
 }
 
 impl<TExecutor> RpcClient<TExecutor>
 where
-    TExecutor: Executor<(), ErrorData = CredentialError>,
+    TExecutor: Executor<()>,
 {
     pub fn new(client: TExecutor) -> Self {
         Self { client }
@@ -33,7 +33,7 @@ where
 #[async_trait]
 impl<TExecutor> RpcBuilder for RpcClient<TExecutor>
 where
-    TExecutor: Executor<(), ErrorData = CredentialError> + Send + Sync + Clone,
+    TExecutor: Executor<()> + Send + Sync + Clone,
 {
     async fn send_credential_to_holder(
         &self,
@@ -100,7 +100,7 @@ mod tests {
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
 
-    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<(), CredentialError>> {
+    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<()>> {
         return RpcClient::new(ReqwestExecutor::new());
     }
 
@@ -129,7 +129,7 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostCredential));
-        let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
+        let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: None,
@@ -177,7 +177,7 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredential));
-        let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
+        let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: None,
@@ -259,8 +259,8 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostCredential));
-        let response_err = RpcErrorBuilder::<CredentialError>::build(RpcError::InvalidParams, None);
-        let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
+        let response_err = RpcErrorBuilder::build(RpcError::InvalidParams);
+        let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: Some(response_err),
@@ -318,8 +318,8 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::VerifyCredential));
-        let response_err = RpcErrorBuilder::<CredentialError>::build(RpcError::InvalidParams, None);
-        let jsonresp: JSONResponse<(), CredentialError> = JSONResponse {
+        let response_err = RpcErrorBuilder::build(RpcError::InvalidParams);
+        let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: Some(response_err),

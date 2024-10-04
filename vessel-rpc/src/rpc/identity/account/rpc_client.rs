@@ -18,14 +18,14 @@ use super::rpc_param::{Param, Vessel};
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
 where
-    TExecutor: Executor<Doc, ErrorData = AccountError> + Clone,
+    TExecutor: Executor<Doc> + Clone,
 {
     client: TExecutor,
 }
 
 impl<TExecutor> RpcClient<TExecutor>
 where
-    TExecutor: Executor<Doc, ErrorData = AccountError> + Clone,
+    TExecutor: Executor<Doc> + Clone,
 {
     pub fn new(client: TExecutor) -> Self {
         Self { client }
@@ -35,7 +35,7 @@ where
 #[async_trait]
 impl<TExecutor> RpcBuilder for RpcClient<TExecutor>
 where
-    TExecutor: Executor<Doc, ErrorData = AccountError> + Send + Sync + Clone,
+    TExecutor: Executor<Doc> + Send + Sync + Clone,
 {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError> {
         let rpc_param = Param::Vessel(Vessel::ResolveDIDDoc { did });
@@ -81,7 +81,7 @@ mod tests {
     use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
     use prople_jsonrpc_client::types::{JSONResponse, RpcValue};
 
-    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<Doc, AccountError>> {
+    fn generate_rpc_client() -> RpcClient<ReqwestExecutor<Doc>> {
         return RpcClient::new(ReqwestExecutor::new());
     }
 
@@ -115,7 +115,7 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::ResolveDIDDoc);
-        let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
+        let jsonresp: JSONResponse<Doc> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: Some(doc),
             error: None,
@@ -182,8 +182,8 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::ResolveDIDDoc);
-        let response_err = RpcErrorBuilder::<AccountError>::build(RpcError::InvalidParams, None);
-        let jsonresp: JSONResponse<Doc, AccountError> = JSONResponse {
+        let response_err = RpcErrorBuilder::build(RpcError::InvalidParams);
+        let jsonresp: JSONResponse<Doc> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,
             error: Some(response_err),

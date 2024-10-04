@@ -5,18 +5,15 @@ use prople_did_core::doc::types::Doc;
 use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
 use prople_jsonrpc_core::types::RpcRoute;
 
-use prople_vessel_core::identity::account::types::AccountError;
 use prople_vessel_core::identity::account::usecase::Usecase as AccountUsecase;
 
-use prople_vessel_core::identity::verifiable::credential::types::{CredentialAPI, CredentialError};
+use prople_vessel_core::identity::verifiable::credential::types::CredentialAPI;
 use prople_vessel_core::identity::verifiable::credential::Usecase as CredentialUsecase;
 
 use crate::rpc::identity::account::{Repository as AccountRepo, RpcClient as AccountRpc};
 
 use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::types::{CommonError, RPCService};
-
-use super::credential::rpc_method::{Domain, Method, Vessel};
 
 mod handler;
 mod repository;
@@ -28,10 +25,19 @@ pub use handler::CredentialHandler;
 pub use repository::Repository;
 pub use rpc_client::RpcClient;
 
-type AccountRpcClient = AccountRpc<ReqwestExecutor<Doc, AccountError>>;
+pub mod components {
+    use super::*;
+
+    pub use prople_vessel_core::identity::verifiable::Credential as CoreCredentialModel;
+
+    pub use rpc_method::{Domain as MethodDomain, Vessel as MethodVessel, Method};
+    pub use rpc_param::{Domain as ParamDomain, Vessel as ParamVessel, Param};
+}
+
+type AccountRpcClient = AccountRpc<ReqwestExecutor<Doc>>;
 type AccountAPIImplementer = AccountUsecase<AccountRepo, AccountRpcClient>;
 
-type CredentialRpcClient = RpcClient<ReqwestExecutor<(), CredentialError>>;
+type CredentialRpcClient = RpcClient<ReqwestExecutor<()>>;
 type CredentialAPIImplementer =
     CredentialUsecase<CredentialRpcClient, Repository, AccountAPIImplementer>;
 
@@ -90,32 +96,32 @@ impl RPCService for Credential<CredentialAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Vessel(Vessel::PostCredential)),
+            build_rpc_method(components::Method::Vessel(components::MethodVessel::PostCredential)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::GenerateCredential)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::GenerateCredential)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::ListCredentialsByDID)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::ListCredentialsByDID)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::ListCredentialsByIDs)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::ListCredentialsByIDs)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::SendCredential)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::SendCredential)),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::Domain(Domain::VerifyCredential)),
+            build_rpc_method(components::Method::Domain(components::MethodDomain::VerifyCredential)),
             controller.clone(),
         ));
 

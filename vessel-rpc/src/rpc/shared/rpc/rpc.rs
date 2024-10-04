@@ -31,16 +31,15 @@ pub enum CallError {
     ResponseError(String),
 }
 
-pub async fn call<T, E, TExec>(
+pub async fn call<T, TExec>(
     client: TExec,
     addr: Multiaddr,
     method: RpcMethod,
     param: Option<impl RpcValue>,
-) -> Result<JSONResponse<T, E>, CallError>
+) -> Result<JSONResponse<T>, CallError>
 where
     T: Clone + Send + Sync + DeserializeOwned,
-    E: Clone,
-    TExec: Executor<T, ErrorData = E>,
+    TExec: Executor<T>,
 {
     let endpoint = build_endpoint(addr).map_err(|err| CallError::EndpointError(err))?;
 

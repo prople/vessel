@@ -2,9 +2,10 @@ use rstdev_storage::engine::rocksdb::executor::Executor as DbExecutor;
 
 use prople_did_core::doc::types::Doc;
 use prople_jsonrpc_client::executor::reqwest::Reqwest as ReqwestExecutor;
+
 use prople_jsonrpc_core::types::RpcRoute;
 
-use prople_vessel_core::identity::account::types::{AccountAPI, AccountError};
+use prople_vessel_core::identity::account::types::AccountAPI;
 use prople_vessel_core::identity::account::usecase::Usecase;
 
 use crate::rpc::shared::rpc::method::build_rpc_method;
@@ -20,10 +21,18 @@ pub use handler::AccountHandler;
 pub use repository::Repository;
 
 pub use rpc_client::RpcClient;
-pub use rpc_method::Method;
-pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
 
-type AccountRpcClient = RpcClient<ReqwestExecutor<Doc, AccountError>>;
+pub mod components {
+    use super::*;
+
+    pub use prople_vessel_core::identity::account::Account as CoreAccountModel;
+    pub use prople_jsonrpc_core::types::RpcError as CoreRpcError;
+
+    pub use rpc_method::Method;
+    pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
+}
+
+type AccountRpcClient = RpcClient<ReqwestExecutor<Doc>>;
 type AccountAPIImplementer = Usecase<Repository, AccountRpcClient>;
 
 pub struct Account<TAccount>
@@ -77,27 +86,27 @@ impl RPCService for Account<AccountAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::GenerateDID),
+            build_rpc_method(components::Method::GenerateDID),
             controller.clone(),
         ));
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::BuildDIDURI),
+            build_rpc_method(components::Method::BuildDIDURI),
             controller.clone(),
         ));
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::ResolveDIDURI),
+            build_rpc_method(components::Method::ResolveDIDURI),
             controller.clone(),
         ));
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::ResolveDIDDoc),
+            build_rpc_method(components::Method::ResolveDIDDoc),
             controller.clone(),
         ));
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::RemoveDID),
+            build_rpc_method(components::Method::RemoveDID),
             controller.clone(),
         ));
         self.routes.push(RpcRoute::new(
-            build_rpc_method(Method::GetAccountDID),
+            build_rpc_method(components::Method::GetAccountDID),
             controller.clone(),
         ));
 

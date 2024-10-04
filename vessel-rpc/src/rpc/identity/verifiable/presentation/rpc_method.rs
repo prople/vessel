@@ -12,7 +12,7 @@ const METHOD_DOMAIN_VERIFY_PRESENTATION: &str = "identity.vp.verify_presentation
 const METHOD_DOMAIN_LIST_VPS_BY_DID_VERIFIER: &str = "identity.vp.list_vps_by_did_verifier";
 
 #[derive(Clone)]
-pub(crate) enum Vessel {
+pub enum Vessel {
     PostPresentation,
 }
 
@@ -25,7 +25,7 @@ impl RpcMethodBuilder for Vessel {
 }
 
 #[derive(Clone)]
-pub(crate) enum Domain {
+pub enum Domain {
     Generate,
     SendPresentation,
     GetByID,
@@ -46,7 +46,7 @@ impl RpcMethodBuilder for Domain {
 }
 
 #[derive(Clone)]
-pub(crate) enum Method {
+pub enum Method {
     Vessel(Vessel),
     Domain(Domain),
 }

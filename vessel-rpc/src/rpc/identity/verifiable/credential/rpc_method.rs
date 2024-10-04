@@ -13,7 +13,7 @@ const METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID: &str = "identity.vc.list_credential
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS: &str = "identity.vc.list_credential_by_ids";
 
 #[derive(Clone)]
-pub(crate) enum Vessel {
+pub enum Vessel {
     PostCredential,
     VerifyCredential,
 }
@@ -28,7 +28,7 @@ impl RpcMethodBuilder for Vessel {
 }
 
 #[derive(Clone)]
-pub(crate) enum Domain {
+pub enum Domain {
     GenerateCredential,
     SendCredential,
     VerifyCredential,
@@ -49,7 +49,7 @@ impl RpcMethodBuilder for Domain {
 }
 
 #[derive(Clone)]
-pub(crate) enum Method {
+pub enum Method {
     Vessel(Vessel),
     Domain(Domain),
 }

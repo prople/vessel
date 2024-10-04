@@ -6,8 +6,13 @@ mod rpc;
 pub use config::app::App as ConfigApp;
 pub use config::config::Config;
 
-pub use rpc::identity::account::Method;
-pub use rpc::identity::account::{Param, ParamDomain, ParamVessel};
+pub mod components {
+    use super::*;
+
+    pub use rpc::identity::account::components as account;
+    pub use rpc::identity::verifiable::credential::components as credential;
+    pub use rpc::identity::verifiable::presentation::components as presentation;
+}
 
 use config::parser::Parser as ConfigParser;
 

@@ -10,14 +10,14 @@ use crate::rpc::shared::types::CommonError;
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(crate = "self::serde")]
 #[serde(tag = "param", content = "payload")]
-pub(crate) enum Vessel {
+pub enum Vessel {
     PostPresentation { did_verifier: String, vp: VP },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(crate = "self::serde")]
 #[serde(tag = "param", content = "payload")]
-pub(crate) enum Domain {
+pub enum Domain {
     Generate {
         password: String,
         did_issuer: String,
@@ -42,7 +42,7 @@ pub(crate) enum Domain {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(crate = "self::serde")]
 #[serde(tag = "type", content = "payload")]
-pub(crate) enum Param {
+pub enum Param {
     Vessel(Vessel),
     Domain(Domain),
 }
