@@ -82,7 +82,28 @@ pub async fn handle_commands(
         }
 
         AccountCommands::RemoveDID { did } => {
-            println!("did: {}", did)
+            debug!(
+                "[account:removeDID] agent from context: {}",
+                ctx.agent().unwrap_or(String::from("empty agent"))
+            );
+
+            debug!("[account:removeDID] DID: {did}");
+
+            let method = build_rpc_method(Method::RemoveDID);
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<()>();
+            
+            let _ = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::RemoveDID { did: did.clone() })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+            
+            info!("DID: {did} has been removed")
         }
 
         AccountCommands::GetAccountDID { did } => {
