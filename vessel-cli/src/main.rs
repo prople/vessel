@@ -74,7 +74,7 @@ async fn main() -> Result<(), CliError> {
 
     match &cli.commands {
         Commands::Identity(args) => match &args.commands {
-            IdentityCommands::Account(args) => account_handler(&ctx, args.commands.clone()).await,
+            IdentityCommands::Account(args) => account_handler(&ctx, args.commands.clone()).await?,
         },
         Commands::Agent(args) => agent_handler(&ctx, args.commands.clone())?,
         Commands::Ping(args) => ping_handler(&ctx, args.commands.clone()).await?,

@@ -53,7 +53,7 @@ impl DB {
                 let val =
                     value.ok_or(ModelError::DatabaseError(String::from("value not found")))?;
 
-                value_fn(val) 
+                value_fn(val)
             }
             _ => Err(ModelError::DatabaseError(String::from(
                 "invalid output return type",

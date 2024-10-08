@@ -20,4 +20,7 @@ pub enum CliError {
 
     #[error("rpc error: {0}")]
     RpcError(String),
+
+    #[error("json error: {0}")]
+    JSONError(String),
 }

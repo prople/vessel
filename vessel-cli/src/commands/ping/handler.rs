@@ -1,6 +1,4 @@
-use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json;
-use rst_common::with_errors::thiserror::{self, Error};
 use rst_common::with_logging::log::{debug, info};
 
 use prople_jsonrpc_client::types::Executor;
@@ -14,13 +12,6 @@ use crate::utils::rpc::build_client;
 
 use super::PingCommands;
 
-#[derive(Serialize, Deserialize, Error, Clone, Debug)]
-#[serde(crate = "self::serde")]
-enum NoopsError {
-    #[error("error: {0}")]
-    ErrorMsg(String),
-}
-
 pub async fn handle_commands(ctx: &ContextHandler, commands: PingCommands) -> Result<(), CliError> {
     debug!("ping command handler triggered...");
 
@@ -33,7 +24,7 @@ pub async fn handle_commands(ctx: &ContextHandler, commands: PingCommands) -> Re
 
             let agent_addr = get_agent_address(ctx)?;
 
-            let client = build_client::<AgentPingResponse, NoopsError>();
+            let client = build_client::<AgentPingResponse>();
             let resp = client
                 .call(
                     agent_addr,
