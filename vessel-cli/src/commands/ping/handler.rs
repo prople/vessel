@@ -36,8 +36,8 @@ pub async fn handle_commands(ctx: &ContextHandler, commands: PingCommands) -> Re
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
             let rpc_resp = resp
-                .extract_result()
-                .map_err(|err| CliError::RpcError(err.to_string()))?;
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
 
             let rpc_resp_json = serde_json::to_string(&rpc_resp)
                 .map_err(|err| CliError::RpcError(err.to_string()))?;

@@ -52,8 +52,8 @@ pub async fn handle_commands(
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
             let rpc_resp = resp
-                .extract_result()
-                .map_err(|err| CliError::RpcError(err.to_string()))?;
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
 
             let did = rpc_resp.get_did();
 
@@ -126,8 +126,8 @@ pub async fn handle_commands(
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
             let rpc_resp = resp
-                .extract_result()
-                .map_err(|err| CliError::RpcError(err.to_string()))?;
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
 
             let jsonstr = serde_json::to_string_pretty(&rpc_resp)
                 .map_err(|err| CliError::JSONError(err.to_string()))?;
