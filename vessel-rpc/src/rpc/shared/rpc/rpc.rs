@@ -49,13 +49,12 @@ where
         .await
         .map_err(|err| CallError::ExecutorError(err))?;
 
-    if rpc_response.is_error() {
-        let json_err = rpc_response
-            .extract_err()
-            .map(|val| format!("code: {} | message: {}", val.code, val.message))
-            .map_err(|err| CallError::ExecutorError(err))?;
+    if rpc_response.error.is_some() {
+        let json_err = rpc_response.error.map_or(CallError::ResponseError(String::from("missing response error")), |val| {
+            CallError::ResponseError(format!("code: {} | message: {}", val.code, val.message))
+        });
 
-        return Err(CallError::ResponseError(json_err));
+        return Err(json_err);
     }
 
     Ok(rpc_response)
