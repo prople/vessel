@@ -27,7 +27,7 @@ prople-vessel-cli = {version = "~0.1", path = "vessel-cli"}
 prople-did-core = {version = "~0.5"}
 prople-crypto = {version = "~0.2"}
 prople-jsonrpc-core = {version = "~0.5"}
-prople-jsonrpc-client = {version = "~0.2"}
+prople-jsonrpc-client = {version = "~0.3"}
 prople-jsonrpc-axum = {version = "~0.2"}
 
 # rstdev and rst_common libraries
