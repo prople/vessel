@@ -21,6 +21,12 @@ impl From<&str> for AgentName {
     }
 }
 
+impl From<String> for AgentName {
+    fn from(value: String) -> Self {
+        AgentName(value)
+    }
+}
+
 impl ToString for AgentName {
     fn to_string(&self) -> String {
         self.0.to_owned()

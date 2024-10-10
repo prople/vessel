@@ -36,7 +36,7 @@ impl DB {
     pub async fn get_model<O, ValueFn>(&self, key: Key, value_fn: ValueFn) -> Result<O, ModelError>
     where
         O: Model,
-        ValueFn: FnOnce(Vec<u8>) -> Result<O, ModelError>,
+        ValueFn: FnOnce(Option<Vec<u8>>) -> Result<O, ModelError>,
     {
         let key_str: String = key.try_into().map_err(|_| {
             ModelError::DeserializeError(String::from("unable to revert key to string"))
@@ -49,12 +49,7 @@ impl DB {
             .map_err(|err| ModelError::DatabaseError(err.to_string()))?;
 
         match out {
-            OutputOpts::SingleByte { value } => {
-                let val =
-                    value.ok_or(ModelError::DatabaseError(String::from("value not found")))?;
-
-                value_fn(val)
-            }
+            OutputOpts::SingleByte { value } => value_fn(value),
             _ => Err(ModelError::DatabaseError(String::from(
                 "invalid output return type",
             ))),

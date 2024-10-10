@@ -12,8 +12,9 @@ use crate::commands::handler::ContextHandler;
 
 use crate::models::db::DB;
 use crate::models::identity::account::account::Account;
+use crate::models::identity::account::accounts::Accounts;
 use crate::models::identity::account::types::DID;
-use crate::models::types::AgentName;
+use crate::models::types::{AgentName, KeyIdentifier};
 
 use crate::types::CliError;
 use crate::utils::rpc::build_client;
@@ -64,7 +65,27 @@ pub async fn handle_commands(
                 rpc_resp.get_doc(),
             );
 
-            let _ = db.save(AgentName::from(agent.as_str()), account);
+            let _ = db
+                .save(AgentName::from(agent.clone()), account.clone())
+                .await
+                .map_err(|err| CliError::DBError(err.to_string()))?;
+
+            debug!("Generate and saving accounts...");
+            let accounts = Accounts::default();
+            let accounts_key = accounts.key_name(AgentName::from(agent.clone()));
+
+            let saved_accounts = db
+                .get_model(accounts_key, |opt_val| match opt_val {
+                    Some(val) => Accounts::try_from(val),
+                    None => Ok(Accounts::default()),
+                })
+                .await
+                .map_err(|err| CliError::DBError(err.to_string()))?;
+
+            let _ = db
+                .save(AgentName::from(agent), saved_accounts)
+                .await
+                .map_err(|err| CliError::DBError(err.to_string()))?;
 
             info!("Generated DID: {}", did);
         }
@@ -92,7 +113,7 @@ pub async fn handle_commands(
             let method = build_rpc_method(Method::RemoveDID);
             let agent_addr = get_agent_address(ctx)?;
             let client = build_client::<()>();
-            
+
             let _ = client
                 .call(
                     agent_addr,
@@ -102,7 +123,7 @@ pub async fn handle_commands(
                 )
                 .await
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
-            
+
             info!("DID: {did} has been removed")
         }
 
