@@ -1,3 +1,5 @@
+use rst_common::standard::serde::Serialize;
+use rst_common::standard::serde_json;
 use rst_common::with_errors::thiserror::{self, Error};
 
 #[derive(Clone, Debug, Error)]
@@ -86,10 +88,21 @@ pub trait KeyIdentifier {
 }
 
 pub trait ValueBuilder {
-    fn build_value(&self) -> Result<Value, ModelError>;
+    fn build_value(&self) -> Result<Value, ModelError>
+    where
+        Self: Serialize,
+    {
+        let json = serde_json::to_string(self)
+            .map_err(|err| ModelError::BuildValueError(err.to_string()))?;
+
+        Ok(Value::from(json))
+    }
 }
 
-pub trait Model: KeyIdentifier + ValueBuilder {
+pub trait Model: KeyIdentifier + ValueBuilder
+where
+    Self: Serialize,
+{
     fn build(&self, agent_name: AgentName) -> Result<(Key, Value), ModelError> {
         let key = self.key_name(agent_name);
         let value = self.build_value()?;

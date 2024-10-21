@@ -3,7 +3,7 @@ use rst_common::standard::serde_json;
 
 use prople_did_core::doc::types::Doc;
 
-use crate::models::types::{AgentName, Key, KeyIdentifier, Model, ModelError, Value, ValueBuilder};
+use crate::models::types::{AgentName, Key, KeyIdentifier, Model, ModelError, ValueBuilder};
 
 use super::types::DID;
 
@@ -95,15 +95,7 @@ impl KeyIdentifier for Account {
     }
 }
 
-impl ValueBuilder for Account {
-    fn build_value(&self) -> Result<Value, ModelError> {
-        let json = serde_json::to_string(self)
-            .map_err(|err| ModelError::BuildValueError(err.to_string()))?;
-
-        Ok(Value::from(json))
-    }
-}
-
+impl ValueBuilder for Account {}
 impl Model for Account {}
 
 #[cfg(test)]
