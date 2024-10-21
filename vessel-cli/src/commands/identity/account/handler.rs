@@ -1,6 +1,7 @@
 use rst_common::standard::serde_json;
 use rst_common::with_logging::log::{debug, info};
 
+use prople_did_core::did::query::Params as QueryParams;
 use prople_jsonrpc_client::types::Executor;
 
 use prople_vessel_core::identity::account::types::AccountEntityAccessor;
@@ -91,7 +92,37 @@ pub async fn handle_commands(
         }
 
         AccountCommands::BuildDIDURI(args) => {
-            println!("params: {:?}", args)
+            debug!(
+                "[account:buildDIDURI] agent from context: {}",
+                ctx.agent().unwrap_or(String::from("empty agent"))
+            );
+
+            let method = build_rpc_method(Method::BuildDIDURI);
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<String>();
+
+            let mut query_params = QueryParams::default();
+            query_params.address = Some(args.address);
+
+            let resp = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::BuildDIDURI {
+                        did: args.did,
+                        password: args.password,
+                        query_params: Some(query_params),
+                    })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+            
+            let rpc_resp = resp
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
+            
+            info!("Generated URI: {}", rpc_resp);
         }
 
         AccountCommands::ResolveDIDURI { uri } => {

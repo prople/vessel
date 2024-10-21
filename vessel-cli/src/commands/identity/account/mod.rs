@@ -31,15 +31,16 @@ pub enum AccountCommands {
 
 #[derive(Args, Debug, Clone)]
 pub struct BuildDIDURIArgs {
-    #[arg(long, short)]
+    /// chose DID account used to build the URI
+    #[arg(long, short, required = true)]
     did: String,
 
-    #[arg(long, short)]
+    /// password is a password used when build your account
+    #[arg(long, short, required = true)]
     password: String,
 
-    #[arg(long, short)]
-    address: Option<String>,
-
-    #[arg(long)]
-    hl: Option<String>,
+    /// address format: https://<host>:<port>/<params> or
+    /// https://<domain>/<params>
+    #[arg(long, short, required = true)]
+    address: String,
 }
