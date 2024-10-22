@@ -20,7 +20,7 @@ pub enum AccountCommands {
     ResolveDIDURI { uri: String },
 
     #[command(name = "resolve-doc")]
-    ResolveDIDDoc { uri: String },
+    ResolveDIDDoc{ did: String },
 
     #[command(name = "remove-did")]
     RemoveDID { did: String },
@@ -32,7 +32,7 @@ pub enum AccountCommands {
 #[derive(Args, Debug, Clone)]
 pub struct BuildDIDURIArgs {
     /// chose DID account used to build the URI
-    #[arg(long, short, required = true)]
+    #[arg(long, required = true)]
     did: String,
 
     /// password is a password used when build your account

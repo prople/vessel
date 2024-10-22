@@ -1,4 +1,4 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
 
 use rst_common::with_logging::env_logger::{Builder, Env};
 use rst_common::with_logging::log::Level;
@@ -28,8 +28,8 @@ struct Cli {
     #[command(subcommand)]
     commands: Commands,
 
-    #[arg(long, global(true))]
-    enable_debug: Option<bool>,
+    #[arg(long, global(true), action=ArgAction::SetTrue)]
+    enable_debug: bool,
 
     #[arg(long, global(true))]
     agent: Option<String>,
@@ -47,10 +47,8 @@ async fn main() -> Result<(), CliError> {
     let cli = Cli::parse();
     let mut level = Level::Info.as_str();
 
-    if let Some(val) = &cli.enable_debug {
-        if val.to_owned() {
-            level = Level::Debug.as_str();
-        }
+    if cli.enable_debug {
+        level = Level::Debug.as_str();
     }
 
     // setup logging configurations

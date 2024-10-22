@@ -2,6 +2,8 @@ use rst_common::standard::serde_json;
 use rst_common::with_logging::log::{debug, info};
 
 use prople_did_core::did::query::Params as QueryParams;
+use prople_did_core::doc::types::Doc;
+
 use prople_jsonrpc_client::types::Executor;
 
 use prople_vessel_core::identity::account::types::AccountEntityAccessor;
@@ -117,11 +119,11 @@ pub async fn handle_commands(
                 )
                 .await
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
-            
+
             let rpc_resp = resp
                 .result
                 .ok_or(CliError::RpcError(String::from("missing result")))?;
-            
+
             info!("Generated URI: {}", rpc_resp);
         }
 
@@ -129,8 +131,39 @@ pub async fn handle_commands(
             println!("uri: {}", uri)
         }
 
-        AccountCommands::ResolveDIDDoc { uri } => {
-            println!("uri: {}", uri)
+        AccountCommands::ResolveDIDDoc{ did } => {
+            debug!(
+                "[account:resolveDIDDoc] agent from context: {}",
+                ctx.agent().unwrap_or(String::from("empty agent"))
+            );
+
+            debug!(
+                "[account:resolveDIDDoc] did: {}",
+                did
+            );
+
+            let method = build_rpc_method(Method::ResolveDIDDoc);
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<Doc>();
+
+            let resp = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::ResolveDIDDoc { did })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            let rpc_resp = resp
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
+
+            let out = serde_json::to_string_pretty(&rpc_resp)
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            info!("Doc: \n{}", out)
         }
 
         AccountCommands::RemoveDID { did } => {
@@ -184,7 +217,7 @@ pub async fn handle_commands(
             let jsonstr = serde_json::to_string_pretty(&rpc_resp)
                 .map_err(|err| CliError::JSONError(err.to_string()))?;
 
-            info!("Account JSON: {}", jsonstr)
+            info!("Account JSON: \n{}", jsonstr)
         }
     }
 
