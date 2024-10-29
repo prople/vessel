@@ -35,8 +35,8 @@ pub mod components {
 
     pub use prople_vessel_core::identity::verifiable::presentation::{Presentation, Verifier};
 
-    pub use rpc_method::{Domain as MethodDomain, Vessel as MethodVessel, Method};
-    pub use rpc_param::{Domain as ParamDomain, Vessel as ParamVessel, Param};
+    pub use rpc_method::{Domain as MethodDomain, Method, Vessel as MethodVessel};
+    pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
 }
 
 type AccountRpcClient = AccountRpc<ReqwestExecutor<Doc>>;
@@ -122,32 +122,44 @@ impl RPCService for Presentation<PresentationAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Vessel(components::MethodVessel::PostPresentation)),
+            build_rpc_method(components::Method::Vessel(
+                components::MethodVessel::PostPresentation,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::Generate)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::Generate,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::GetByID)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::GetByID,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::ListVPsByDIDVerifier)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::ListVPsByDIDVerifier,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::SendPresentation)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::SendPresentation,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::VerifyPersentation)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::VerifyPersentation,
+            )),
             controller.clone(),
         ));
 

@@ -13,7 +13,7 @@ use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::rpc::{call, CallError};
 
 use super::rpc_method::Method;
-use super::rpc_param::{Param, Domain};
+use super::rpc_param::{Domain, Param};
 
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>

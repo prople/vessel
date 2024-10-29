@@ -30,8 +30,8 @@ pub mod components {
 
     pub use prople_vessel_core::identity::verifiable::Credential as CoreCredentialModel;
 
-    pub use rpc_method::{Domain as MethodDomain, Vessel as MethodVessel, Method};
-    pub use rpc_param::{Domain as ParamDomain, Vessel as ParamVessel, Param};
+    pub use rpc_method::{Domain as MethodDomain, Method, Vessel as MethodVessel};
+    pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
 }
 
 type AccountRpcClient = AccountRpc<ReqwestExecutor<Doc>>;
@@ -96,32 +96,44 @@ impl RPCService for Credential<CredentialAPIImplementer> {
         let controller = Box::new(handler);
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Vessel(components::MethodVessel::PostCredential)),
+            build_rpc_method(components::Method::Vessel(
+                components::MethodVessel::PostCredential,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::GenerateCredential)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::GenerateCredential,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::ListCredentialsByDID)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::ListCredentialsByDID,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::ListCredentialsByIDs)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::ListCredentialsByIDs,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::SendCredential)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::SendCredential,
+            )),
             controller.clone(),
         ));
 
         self.routes.push(RpcRoute::new(
-            build_rpc_method(components::Method::Domain(components::MethodDomain::VerifyCredential)),
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::VerifyCredential,
+            )),
             controller.clone(),
         ));
 

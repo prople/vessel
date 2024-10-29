@@ -50,9 +50,12 @@ where
         .map_err(|err| CallError::ExecutorError(err))?;
 
     if rpc_response.error.is_some() {
-        let json_err = rpc_response.error.map_or(CallError::ResponseError(String::from("missing response error")), |val| {
-            CallError::ResponseError(format!("code: {} | message: {}", val.code, val.message))
-        });
+        let json_err = rpc_response.error.map_or(
+            CallError::ResponseError(String::from("missing response error")),
+            |val| {
+                CallError::ResponseError(format!("code: {} | message: {}", val.code, val.message))
+            },
+        );
 
         return Err(json_err);
     }
@@ -76,7 +79,9 @@ pub fn build_endpoint(addr: Multiaddr) -> Result<String, EndpointError> {
     let addr_cloned = addr.clone();
     let components = addr_cloned.iter().collect::<Vec<_>>();
     if components.len() < 2 {
-        return Err(EndpointError::InvalidMultiAddr("invalid multiaddress format".to_string()))
+        return Err(EndpointError::InvalidMultiAddr(
+            "invalid multiaddress format".to_string(),
+        ));
     }
 
     let mut endpoint = String::new();
@@ -88,10 +93,14 @@ pub fn build_endpoint(addr: Multiaddr) -> Result<String, EndpointError> {
             Protocol::Tcp(port) => endpoint.push_str(format!(":{}", port).as_str()),
             Protocol::Http => endpoint.insert_str(0, "http://"),
             Protocol::Https => endpoint.insert_str(0, "https://"),
-            _ => return Err(EndpointError::InvalidMultiAddr("unknown multiaddrss format".to_string()))
+            _ => {
+                return Err(EndpointError::InvalidMultiAddr(
+                    "unknown multiaddrss format".to_string(),
+                ))
+            }
         }
     }
-    
+
     endpoint.push_str(RPC_PATH);
     Ok(endpoint)
 }

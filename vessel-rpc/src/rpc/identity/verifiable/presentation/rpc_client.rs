@@ -173,8 +173,7 @@ mod tests {
         let param_value = param.build_serde_value().unwrap();
 
         let rpc_method = build_rpc_method(Method::Vessel(VesselMethod::PostPresentation));
-        let response_err =
-            RpcErrorBuilder::build(RpcError::InvalidParams);
+        let response_err = RpcErrorBuilder::build(RpcError::InvalidParams);
         let jsonresp: JSONResponse<()> = JSONResponse {
             id: Some(RpcId::IntegerVal(1)),
             result: None,

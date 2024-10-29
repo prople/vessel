@@ -25,8 +25,8 @@ pub use rpc_client::RpcClient;
 pub mod components {
     use super::*;
 
-    pub use prople_vessel_core::identity::account::Account as CoreAccountModel;
     pub use prople_jsonrpc_core::types::RpcError as CoreRpcError;
+    pub use prople_vessel_core::identity::account::Account as CoreAccountModel;
 
     pub use rpc_method::Method;
     pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
