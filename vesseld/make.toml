@@ -27,8 +27,7 @@ args = ["publish", "-p", "${PROPLE_CRATE_NAME}", "--dry-run", "--allow-dirty"]
 
 [tasks.publish]
 command = "cargo"
-args = ["publish", "-p", "${PROPLE_CRATE_NAME}", "--no-verify"]
+args = ["publish", "-p", "${PROPLE_CRATE_NAME}", "--no-verify", "--allow-dirty"]
 
 [tasks.publish-flow]
-private = true
 dependencies = ["pre-build", "publish-dry", "publish"]
