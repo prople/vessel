@@ -31,4 +31,4 @@ args = ["publish", "-p", "${PROPLE_CRATE_NAME}", "--no-verify"]
 
 [tasks.publish-flow]
 private = true
-dependencies = ["publish-dry"]
+dependencies = ["pre-build", "publish-dry", "publish"]
