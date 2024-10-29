@@ -1,4 +1,5 @@
-use clap::{Parser, Subcommand};
+use clap::{ArgAction, Parser, Subcommand};
+
 use rst_common::with_tokio::tokio;
 
 use prople_jsonrpc_axum::rpc::RpcError;
@@ -21,6 +22,9 @@ enum Commands {
         #[arg(short, long, value_name = "FILE")]
         #[arg(required = true)]
         config: Option<String>,
+
+        #[arg(long, global(true), action=ArgAction::SetTrue)]
+        enable_debug: bool,
     },
 }
 
@@ -28,8 +32,11 @@ enum Commands {
 async fn main() -> Result<(), RpcError> {
     let cli = Cli::parse();
     match &cli.command {
-        Commands::Rpc { config } => {
-            let rpc_server = Rpc::new(config.to_owned().unwrap());
+        Commands::Rpc {
+            config,
+            enable_debug,
+        } => {
+            let rpc_server = Rpc::new(config.to_owned().unwrap(), *enable_debug);
             let svc = rpc_server.svc()?;
             let _ = svc.serve().await?;
         }

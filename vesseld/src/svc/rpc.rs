@@ -4,8 +4,10 @@ use rst_common::with_http_tokio::axum::routing::post;
 use rst_common::with_http_tokio::axum::Router;
 use rst_common::with_http_tokio::tower_http::timeout::TimeoutLayer;
 use rst_common::with_http_tokio::tower_http::trace::TraceLayer;
+use rst_common::with_tracing::tracing;
+use rst_common::with_tracing::tracing_subscriber::filter::Directive;
 use rst_common::with_tracing::tracing_subscriber::{
-    self, layer::SubscriberExt, util::SubscriberInitExt,
+    self, filter::LevelFilter, fmt, layer::SubscriberExt, util::SubscriberInitExt, EnvFilter,
 };
 
 use prople_jsonrpc_axum::rpc::{Rpc as RpcAxum, RpcConfig, RpcError, RpcHandlerFn, RpcState};
@@ -13,26 +15,34 @@ use prople_vessel_rpc::VesselRPC;
 
 pub struct Rpc {
     config: String,
+    enable_debug: bool,
 }
 
 impl Rpc {
-    pub fn new(config: String) -> Rpc {
-        Self { config }
+    pub fn new(config: String, enable_debug: bool) -> Rpc {
+        Self {
+            config,
+            enable_debug,
+        }
     }
 
     pub fn svc(&self) -> Result<RpcAxum, RpcError> {
+        let mut default_log_level: Directive = LevelFilter::INFO.into();
+        if self.enable_debug {
+            default_log_level = LevelFilter::DEBUG.into();
+        }
+
+        let env_filter = EnvFilter::builder()
+            .with_default_directive(default_log_level.clone())
+            .parse("")
+            .map_err(|err| RpcError::AxumError(err.to_string()))?;
+
         tracing_subscriber::registry()
-            .with(
-                tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-                    format!(
-                        "{}=debug,tower_http=debug,axum=trace",
-                        env!("CARGO_CRATE_NAME")
-                    )
-                    .into()
-                }),
-            )
-            .with(tracing_subscriber::fmt::layer().without_time())
+            .with(env_filter)
+            .with(fmt::layer().without_time())
             .init();
+
+        tracing::info!("Log level: {}", default_log_level.to_string());
 
         let mut vessel_rpc =
             VesselRPC::new(&self.config).map_err(|err| RpcError::AxumError(err.to_string()))?;

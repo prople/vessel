@@ -1,6 +1,6 @@
 [package]
 name = "prople-vesseld"
-version = "0.2.0"
+version = "0.2.1"
 description = "Prople Vessel daemon provides RPC and P2P servers"
 readme = "README.md"
 keywords = ["prople", "vessel", "did", "decentralized", "identity"]
