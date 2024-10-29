@@ -20,7 +20,7 @@ use crate::models::identity::account::types::DID;
 use crate::models::types::{AgentName, KeyIdentifier};
 
 use crate::types::CliError;
-use crate::utils::rpc::build_client;
+use crate::utils::rpc::{build_client, http_to_multiaddr};
 
 use super::AccountCommands;
 
@@ -103,8 +103,11 @@ pub async fn handle_commands(
             let agent_addr = get_agent_address(ctx)?;
             let client = build_client::<String>();
 
+            let addr = http_to_multiaddr(args.address)?;
+            debug!("Multiaddr format: {}", addr.to_string());
+
             let mut query_params = QueryParams::default();
-            query_params.address = Some(args.address);
+            query_params.address = Some(addr.to_string());
 
             let resp = client
                 .call(
@@ -128,19 +131,44 @@ pub async fn handle_commands(
         }
 
         AccountCommands::ResolveDIDURI { uri } => {
-            println!("uri: {}", uri)
+            debug!(
+                "[account:resolveDIDURI] agent from context: {}",
+                ctx.agent().unwrap_or(String::from("empty agent"))
+            );
+
+            debug!("Given URI: {}", uri);
+
+            let method = build_rpc_method(Method::ResolveDIDURI);
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<Doc>();
+
+            let resp = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::ResolveDIDURI { uri })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            let rpc_resp = resp
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
+
+            let out = serde_json::to_string_pretty(&rpc_resp)
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            info!("Doc: \n{}", out)
         }
 
-        AccountCommands::ResolveDIDDoc{ did } => {
+        AccountCommands::ResolveDIDDoc { did } => {
             debug!(
                 "[account:resolveDIDDoc] agent from context: {}",
                 ctx.agent().unwrap_or(String::from("empty agent"))
             );
 
-            debug!(
-                "[account:resolveDIDDoc] did: {}",
-                did
-            );
+            debug!("[account:resolveDIDDoc] did: {}", did);
 
             let method = build_rpc_method(Method::ResolveDIDDoc);
             let agent_addr = get_agent_address(ctx)?;

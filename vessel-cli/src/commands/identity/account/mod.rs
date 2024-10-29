@@ -20,7 +20,7 @@ pub enum AccountCommands {
     ResolveDIDURI { uri: String },
 
     #[command(name = "resolve-doc")]
-    ResolveDIDDoc{ did: String },
+    ResolveDIDDoc { did: String },
 
     #[command(name = "remove-did")]
     RemoveDID { did: String },
