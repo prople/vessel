@@ -13,7 +13,7 @@ use crate::rpc::shared::rpc::method::build_rpc_method;
 use crate::rpc::shared::rpc::{call, CallError};
 
 use super::rpc_method::Method;
-use super::rpc_param::{Param, Vessel};
+use super::rpc_param::{Param, Domain};
 
 #[derive(Clone)]
 pub struct RpcClient<TExecutor>
@@ -38,7 +38,7 @@ where
     TExecutor: Executor<Doc> + Send + Sync + Clone,
 {
     async fn resolve_did_doc(&self, addr: Multiaddr, did: String) -> Result<Doc, AccountError> {
-        let rpc_param = Param::Vessel(Vessel::ResolveDIDDoc { did });
+        let rpc_param = Param::Domain(Domain::ResolveDIDDoc { did });
         let rpc_response = call(
             self.client.clone(),
             addr,
@@ -108,7 +108,7 @@ mod tests {
         let (_, port) = parse_url(base_url);
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
-        let param = Param::Vessel(Vessel::ResolveDIDDoc {
+        let param = Param::Domain(Domain::ResolveDIDDoc {
             did: did_str.clone(),
         });
 
@@ -175,7 +175,7 @@ mod tests {
         let (_, port) = parse_url(base_url);
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Tcp(port));
 
-        let param = Param::Vessel(Vessel::ResolveDIDDoc {
+        let param = Param::Domain(Domain::ResolveDIDDoc {
             did: did_str.clone(),
         });
 

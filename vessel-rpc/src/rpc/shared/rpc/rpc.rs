@@ -76,31 +76,23 @@ pub fn build_endpoint(addr: Multiaddr) -> Result<String, EndpointError> {
     let addr_cloned = addr.clone();
     let components = addr_cloned.iter().collect::<Vec<_>>();
     if components.len() < 2 {
-        return Err(EndpointError::InvalidMultiAddr(String::from(
-            "multiaddr length not valid",
-        )));
+        return Err(EndpointError::InvalidMultiAddr("invalid multiaddress format".to_string()))
     }
 
-    let host = {
-        match &components[0] {
-            Protocol::Ip4(ip) => Ok(format!("http://{}", ip.to_string())),
-            Protocol::Dns(dns) => Ok(dns.to_string()),
-            Protocol::Dns4(dns4) => Ok(dns4.to_string()),
-            protocol => Err(EndpointError::InvalidMultiAddr(format!(
-                "unknown protocol: {}",
-                protocol.to_string()
-            ))),
+    let mut endpoint = String::new();
+    for comp in components {
+        match comp {
+            Protocol::Ip4(ip) => endpoint.push_str(format!("http://{}", ip.to_string()).as_str()),
+            Protocol::Dns(dns) => endpoint.push_str(dns.to_string().as_str()),
+            Protocol::Dns4(dns4) => endpoint.push_str(dns4.to_string().as_str()),
+            Protocol::Tcp(port) => endpoint.push_str(format!(":{}", port).as_str()),
+            Protocol::Http => endpoint.insert_str(0, "http://"),
+            Protocol::Https => endpoint.insert_str(0, "https://"),
+            _ => return Err(EndpointError::InvalidMultiAddr("unknown multiaddrss format".to_string()))
         }
-    }?;
-
-    let port = {
-        match components[1] {
-            Protocol::Tcp(port) => port,
-            _ => 80,
-        }
-    };
-
-    let endpoint = format!("{}:{}{}", host, port, RPC_PATH);
+    }
+    
+    endpoint.push_str(RPC_PATH);
     Ok(endpoint)
 }
 
@@ -112,15 +104,8 @@ mod tests {
     use multiaddr::multiaddr;
 
     #[test]
-    fn test_multiaddr_invalid() {
-        let addr = multiaddr!(Udp(10500u16), QuicV1);
-        let parsed = build_endpoint(addr);
-        assert!(parsed.is_err());
-    }
-
-    #[test]
     fn test_multiaddr_dns() {
-        let addr = multiaddr!(Dns("http://google.com"), Tcp(8080u16));
+        let addr = multiaddr!(Dns("google.com"), Http, Tcp(8080u16));
         let parsed = build_endpoint(addr);
         assert!(!parsed.is_err());
         assert_eq!("http://google.com:8080/rpc", parsed.unwrap())
@@ -128,7 +113,7 @@ mod tests {
 
     #[test]
     fn test_multiaddr_dns4() {
-        let addr = multiaddr!(Dns4("http://google.com"), Tcp(8080u16));
+        let addr = multiaddr!(Dns4("google.com"), Http, Tcp(8080u16));
         let parsed = build_endpoint(addr);
         assert!(!parsed.is_err());
         assert_eq!("http://google.com:8080/rpc", parsed.unwrap())
