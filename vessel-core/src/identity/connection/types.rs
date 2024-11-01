@@ -8,8 +8,8 @@ use rst_common::with_errors::thiserror::{self, Error};
 use rstdev_domain::entity::ToJSON;
 
 /// ConnectionError is a base error types for the `Connection` domain
-/// 
-/// It will contains any possible errors for the `connection` 
+///
+/// It will contains any possible errors for the `connection`
 #[derive(Debug, PartialEq, Error, Serialize, Deserialize, Clone)]
 #[serde(crate = "self::serde")]
 pub enum ConnectionError {
@@ -50,9 +50,9 @@ pub trait ConnectionEntityAccessor:
 }
 
 /// ConnectionChallenge used as a response to the peer sender that request to connect
-/// 
+///
 /// It will contains two important properties:
-/// 
+///
 /// - Connection id
 /// - Connection challenge
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -100,7 +100,7 @@ pub trait ConnectionAPI: Clone {
     ) -> Result<(), ConnectionError>;
 
     /// submit_request used by the sender to submit the connection request from their client app like from CLI or others
-    /// 
+    ///
     /// When an user submit request it must able to generate the ECDH key pairs, and use the public as additional parameter
     /// to the peer through [`ConnectionAPI::request_connect`]
     async fn submit_request(
@@ -111,10 +111,13 @@ pub trait ConnectionAPI: Clone {
 
     async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
     async fn get_connection(&self, id: String) -> Result<Self::EntityAccessor, ConnectionError>;
-    async fn list_connections(&self, state: Option<State>) -> Result<Vec<Self::EntityAccessor>, ConnectionError>;
+    async fn list_connections(
+        &self,
+        state: Option<State>,
+    ) -> Result<Vec<Self::EntityAccessor>, ConnectionError>;
 }
 
-/// RepoBuilder is a `Connection Repository` abstraction by implementing repository pattern 
+/// RepoBuilder is a `Connection Repository` abstraction by implementing repository pattern
 #[async_trait]
 pub trait RepoBuilder: Clone + Sync + Send {
     type EntityAccessor: ConnectionEntityAccessor;
@@ -127,4 +130,22 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         state: Option<State>,
     ) -> Result<Vec<Self::EntityAccessor>, ConnectionError>;
+}
+
+/// `RpcBuilder` is a trait behavior used as `JSON-RPC` client builder
+/// to calling other `Vessel` agents.
+#[async_trait]
+pub trait RpcBuilder: Clone {
+    async fn request_connect(
+        &self,
+        own_did_uri: String,
+        peer_did_uri: String,
+        public_key: String,
+    ) -> Result<ConnectionChallenge, ConnectionError>;
+
+    async fn response_challenge(
+        &self,
+        connection_id: String,
+        answer: String,
+    ) -> Result<(), ConnectionError>;
 }
