@@ -49,4 +49,5 @@
 //! they will generate the `VC` and `VP` with it's proofs which contains a digital signature, which means
 //! they need to exchange their public keys.
 pub mod account;
+pub mod connection;
 pub mod verifiable;
