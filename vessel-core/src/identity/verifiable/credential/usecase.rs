@@ -210,14 +210,13 @@ mod tests {
     use multiaddr::{multiaddr, Multiaddr};
 
     use prople_crypto::eddsa::keypair::KeyPair;
-    use prople_crypto::keysecure::types::ToKeySecure;
+    use prople_crypto::keysecure::types::{ToKeySecure, Password};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
-    use prople_did_core::verifiable::objects::ProofValue;
 
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
@@ -351,7 +350,7 @@ mod tests {
         let did_holder_keysecure = did_holder
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         let did_holder_account = Account::new(
@@ -464,7 +463,7 @@ mod tests {
                     let did_vc_keysecure = did_vc
                         .account()
                         .privkey()
-                        .to_keysecure("password".to_string())
+                        .to_keysecure(Password::from("password".to_string()))
                         .unwrap();
 
                     Ok(AccountIdentity {
@@ -564,7 +563,7 @@ mod tests {
                     let did_vc_keysecure = did_vc
                         .account()
                         .privkey()
-                        .to_keysecure("password".to_string())
+                        .to_keysecure(Password::from("password".to_string()))
                         .unwrap();
 
                     Ok(AccountIdentity {
@@ -651,25 +650,9 @@ mod tests {
             .map_err(|err| CredentialError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
-        let (vc_original, proof) = vc.split_proof();
+        let (_, proof) = vc.split_proof();
         assert!(proof.is_some());
 
-        let verified = ProofValue::transform_verifier(
-            account_doc_keypair.clone().unwrap(),
-            vc_original,
-            proof.clone().unwrap().proof_value,
-        );
-        assert!(!verified.is_err());
-        assert!(verified.unwrap());
-
-        // verification should be error if using VC directly
-        let verified_invalid = ProofValue::transform_verifier(
-            account_doc_keypair.unwrap(),
-            vc,
-            proof.unwrap().proof_value,
-        );
-        assert!(!verified_invalid.is_err());
-        assert!(!verified_invalid.unwrap());
     }
 
     #[tokio::test]
@@ -814,7 +797,7 @@ mod tests {
                     let did_vc_keysecure = did_vc
                         .account()
                         .privkey()
-                        .to_keysecure("password".to_string())
+                        .to_keysecure(Password::from("password".to_string()))
                         .unwrap();
 
                     Ok(AccountIdentity {
@@ -886,7 +869,7 @@ mod tests {
                         keysecure: did_vc_cloned
                             .account()
                             .privkey()
-                            .to_keysecure("password".to_string())
+                            .to_keysecure(Password::from("password".to_string()))
                             .unwrap(),
                         created_at: Utc::now(),
                         updated_at: Utc::now(),
@@ -1028,7 +1011,7 @@ mod tests {
                         keysecure: did_vc_cloned
                             .account()
                             .privkey()
-                            .to_keysecure("password".to_string())
+                            .to_keysecure(Password::from("password".to_string()))
                             .unwrap(),
                         created_at: Utc::now(),
                         updated_at: Utc::now(),

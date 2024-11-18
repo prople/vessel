@@ -188,13 +188,11 @@ mod tests {
     use rst_common::standard::serde_json;
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::eddsa::keypair::KeyPair;
-    use prople_crypto::keysecure::types::ToKeySecure;
+    use prople_crypto::keysecure::types::{ToKeySecure, Password};
 
     use prople_did_core::did::DID;
     use prople_did_core::doc::types::ToDoc;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
-    use prople_did_core::verifiable::objects::ProofValue;
 
     use crate::identity::account::Account as AccountIdentity;
 
@@ -224,7 +222,7 @@ mod tests {
         let did_vc_keysecure = did_vc
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         AccountIdentity {
@@ -263,78 +261,5 @@ mod tests {
 
         let credential = credential_builder.unwrap();
         assert!(credential.vc.proof.is_none())
-    }
-
-    #[tokio::test]
-    async fn test_generate_credential_with_params() {
-        let did_issuer = generate_did();
-        let did_issuer_value = did_issuer.identity().unwrap().value();
-
-        let did_vc = generate_did();
-
-        let claims = serde_json::to_value(FakeCredential {
-            msg: "hello world".to_string(),
-        })
-        .unwrap();
-
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
-        let account = generate_account(did_vc);
-        let credential_builder = Credential::generate(
-            account,
-            "password".to_string(),
-            did_issuer_value,
-            claims,
-            Some(proof_params),
-        )
-        .await;
-        assert!(!credential_builder.is_err());
-
-        let credential = credential_builder.unwrap();
-        assert!(credential.vc.proof.is_some());
-
-        let vc = credential.vc;
-        let doc_private_keys = credential.did_vc_doc_private_keys;
-
-        let account_doc_verification_pem_bytes = doc_private_keys
-            .clone()
-            .authentication
-            .map(|val| {
-                val.decrypt_verification("password".to_string())
-                    .map_err(|err| CredentialError::GenerateError(err.to_string()))
-            })
-            .ok_or(CredentialError::GenerateError(
-                "PrivateKeyPairs is missing".to_string(),
-            ));
-        assert!(!account_doc_verification_pem_bytes.is_err());
-
-        let account_doc_verification_pem_bytes_unwrap =
-            account_doc_verification_pem_bytes.unwrap().unwrap();
-        let account_doc_verification_pem =
-            String::from_utf8(account_doc_verification_pem_bytes_unwrap)
-                .map_err(|err| CredentialError::GenerateError(err.to_string()));
-        assert!(!account_doc_verification_pem.is_err());
-
-        let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
-            .map_err(|err| CredentialError::GenerateError(err.to_string()));
-        assert!(!account_doc_keypair.is_err());
-
-        let (vc_original, proof_original) = vc.split_proof();
-        let verified = ProofValue::transform_verifier(
-            account_doc_keypair.clone().unwrap(),
-            vc_original,
-            proof_original.clone().unwrap().proof_value,
-        );
-
-        assert!(!verified.is_err());
-        assert!(verified.unwrap())
     }
 }

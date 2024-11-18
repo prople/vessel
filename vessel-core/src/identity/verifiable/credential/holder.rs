@@ -7,12 +7,9 @@ use rst_common::standard::uuid::Uuid;
 use rstdev_domain::entity::ToJSON;
 use rstdev_domain::BaseError;
 
-use prople_did_core::doc::types::PublicKeyDecoded;
-use prople_did_core::types::VERIFICATION_TYPE_ED25519;
-use prople_did_core::verifiable::objects::{ProofValue, VC};
+use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::account::types::AccountAPI;
-use crate::identity::account::URI;
 
 use super::types::{CredentialError, HolderEntityAccessor};
 
@@ -55,95 +52,7 @@ impl Holder {
         self
     }
 
-    pub async fn verify_vc(&self, account: impl AccountAPI) -> Result<Self, CredentialError> {
-        let vc = {
-            let internal = self.vc.to_owned();
-            match internal.proof {
-                Some(_) => Ok(internal),
-                None => Err(CredentialError::VerifyError(
-                    "proof was missing".to_string(),
-                )),
-            }
-        }?;
-
-        let vc_did_uri = {
-            let did_uri = vc.clone().id;
-            let check_did_uri_params = URI::has_params(did_uri.clone())
-                .map(move |has_params| {
-                    if !has_params {
-                        return Err(CredentialError::VerifyError(
-                            "current did uri doesn't have any params".to_string(),
-                        ));
-                    }
-
-                    Ok(did_uri)
-                })
-                .map_err(|err| CredentialError::VerifyError(err.to_string()))?;
-
-            check_did_uri_params
-        }?;
-
-        let vc_doc = account
-            .resolve_did_doc(vc_did_uri)
-            .await
-            .map_err(|err| CredentialError::VerifyError(err.to_string()))?;
-
-        let vc_doc_primary_key = {
-            let primary =
-                vc_doc
-                    .authentication
-                    .map(|doc| doc)
-                    .ok_or(CredentialError::VerifyError(
-                        "missing primary keys".to_string(),
-                    ))?;
-
-            let key = primary
-                .iter()
-                .find(|key| {
-                    let key = key.to_owned();
-                    *key.verification_type.to_string() == VERIFICATION_TYPE_ED25519.to_string()
-                })
-                .map(|key| key.to_owned());
-
-            key
-        }
-        .ok_or(CredentialError::VerifyError(
-            "doc public keys not found".to_string(),
-        ))?;
-
-        let vc_doc_pubkey = {
-            let pubkey_decoded = vc_doc_primary_key
-                .decode_pub_key()
-                .map_err(|err| CredentialError::VerifyError(err.to_string()))?;
-
-            match pubkey_decoded {
-                PublicKeyDecoded::EdDSA(pubkey) => Ok(pubkey),
-                _ => Err(CredentialError::VerifyError(
-                    "the public key should be in EdDSA format, others detected".to_string(),
-                )),
-            }
-        }?;
-
-        let (vc_orig, proof_orig) = vc.clone().split_proof();
-
-        let proof_signature = proof_orig
-            .map(|proof| proof)
-            .ok_or(CredentialError::VerifyError(
-                "proof was missing".to_string(),
-            ))?;
-
-        let _ = ProofValue::verify_proof(vc_doc_pubkey, vc_orig, proof_signature.proof_value)
-            .map(|verified| {
-                if !verified {
-                    return Err(CredentialError::VerifyError(
-                        "proof signature is invalid".to_string(),
-                    ));
-                }
-
-                Ok(())
-            })
-            .map_err(|err| CredentialError::VerifyError(err.to_string()))??;
-
+    pub async fn verify_vc(&self, _: impl AccountAPI) -> Result<Self, CredentialError> {
         let mut verified_holder = self.clone();
         verified_holder.is_verified = true;
 

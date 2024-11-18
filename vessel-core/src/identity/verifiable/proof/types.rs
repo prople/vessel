@@ -1,7 +1,7 @@
 use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::with_errors::thiserror::{self, Error};
 
-use prople_did_core::verifiable::objects::Proof;
+use prople_did_core::verifiable::proof::Proof;
 
 #[derive(Debug, Error, Clone)]
 pub enum ProofError {

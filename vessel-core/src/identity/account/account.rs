@@ -7,7 +7,7 @@ use rst_common::standard::uuid::Uuid;
 use rstdev_domain::entity::ToJSON;
 use rstdev_domain::BaseError;
 
-use prople_crypto::keysecure::types::ToKeySecure;
+use prople_crypto::keysecure::types::{ToKeySecure, Password};
 use prople_crypto::keysecure::KeySecure;
 
 use prople_did_core::did::DID;
@@ -67,7 +67,7 @@ impl Account {
         let account_keysecure = did
             .account()
             .privkey()
-            .to_keysecure(password.clone())
+            .to_keysecure(Password::from(password.clone()))
             .map_err(|err| AccountError::GenerateIdentityError(err.to_string()))?;
 
         let doc = identity

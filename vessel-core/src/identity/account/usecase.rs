@@ -138,7 +138,7 @@ mod tests {
     use multiaddr::{multiaddr, Multiaddr};
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::ToKeySecure;
+    use prople_crypto::keysecure::types::{ToKeySecure, Password};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -250,7 +250,7 @@ mod tests {
                 let keysecure = did
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
 
                 let account = Account::new(
@@ -292,7 +292,7 @@ mod tests {
                 let keysecure = did
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
                 let account = Account::new(
                     identity_value.clone(),
@@ -365,7 +365,7 @@ mod tests {
                 let keysecure = did
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
                 let account = Account::new(
                     identity_repo_clone.clone().value(),
@@ -419,8 +419,8 @@ mod tests {
         let resolved = uc.resolve_did_uri(uri.unwrap()).await;
         assert!(!resolved.is_err());
         assert_eq!(
-            resolved.unwrap().to_json().unwrap().as_bytes(),
-            identity.to_doc().to_json().unwrap().as_bytes()
+            resolved.unwrap().to_json().unwrap().to_bytes(),
+            identity.to_doc().to_json().unwrap().to_bytes()
         )
     }
 
@@ -501,7 +501,7 @@ mod tests {
                 let keysecure = did
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
 
                 let account = Account::new(
@@ -573,7 +573,7 @@ mod tests {
                     let keysecure = did
                         .account()
                         .privkey()
-                        .to_keysecure("password".to_string())
+                        .to_keysecure(Password::from("password".to_string()))
                         .unwrap();
 
                     let account = Account::new(
@@ -593,8 +593,8 @@ mod tests {
         let doc = uc.resolve_did_doc("did:prople:test".to_string()).await;
         assert!(!doc.is_err());
         assert_eq!(
-            identity.clone().to_doc().to_json().unwrap().as_bytes(),
-            doc.unwrap().to_json().unwrap().as_bytes()
+            identity.clone().to_doc().to_json().unwrap().to_bytes(),
+            doc.unwrap().to_json().unwrap().to_bytes()
         )
     }
 

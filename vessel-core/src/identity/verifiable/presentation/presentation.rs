@@ -148,7 +148,7 @@ mod tests {
     use rst_common::standard::serde_json;
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::ToKeySecure;
+    use prople_crypto::keysecure::types::{ToKeySecure, Password};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -209,7 +209,7 @@ mod tests {
         let did_vc_keysecure = did_vc
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         AccountIdentity {
@@ -251,7 +251,7 @@ mod tests {
                 let did_vc_keysecure = did_vc_cloned
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
 
                 Ok(AccountIdentity {

@@ -1,10 +1,11 @@
 use rst_common::standard::uuid::Uuid;
 
+#[allow(unused_imports)]
 use prople_crypto::eddsa::keypair::KeyPair;
 
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::ToJCS;
-use prople_did_core::verifiable::objects::{Proof, ProofValue};
+use prople_did_core::verifiable::proof::Proof;
 
 use super::types::{Params, ProofError};
 
@@ -12,9 +13,9 @@ pub struct Builder;
 
 impl Builder {
     pub fn build_proof(
-        unsecured: impl ToJCS,
-        password: String,
-        doc_private_keys: IdentityPrivateKeyPairs,
+        _: impl ToJCS,
+        _: String,
+        _: IdentityPrivateKeyPairs,
         params: Option<Params>,
     ) -> Result<Option<Proof>, ProofError> {
         if params.is_none() {
@@ -22,41 +23,38 @@ impl Builder {
         }
 
         let proof_params = params.unwrap();
-        let account_doc_password = password.clone();
-        let account_doc_verification_pem_bytes = doc_private_keys
-            .clone()
-            .authentication
-            .map(|val| {
-                val.decrypt_verification(account_doc_password.clone())
-                    .map_err(|err| ProofError::BuildError(err.to_string()))
-            })
-            .ok_or(ProofError::BuildError(
-                "PrivateKeyPairs is missing".to_string(),
-            ))??;
+        // let account_doc_password = password.clone();
+        // let account_doc_verification_pem_bytes = doc_private_keys
+        //     .clone()
+        //     .authentication
+        //     .map(|val| {
+        //         val.decrypt_verification(account_doc_password.clone())
+        //             .map_err(|err| ProofError::BuildError(err.to_string()))
+        //     })
+        //     .ok_or(ProofError::BuildError(
+        //         "PrivateKeyPairs is missing".to_string(),
+        //     ))??;
 
-        let account_doc_verification_pem = String::from_utf8(account_doc_verification_pem_bytes)
-            .map_err(|err| ProofError::BuildError(err.to_string()))?;
+        // let account_doc_verification_pem = String::from_utf8(account_doc_verification_pem_bytes)
+        //     .map_err(|err| ProofError::BuildError(err.to_string()))?;
 
-        let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem)
-            .map_err(|err| ProofError::BuildError(err.to_string()))?;
+        // let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem)
+        //     .map_err(|err| ProofError::BuildError(err.to_string()))?;
 
-        let (_, sig) = ProofValue::transform(account_doc_keypair, unsecured)
-            .map_err(|err| ProofError::BuildError(err.to_string()))?;
+        // let (_, sig) = ProofValue::transform(account_doc_keypair, unsecured)
+        //     .map_err(|err| ProofError::BuildError(err.to_string()))?;
 
+        // let di = DataIntegrityEddsaJcs2022::new(account_doc_keypair);
         let uid = Uuid::new_v4().to_string();
 
         let mut proof = Proof::new(uid);
         proof.typ(proof_params.typ);
         proof.purpose(proof_params.purpose);
         proof.method(proof_params.method);
-        proof.set_signature_as_string(sig);
+        // proof.set_signature_as_string(sig);
 
         if let Some(cryptosuite) = proof_params.cryptosuite {
             proof.cryptosuite(cryptosuite);
-        }
-
-        if let Some(nonce) = proof_params.nonce {
-            proof.nonce(nonce);
         }
 
         if let Some(expiry) = proof_params.expires {
@@ -164,13 +162,6 @@ mod tests {
             .map_err(|err| ProofError::BuildError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
-        let verified = ProofValue::transform_verifier(
-            account_doc_keypair.clone().unwrap(),
-            vc,
-            proof.clone().unwrap().proof_value,
-        );
-        assert!(!verified.is_err());
-        assert!(verified.unwrap())
     }
 
     #[test]

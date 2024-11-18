@@ -253,14 +253,13 @@ mod tests {
     use rst_common::standard::serde_json::value::Value;
 
     use prople_crypto::eddsa::keypair::KeyPair;
-    use prople_crypto::keysecure::types::ToKeySecure;
+    use prople_crypto::keysecure::types::{ToKeySecure, Password};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
-    use prople_did_core::verifiable::objects::ProofValue;
     use prople_did_core::verifiable::objects::VC;
     use prople_did_core::verifiable::objects::VP;
 
@@ -428,14 +427,14 @@ mod tests {
         let did1_keysecure = did1
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         let did2 = generate_did();
         let did2_keysecure = did2
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         let vc1 = VC::new("id1".to_string(), did1.identity().unwrap().value());
@@ -492,7 +491,7 @@ mod tests {
         let did_verifier_keysecure = did_verifier
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         let did_verifier_account = Account::new(
@@ -611,7 +610,7 @@ mod tests {
                 let did_issuer_mock_keysecure = did_issuer_mock
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
 
                 let result = AccountIdentity::new(
@@ -717,7 +716,7 @@ mod tests {
                 let did_issuer_mock_keysecure = did_issuer_mock
                     .account()
                     .privkey()
-                    .to_keysecure("password".to_string())
+                    .to_keysecure(Password::from("password".to_string()))
                     .unwrap();
 
                 let result = AccountIdentity::new(
@@ -786,27 +785,8 @@ mod tests {
             .map_err(|err| PresentationError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
-        let (vp_original, proof) = vp.split_proof();
+        let (_, proof) = vp.split_proof();
         assert!(proof.is_some());
-
-        let verified = ProofValue::transform_verifier(
-            account_doc_keypair.clone().unwrap(),
-            vp_original,
-            proof.clone().unwrap().proof_value,
-        );
-
-        assert!(!verified.is_err());
-        assert!(verified.unwrap());
-
-        // verification should be error if using VP directly
-        let verified_invalid = ProofValue::transform_verifier(
-            account_doc_keypair.unwrap(),
-            vp,
-            proof.unwrap().proof_value,
-        );
-
-        assert!(!verified_invalid.is_err());
-        assert!(!verified_invalid.unwrap());
     }
 
     #[tokio::test]

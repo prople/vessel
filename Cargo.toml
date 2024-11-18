@@ -24,8 +24,8 @@ prople-vessel-rpc = {version = "~0.3", path = "vessel-rpc"}
 prople-vessel-cli = {version = "~0.1", path = "vessel-cli"}
 
 # external prople libraries
-prople-did-core = {version = "~0.5"}
-prople-crypto = {version = "~0.2"}
+prople-did-core = {version = "~0.6"}
+prople-crypto = {version = "~0.3"}
 prople-jsonrpc-core = {version = "~0.5"}
 prople-jsonrpc-client = {version = "~0.3"}
 prople-jsonrpc-axum = {version = "~0.2"}

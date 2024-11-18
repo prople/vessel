@@ -303,7 +303,7 @@ mod tests {
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::ToKeySecure;
+    use prople_crypto::keysecure::types::{ToKeySecure, Password};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -333,14 +333,14 @@ mod tests {
         let did1_keysecure = did1
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         let did2 = generate_did();
         let did2_keysecure = did2
             .account()
             .privkey()
-            .to_keysecure("password".to_string())
+            .to_keysecure(Password::from("password".to_string()))
             .unwrap();
 
         let vc1 = VC::new("id1".to_string(), did1.identity().unwrap().value());
