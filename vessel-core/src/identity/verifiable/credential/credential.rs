@@ -17,7 +17,6 @@ use prople_did_core::verifiable::objects::VC;
 use crate::identity::account::types::AccountEntityAccessor;
 
 use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
-use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
 use super::types::{CredentialEntityAccessor, CredentialError};
@@ -68,7 +67,6 @@ impl Credential {
         password: String,
         did_issuer: String,
         claims: Value,
-        proof_params: Option<ProofParams>,
     ) -> Result<Credential, CredentialError> {
         if password.is_empty() {
             return Err(CredentialError::CommonError(
@@ -96,7 +94,6 @@ impl Credential {
             vc.clone(),
             password,
             account_doc_private_key_pairs.clone(),
-            proof_params,
         )
         .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
 
@@ -176,90 +173,5 @@ impl CredentialEntityAccessor for Credential {
 
     fn get_updated_at(&self) -> DateTime<Utc> {
         self.updated_at.to_owned()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use rst_common::standard::chrono::Utc;
-    use rst_common::standard::serde::{self, Deserialize, Serialize};
-    use rst_common::standard::serde_json;
-    use rst_common::with_tokio::tokio;
-
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
-
-    use prople_did_core::did::DID;
-    use prople_did_core::doc::types::ToDoc;
-    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
-
-    use crate::identity::account::Account as AccountIdentity;
-
-    #[derive(Deserialize, Serialize)]
-    #[serde(crate = "self::serde")]
-    struct FakeCredential {
-        pub msg: String,
-    }
-
-    fn generate_did() -> DID {
-        DID::new()
-    }
-
-    fn generate_account(did_vc: DID) -> AccountIdentity {
-        let mut did_vc_identity = did_vc.identity().unwrap();
-        let did_vc_value_cloned = did_vc_identity.value();
-
-        let did_vc_doc = did_vc_identity
-            .build_assertion_method()
-            .build_auth_method()
-            .to_doc();
-
-        let did_vc_doc_private_keys = did_vc_identity
-            .build_private_keys("password".to_string())
-            .unwrap();
-
-        let did_vc_keysecure = did_vc
-            .account()
-            .privkey()
-            .to_keysecure(Password::from("password".to_string()))
-            .unwrap();
-
-        AccountIdentity {
-            id: Uuid::new_v4().to_string(),
-            did: did_vc_value_cloned.clone(),
-            keysecure: did_vc_keysecure,
-            doc: did_vc_doc,
-            doc_private_keys: did_vc_doc_private_keys,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
-        }
-    }
-
-    #[tokio::test]
-    async fn test_generate_credential_without_params() {
-        let did_issuer = generate_did();
-        let did_issuer_value = did_issuer.identity().unwrap().value();
-
-        let did_vc = generate_did();
-
-        let claims = serde_json::to_value(FakeCredential {
-            msg: "hello world".to_string(),
-        })
-        .unwrap();
-
-        let account = generate_account(did_vc);
-        let credential_builder = Credential::generate(
-            account,
-            "password".to_string(),
-            did_issuer_value,
-            claims,
-            None,
-        )
-        .await;
-        assert!(!credential_builder.is_err());
-
-        let credential = credential_builder.unwrap();
-        assert!(credential.vc.proof.is_none())
     }
 }

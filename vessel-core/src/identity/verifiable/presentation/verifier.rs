@@ -129,7 +129,7 @@ mod tests {
     use rst_common::standard::async_trait::async_trait;
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -140,7 +140,6 @@ mod tests {
     use crate::identity::account::types::{AccountAPI, AccountError};
     use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
-    use crate::identity::verifiable::proof::types::Params as ProofParams;
     use crate::identity::verifiable::Credential;
 
     mock!(
@@ -239,16 +238,6 @@ mod tests {
 
         let did_uri = did.build_uri(Some(query_params)).unwrap();
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let mut vp = VP::new();
         vp.add_context(CONTEXT_VC.to_string())
             .add_context(CONTEXT_VC_V2.to_string())
@@ -263,7 +252,6 @@ mod tests {
             vp.clone(),
             password,
             did_privkeys.clone(),
-            Some(proof_params),
         )
         .unwrap()
         .unwrap();

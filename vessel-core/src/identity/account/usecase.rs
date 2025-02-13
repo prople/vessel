@@ -138,7 +138,7 @@ mod tests {
     use multiaddr::{multiaddr, Multiaddr};
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};

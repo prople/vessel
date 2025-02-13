@@ -7,7 +7,6 @@ use crate::identity::account::types::AccountAPI;
 use crate::identity::account::Account;
 use crate::identity::account::URI;
 
-use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
 use super::types::HolderEntityAccessor;
@@ -75,7 +74,6 @@ where
         password: String,
         did_issuer: String,
         claims: Value,
-        proof_params: Option<ProofParams>,
     ) -> Result<Credential, CredentialError> {
         if password.is_empty() {
             return Err(CredentialError::CommonError(
@@ -95,8 +93,7 @@ where
             .await
             .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
 
-        let credential =
-            Credential::generate(account, password, did_issuer, claims, proof_params).await?;
+        let credential = Credential::generate(account, password, did_issuer, claims).await?;
 
         let _ = self
             .repo()
@@ -200,6 +197,7 @@ mod tests {
     use mockall::mock;
     use mockall::predicate::eq;
 
+    use prople_did_core::verifiable::proof::types::Proofable;
     use rst_common::standard::async_trait::async_trait;
     use rst_common::standard::chrono::Utc;
     use rst_common::standard::serde::{self, Deserialize, Serialize};
@@ -210,7 +208,7 @@ mod tests {
     use multiaddr::{multiaddr, Multiaddr};
 
     use prople_crypto::eddsa::keypair::KeyPair;
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -380,16 +378,6 @@ mod tests {
 
         let did_uri = did.build_uri(Some(query_params)).unwrap();
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let cred_value = serde_json::to_value(FakeCredential {
             msg: "hello world".to_string(),
         })
@@ -405,7 +393,6 @@ mod tests {
             vc.clone(),
             password,
             did_privkeys.clone(),
-            Some(proof_params),
         )
         .unwrap()
         .unwrap();
@@ -493,7 +480,6 @@ mod tests {
                 "password".to_string(),
                 did_issuer.identity().unwrap().value(),
                 cred_value.clone(),
-                None,
             )
             .await;
         assert!(!vc.is_err());
@@ -588,22 +574,11 @@ mod tests {
         })
         .unwrap();
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let vc = uc
             .generate_credential(
                 "password".to_string(),
                 did_issuer.identity().unwrap().value(),
                 cred_value.clone(),
-                Some(proof_params),
             )
             .await;
         assert!(!vc.is_err());
@@ -650,9 +625,8 @@ mod tests {
             .map_err(|err| CredentialError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
-        let (_, proof) = vc.split_proof();
-        assert!(proof.is_some());
-
+        let try_get_proof = vc.get_proof();
+        assert!(try_get_proof.is_some());
     }
 
     #[tokio::test]
@@ -669,12 +643,7 @@ mod tests {
         .unwrap();
 
         let generate_pass = uc
-            .generate_credential(
-                "".to_string(),
-                "issuer".to_string(),
-                cred_value.clone(),
-                None,
-            )
+            .generate_credential("".to_string(), "issuer".to_string(), cred_value.clone())
             .await;
         assert!(generate_pass.is_err());
 
@@ -686,7 +655,7 @@ mod tests {
         }
 
         let generate_issuer = uc
-            .generate_credential("password".to_string(), "".to_string(), cred_value, None)
+            .generate_credential("password".to_string(), "".to_string(), cred_value)
             .await;
         assert!(generate_issuer.is_err());
 
@@ -742,7 +711,6 @@ mod tests {
                 "password".to_string(),
                 did_issuer_uri_builder.unwrap(),
                 cred_value.clone(),
-                None,
             )
             .await;
         assert!(vc.is_err());
@@ -823,12 +791,7 @@ mod tests {
         .unwrap();
 
         let vc = uc
-            .generate_credential(
-                "password".to_string(),
-                did_issuer_uri,
-                cred_value.clone(),
-                None,
-            )
+            .generate_credential("password".to_string(), did_issuer_uri, cred_value.clone())
             .await;
         assert!(vc.is_err());
         assert!(matches!(vc.unwrap_err(), CredentialError::CommonError(_)))

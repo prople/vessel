@@ -13,7 +13,6 @@ use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::{AccountAPI, AccountEntityAccessor};
 use crate::identity::verifiable::credential::types::CredentialAPI;
-use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
@@ -84,7 +83,6 @@ pub trait PresentationAPI: Clone {
         password: String,
         did_issuer: String,
         credentials: Vec<String>,
-        proof_params: Option<ProofParams>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
     async fn send_presentation(&self, id: String, did_uri: String)

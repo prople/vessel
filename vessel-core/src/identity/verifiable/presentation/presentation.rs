@@ -15,7 +15,6 @@ use prople_did_core::verifiable::objects::VP;
 use crate::identity::account::types::AccountEntityAccessor;
 use crate::identity::verifiable::credential::types::CredentialEntityAccessor;
 use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
-use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 
 use super::types::{PresentationEntityAccessor, PresentationError, VP_TYPE};
@@ -103,7 +102,6 @@ impl Presentation {
         did_issuer: String,
         account: impl AccountEntityAccessor,
         credentials: Vec<impl CredentialEntityAccessor>,
-        proof_params: Option<ProofParams>,
     ) -> Result<Presentation, PresentationError> {
         if password.is_empty() {
             return Err(PresentationError::CommonError(
@@ -125,7 +123,6 @@ impl Presentation {
             vp.clone(),
             password,
             account_doc_private_key_pairs.clone(),
-            proof_params,
         )
         .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
@@ -148,7 +145,7 @@ mod tests {
     use rst_common::standard::serde_json;
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -276,7 +273,6 @@ mod tests {
             "password".to_string(),
             did_issuer_value.clone(),
             claims,
-            None,
         )
         .await;
         assert!(!credential_builder.is_err());
@@ -291,7 +287,6 @@ mod tests {
             did_issuer_value,
             account,
             vec![credential],
-            None,
         );
         assert!(!presentation_builder.is_err());
     }

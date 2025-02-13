@@ -7,7 +7,6 @@ use crate::identity::account::Account;
 use crate::identity::account::URI;
 
 use crate::identity::verifiable::credential::types::CredentialAPI;
-use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::VerifiableError;
 use crate::identity::verifiable::Credential;
 
@@ -140,7 +139,6 @@ where
         password: String,
         did_issuer: String,
         credentials: Vec<String>,
-        proof_params: Option<ProofParams>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError> {
         if password.is_empty() {
             return Err(PresentationError::CommonError(
@@ -168,8 +166,7 @@ where
                 PresentationError::CommonError(VerifiableError::DIDError(err.to_string()))
             })?;
 
-        let presentation =
-            Presentation::generate(password, did_issuer, account, vcs, proof_params)?;
+        let presentation = Presentation::generate(password, did_issuer, account, vcs)?;
 
         let _ = self.repo().save(&presentation.clone()).await?;
         Ok(presentation)
@@ -250,10 +247,11 @@ mod tests {
 
     use multiaddr::{multiaddr, Multiaddr};
 
+    use prople_did_core::verifiable::proof::types::Proofable;
     use rst_common::standard::serde_json::value::Value;
 
     use prople_crypto::eddsa::keypair::KeyPair;
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -366,7 +364,6 @@ mod tests {
                 password: String,
                 did_issuer: String,
                 credential: Value,
-                proof_params: Option<ProofParams>,
             ) -> Result<Credential, CredentialError>;
 
             async fn send_credential(
@@ -530,16 +527,6 @@ mod tests {
 
         let did_uri = did.build_uri(Some(query_params)).unwrap();
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let mut vp = VP::new();
         vp.add_context(CONTEXT_VC.to_string())
             .add_context(CONTEXT_VC_V2.to_string())
@@ -554,7 +541,6 @@ mod tests {
             vp.clone(),
             password,
             did_privkeys.clone(),
-            Some(proof_params),
         )
         .unwrap()
         .unwrap();
@@ -644,7 +630,6 @@ mod tests {
                 "password".to_string(),
                 did_issuer_uri.clone(),
                 vec!["id1".to_string(), "id2".to_string()],
-                None,
             )
             .await;
 
@@ -735,22 +720,11 @@ mod tests {
         let rpc = MockFakeRPCClient::new();
         let uc = generate_usecase(repo, rpc, account, credential);
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let result = uc
             .generate(
                 "password".to_string(),
                 did_issuer_uri.clone(),
                 vec!["id1".to_string(), "id2".to_string()],
-                Some(proof_params),
             )
             .await;
 
@@ -785,7 +759,7 @@ mod tests {
             .map_err(|err| PresentationError::GenerateError(err.to_string()));
         assert!(!account_doc_keypair.is_err());
 
-        let (_, proof) = vp.split_proof();
+        let proof = vp.get_proof();
         assert!(proof.is_some());
     }
 

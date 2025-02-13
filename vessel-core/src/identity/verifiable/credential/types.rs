@@ -15,7 +15,6 @@ use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::account::types::{AccountAPI, AccountEntityAccessor};
-use crate::identity::verifiable::proof::types::Params as ProofParams;
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
 #[derive(Debug, Error, Clone, Serialize, Deserialize)]
@@ -101,10 +100,9 @@ pub trait CredentialAPI: Clone {
         password: String,
         did_issuer: String,
         credential: Value,
-        proof_params: Option<ProofParams>,
     ) -> Result<Self::EntityAccessor, CredentialError>;
 
-    /// `send_credential_to_holder` used to send a `VC` to some `Holder`, if there is no error it means the `VC`
+    /// `send_credential` used to send a `VC` to some `Holder`, if there is no error it means the `VC`
     /// already received successfully.
     ///
     /// The communiation itself must be happened through [`VerifiableRPCBuilder::vc_send_to`], the implementation
@@ -114,7 +112,7 @@ pub trait CredentialAPI: Clone {
     /// based on given `id` which is the id of [`Credential`]
     async fn send_credential(&self, id: String, did_uri: String) -> Result<(), CredentialError>;
 
-    /// `receive_credential_by_holder` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
+    /// `post_credential` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
     /// to the persistent storage through `CredentialHolder`
     async fn post_credential(&self, did_holder: String, vc: VC) -> Result<(), CredentialError>;
 
