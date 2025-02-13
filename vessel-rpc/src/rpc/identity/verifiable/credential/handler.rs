@@ -32,11 +32,10 @@ where
                     password,
                     did_issuer,
                     credential,
-                    proof_params,
                 } => {
                     let result = self
                         .credential_api
-                        .generate_credential(password, did_issuer, credential, proof_params)
+                        .generate_credential(password, did_issuer, credential)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 

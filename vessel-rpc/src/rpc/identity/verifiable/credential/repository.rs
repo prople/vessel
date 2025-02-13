@@ -401,7 +401,6 @@ mod tests {
 
     use prople_vessel_core::identity::account::Account as AccountIdentity;
     use prople_vessel_core::identity::verifiable::proof::builder::Builder as ProofBuilder;
-    use prople_vessel_core::identity::verifiable::proof::types::Params as ProofParams;
 
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
@@ -457,7 +456,6 @@ mod tests {
             "password".to_string(),
             did_issuer_value,
             claims,
-            None,
         )
         .await;
 
@@ -482,16 +480,6 @@ mod tests {
 
         let did_uri = did.build_uri(Some(query_params)).unwrap();
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let cred_value = serde_json::to_value(FakeCredential {
             msg: "hello world".to_string(),
         })
@@ -507,7 +495,6 @@ mod tests {
             vc.clone(),
             password,
             did_privkeys.clone(),
-            Some(proof_params),
         )
         .unwrap()
         .unwrap();
@@ -532,7 +519,6 @@ mod tests {
             "password".to_string(),
             did_issuer_value,
             claims,
-            None,
         )
         .await;
 

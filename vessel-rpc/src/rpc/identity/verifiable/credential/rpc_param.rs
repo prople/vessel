@@ -4,7 +4,6 @@ use rst_common::standard::serde_json::{self, Value};
 use prople_did_core::verifiable::objects::VC;
 use prople_jsonrpc_client::types::{ExecutorError, RpcValue};
 
-use prople_vessel_core::identity::verifiable::proof::types::Params as ProofParams;
 use prople_vessel_core::identity::verifiable::types::PaginationParams;
 
 use crate::rpc::shared::types::CommonError;
@@ -25,7 +24,6 @@ pub enum Domain {
         password: String,
         did_issuer: String,
         credential: Value,
-        proof_params: Option<ProofParams>,
     },
     SendCredential {
         id: String,

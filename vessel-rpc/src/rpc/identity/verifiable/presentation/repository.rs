@@ -313,7 +313,6 @@ mod tests {
 
     use prople_vessel_core::identity::verifiable::credential::types::CredentialEntityAccessor;
     use prople_vessel_core::identity::verifiable::proof::builder::Builder as ProofBuilder;
-    use prople_vessel_core::identity::verifiable::proof::types::Params as ProofParams;
     use prople_vessel_core::identity::verifiable::{Credential, Presentation};
 
     #[derive(Deserialize, Serialize)]
@@ -399,16 +398,6 @@ mod tests {
 
         let did_uri = did.build_uri(Some(query_params)).unwrap();
 
-        let proof_params = ProofParams {
-            id: "uid".to_string(),
-            typ: "type".to_string(),
-            method: "method".to_string(),
-            purpose: "purpose".to_string(),
-            cryptosuite: None,
-            expires: None,
-            nonce: None,
-        };
-
         let mut vp = VP::new();
         vp.add_context(CONTEXT_VC.to_string())
             .add_context(CONTEXT_VC_V2.to_string())
@@ -423,7 +412,6 @@ mod tests {
             vp.clone(),
             password,
             did_privkeys.clone(),
-            Some(proof_params),
         )
         .unwrap()
         .unwrap();

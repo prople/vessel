@@ -38,11 +38,10 @@ where
                     password,
                     did_issuer,
                     credentials,
-                    proof_params,
                 } => {
                     let result = self
                         .presentation_api
-                        .generate(password, did_issuer, credentials, proof_params)
+                        .generate(password, did_issuer, credentials)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
