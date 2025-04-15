@@ -391,7 +391,7 @@ mod tests {
     use rst_common::standard::serde_json;
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -451,13 +451,8 @@ mod tests {
         .unwrap();
 
         let account = generate_account(did_vc);
-        let credential_builder = Credential::generate(
-            account,
-            "password".to_string(),
-            did_issuer_value,
-            claims,
-        )
-        .await;
+        let credential_builder =
+            Credential::generate(account, "password".to_string(), did_issuer_value, claims).await;
 
         credential_builder.unwrap()
     }
@@ -491,13 +486,9 @@ mod tests {
             .add_type("VerifiableCredential".to_string())
             .set_credential(cred_value);
 
-        let proof_builder = ProofBuilder::build_proof(
-            vc.clone(),
-            password,
-            did_privkeys.clone(),
-        )
-        .unwrap()
-        .unwrap();
+        let proof_builder = ProofBuilder::build_proof(vc.clone(), password, did_privkeys.clone())
+            .unwrap()
+            .unwrap();
 
         vc.proof(proof_builder);
         let holder = Holder::new(did_value, vc);
@@ -514,13 +505,8 @@ mod tests {
         .unwrap();
 
         let account = generate_account(did_vc);
-        let credential_builder = Credential::generate(
-            account,
-            "password".to_string(),
-            did_issuer_value,
-            claims,
-        )
-        .await;
+        let credential_builder =
+            Credential::generate(account, "password".to_string(), did_issuer_value, claims).await;
 
         credential_builder.unwrap()
     }

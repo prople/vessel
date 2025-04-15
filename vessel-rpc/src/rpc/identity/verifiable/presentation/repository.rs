@@ -303,7 +303,7 @@ mod tests {
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::{ToKeySecure, Password};
+    use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -408,13 +408,9 @@ mod tests {
             vp.add_credential(credential.get_vc().to_owned());
         }
 
-        let proof_builder = ProofBuilder::build_proof(
-            vp.clone(),
-            password,
-            did_privkeys.clone(),
-        )
-        .unwrap()
-        .unwrap();
+        let proof_builder = ProofBuilder::build_proof(vp.clone(), password, did_privkeys.clone())
+            .unwrap()
+            .unwrap();
 
         vp.add_proof(proof_builder);
         let verifier = Verifier::new(did_value, vp);

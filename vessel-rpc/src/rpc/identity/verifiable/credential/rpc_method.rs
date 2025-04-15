@@ -8,7 +8,6 @@ const METHOD_VESSEL_VERIFY_CREDENTIAL: &str = "identity.vc.verify_credential";
 
 const METHOD_DOMAIN_GENERATE_CREDENTIAL: &str = "identity.vc.generate_credential";
 const METHOD_DOMAIN_SEND_CREDENTIAL: &str = "identity.vc.send_credential";
-const METHOD_DOMAIN_VERIFY_CREDENTIAL: &str = "identity.vc.verify_credential";
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID: &str = "identity.vc.list_credentials_by_did";
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS: &str = "identity.vc.list_credential_by_ids";
 
@@ -31,7 +30,6 @@ impl RpcMethodBuilder for Vessel {
 pub enum Domain {
     GenerateCredential,
     SendCredential,
-    VerifyCredential,
     ListCredentialsByDID,
     ListCredentialsByIDs,
 }
@@ -43,7 +41,6 @@ impl RpcMethodBuilder for Domain {
             Domain::ListCredentialsByDID => METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID,
             Domain::ListCredentialsByIDs => METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS,
             Domain::SendCredential => METHOD_DOMAIN_SEND_CREDENTIAL,
-            Domain::VerifyCredential => METHOD_DOMAIN_VERIFY_CREDENTIAL,
         }
     }
 }
@@ -92,9 +89,6 @@ impl TryFrom<RpcMethod> for Method {
             }
             _ if given.as_str().contains(METHOD_DOMAIN_SEND_CREDENTIAL) => {
                 Ok(Self::Domain(Domain::SendCredential))
-            }
-            _ if given.as_str().contains(METHOD_DOMAIN_VERIFY_CREDENTIAL) => {
-                Ok(Self::Domain(Domain::VerifyCredential))
             }
             _ => Err(CommonError::MethodError(format!(
                 "unknown method: {}",

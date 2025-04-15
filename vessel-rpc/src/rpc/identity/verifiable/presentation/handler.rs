@@ -56,10 +56,15 @@ where
     async fn send_to_verifier(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Domain(domain) => match domain {
-                Domain::SendPresentation { id, did_uri } => {
+                Domain::SendPresentation {
+                    id,
+                    did_uri,
+                    password,
+                    params,
+                } => {
                     let _ = self
                         .presentation_api
-                        .send_presentation(id, did_uri)
+                        .send_presentation(id, did_uri, password, params)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 

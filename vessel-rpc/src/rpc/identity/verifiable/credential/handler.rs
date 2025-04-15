@@ -50,10 +50,15 @@ where
     async fn send_credential_to_holder(&self, param: Param) -> RpcHandlerOutput {
         match param {
             Param::Domain(domain) => match domain {
-                Domain::SendCredential { id, did_uri } => {
+                Domain::SendCredential {
+                    id,
+                    did_uri,
+                    password,
+                    params,
+                } => {
                     let _ = self
                         .credential_api
-                        .send_credential(id, did_uri)
+                        .send_credential(id, did_uri, password, params)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -72,24 +77,6 @@ where
                     let _ = self
                         .credential_api
                         .post_credential(did_holder, vc)
-                        .await
-                        .map_err(|err| RpcError::HandlerError(err.to_string()))?;
-
-                    Ok(None)
-                }
-                _ => Err(RpcError::InvalidParams),
-            },
-            _ => Err(RpcError::InvalidParams),
-        }
-    }
-
-    async fn verify_credential_by_holder(&self, param: Param) -> RpcHandlerOutput {
-        match param {
-            Param::Domain(domain) => match domain {
-                Domain::VerifyCredential { id } => {
-                    let _ = self
-                        .credential_api
-                        .verify_credential(id)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -161,7 +148,6 @@ where
                 DomainMethod::ListCredentialsByDID => self.list_credentials_by_did(rpc_param).await,
                 DomainMethod::ListCredentialsByIDs => self.list_credentials_by_ids(rpc_param).await,
                 DomainMethod::SendCredential => self.send_credential_to_holder(rpc_param).await,
-                DomainMethod::VerifyCredential => self.verify_credential_by_holder(rpc_param).await,
             },
         }
     }

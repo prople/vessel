@@ -1,6 +1,7 @@
 use rst_common::standard::serde::{self, Deserialize, Serialize};
 use rst_common::standard::serde_json::{self, Value};
 
+use prople_did_core::did::query::Params as QueryParams;
 use prople_did_core::verifiable::objects::VC;
 use prople_jsonrpc_client::types::{ExecutorError, RpcValue};
 
@@ -28,6 +29,8 @@ pub enum Domain {
     SendCredential {
         id: String,
         did_uri: String,
+        password: String,
+        params: Option<QueryParams>,
     },
     VerifyCredential {
         id: String,
