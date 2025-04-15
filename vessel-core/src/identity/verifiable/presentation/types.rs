@@ -8,6 +8,7 @@ use rst_common::with_errors::thiserror::{self, Error};
 
 use rstdev_domain::entity::ToJSON;
 
+use prople_did_core::did::query::Params as QueryParams;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::VP;
 
@@ -44,8 +45,14 @@ pub enum PresentationError {
     #[error("list presentation error: {0}")]
     ListError(String),
 
+    #[error("holder not found")]
+    HolderNotFound,
+
     #[error("common error")]
     CommonError(#[from] VerifiableError),
+
+    #[error("send presentation error")]
+    SendError(String),
 }
 
 /// `PresentationEntityAccessor` is a getter object used to access
@@ -85,8 +92,13 @@ pub trait PresentationAPI: Clone {
         credentials: Vec<String>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
-    async fn send_presentation(&self, id: String, did_uri: String)
-        -> Result<(), PresentationError>;
+    async fn send_presentation(
+        &self,
+        id: String,
+        did_uri: String,
+        password: String,
+        params: Option<QueryParams>,
+    ) -> Result<(), PresentationError>;
 
     async fn verify_presentation(&self, id: String) -> Result<(), PresentationError>;
 

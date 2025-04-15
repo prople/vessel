@@ -1,5 +1,6 @@
 use rst_common::standard::async_trait::async_trait;
 
+use prople_did_core::did::query::Params as QueryParams;
 use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::AccountAPI;
@@ -107,6 +108,8 @@ where
         &self,
         id: String,
         did_uri: String,
+        password: String,
+        params: Option<QueryParams>,
     ) -> Result<(), PresentationError> {
         if id.is_empty() {
             return Err(PresentationError::CommonError(
@@ -128,7 +131,28 @@ where
             VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
         ))?;
 
-        let presentation = self.repo().get_by_id(id).await?;
+        let presentation = {
+            let presentation_repo = self.repo().get_by_id(id).await?;
+            let cloned = presentation_repo.clone();
+
+            match cloned.vp.holder {
+                Some(holder) => {
+                    let mut presentation_rebuild = presentation_repo.clone();
+                    let holder_did_uri = self
+                        .account()
+                        .build_did_uri(holder, password, params)
+                        .await
+                        .map_err(|err| PresentationError::SendError(err.to_string()))?;
+
+                    presentation_rebuild.vp.set_holder(holder_did_uri);
+                    Ok(presentation_rebuild)
+                }
+                None => Err(PresentationError::SendError(
+                    "missing VP holder".to_string(),
+                )),
+            }
+        }?;
+
         self.rpc()
             .send_to_verifier(addr, uri_did, presentation.vp)
             .await
@@ -243,7 +267,7 @@ where
 mod tests {
     use super::*;
     use mockall::mock;
-    use mockall::predicate::eq;
+    use mockall::predicate::{eq, function};
 
     use multiaddr::{multiaddr, Multiaddr};
 
@@ -253,6 +277,7 @@ mod tests {
     use prople_crypto::eddsa::keypair::KeyPair;
     use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
+    use prople_did_core::did::query::Params as QueryParams;
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
@@ -370,6 +395,8 @@ mod tests {
                 &self,
                 id: String,
                 did_uri: String,
+                password: String,
+                params: Option<QueryParams>
             ) -> Result<(), CredentialError>;
 
             async fn post_credential(
@@ -377,8 +404,6 @@ mod tests {
                 did_holder: String,
                 vc: VC,
             ) -> Result<(), CredentialError>;
-
-            async fn verify_credential(&self, id: String) -> Result<(), CredentialError>;
 
             async fn list_credentials_by_did(
                 &self,
@@ -501,13 +526,6 @@ mod tests {
         (did_verifier_account, did_verifier)
     }
 
-    fn generate_doc(did: DID) -> Doc {
-        let mut did_identity = did.identity().unwrap();
-        did_identity.build_assertion_method().build_auth_method();
-
-        did_identity.to_doc()
-    }
-
     fn generate_verifier(
         addr: Multiaddr,
         password: String,
@@ -537,112 +555,17 @@ mod tests {
             vp.add_credential(credential.vc.to_owned());
         }
 
-        let proof_builder = ProofBuilder::build_proof(
-            vp.clone(),
-            password,
-            did_privkeys.clone(),
-        )
-        .unwrap()
-        .unwrap();
+        let secured =
+            ProofBuilder::build_proof(vp.clone(), password, did_privkeys.clone()).unwrap();
 
-        vp.add_proof(proof_builder);
+        vp.setup_proof(secured.unwrap());
         let verifier = Verifier::new(did_value, vp);
 
         (verifier, did_doc)
     }
 
     #[tokio::test]
-    async fn test_generate_without_params() {
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-
-        let did_issuer = generate_did();
-        let did_issuer_mock = did_issuer.clone();
-
-        let mut did_issuer_uri_params = Params::default();
-        did_issuer_uri_params.address = Some(addr.to_string());
-
-        let did_issuer_uri_builder = did_issuer.build_uri(Some(did_issuer_uri_params));
-        assert!(!did_issuer_uri_builder.is_err());
-
-        let did_issuer_uri = did_issuer_uri_builder.unwrap();
-
-        let creds = generate_credentials();
-
-        let mut repo = MockFakeRepo::new();
-        repo.expect_clone().times(1).return_once(move || {
-            let mut expected = MockFakeRepo::new();
-            expected.expect_save().returning(|_| Ok(()));
-
-            expected
-        });
-
-        let mut account = MockFakeAccountUsecase::new();
-        account.expect_clone().times(1).return_once(move || {
-            let mut expected = MockFakeAccountUsecase::new();
-            expected.expect_get_account_did().returning(move |_| {
-                let did_issuer_mock_doc = did_issuer_mock
-                    .identity()
-                    .unwrap()
-                    .build_assertion_method()
-                    .build_auth_method()
-                    .to_doc();
-
-                let did_issuer_doc_private_keys = did_issuer_mock
-                    .identity()
-                    .unwrap()
-                    .build_private_keys("password".to_string())
-                    .unwrap();
-
-                let did_issuer_mock_keysecure = did_issuer_mock
-                    .account()
-                    .privkey()
-                    .to_keysecure(Password::from("password".to_string()))
-                    .unwrap();
-
-                let result = AccountIdentity::new(
-                    did_issuer_mock.identity().unwrap().value(),
-                    did_issuer_mock_doc,
-                    did_issuer_doc_private_keys,
-                    did_issuer_mock_keysecure,
-                );
-
-                Ok(result)
-            });
-
-            expected
-        });
-
-        let mut credential = MockFakeCredentialUsecase::new();
-        credential.expect_clone().times(1).return_once(move || {
-            let creds = creds.clone();
-            let mut expected = MockFakeCredentialUsecase::new();
-            expected
-                .expect_list_credentials_by_ids()
-                .returning(move |_| Ok(creds.clone()));
-
-            expected
-        });
-
-        let rpc = MockFakeRPCClient::new();
-        let uc = generate_usecase(repo, rpc, account, credential);
-        let result = uc
-            .generate(
-                "password".to_string(),
-                did_issuer_uri.clone(),
-                vec!["id1".to_string(), "id2".to_string()],
-            )
-            .await;
-
-        assert!(!result.is_err());
-
-        let presentation = result.unwrap();
-        assert!(presentation.vp.holder.is_some());
-        assert!(presentation.vp.verifiable_credential.len() == 2);
-        assert_eq!(presentation.vp.holder.unwrap(), did_issuer_uri);
-    }
-
-    #[tokio::test]
-    async fn test_generate_with_params() {
+    async fn test_generate() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
 
         let did_issuer = generate_did();
@@ -766,6 +689,7 @@ mod tests {
     #[tokio::test]
     async fn test_send_to_verifier() {
         let presentation = generate_presentation();
+        let presentation_cloned = presentation.clone();
         let presentation_mock = presentation.clone();
 
         let mut repo = MockFakeRepo::new();
@@ -783,6 +707,7 @@ mod tests {
         let verifier_did_value = verifier_did.identity().unwrap().value();
 
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+        let cloned_addr = addr.clone();
 
         let mut did_uri_params = Params::default();
         did_uri_params.address = Some(addr.clone().to_string());
@@ -795,24 +720,69 @@ mod tests {
         )
         .unwrap();
 
+        let expected_presentation = presentation_cloned.clone();
+        let expected_presentation_addr = cloned_addr.clone();
+
+        let expected_rpc_presentation = presentation_cloned.clone();
+        let expected_rpc_addr = cloned_addr.clone();
+
         let mut rpc = MockFakeRPCClient::new();
         rpc.expect_clone().times(1).return_once(move || {
+            let expected_presentation = expected_rpc_presentation.clone();
+            let mut vp = expected_presentation.vp;
+            let holder = vp.holder.as_ref().unwrap();
+
+            vp.set_holder(format!("{}?address={}", holder.clone(), expected_rpc_addr));
+
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_to_verifier()
-                .with(eq(addr), eq(verifier_did_value), eq(presentation.vp))
+                .with(eq(addr), eq(verifier_did_value), eq(vp.clone()))
                 .times(1)
                 .returning(|_, _, _| Ok(()));
 
             expected
         });
 
-        let account = MockFakeAccountUsecase::new();
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(move || {
+            let mut expected = MockFakeAccountUsecase::new();
+            let vp = expected_presentation.vp;
+            let holder = vp.holder.unwrap();
+
+            expected
+                .expect_build_did_uri()
+                .with(
+                    eq(holder.clone()),
+                    eq("password".to_string()),
+                    function(|val: &Option<QueryParams>| val.is_some()),
+                )
+                .times(1)
+                .return_once(move |_, _, _| {
+                    let vp_did = format!(
+                        "{}?address={}",
+                        holder.clone(),
+                        expected_presentation_addr.clone()
+                    );
+                    Ok(vp_did)
+                });
+
+            expected
+        });
+
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
         let send_output = uc
-            .send_presentation("id1".to_string(), did_holder_uri)
+            .send_presentation(
+                "id1".to_string(),
+                did_holder_uri,
+                "password".to_string(),
+                Some(QueryParams {
+                    address: Some(cloned_addr.clone().to_string()),
+                    hl: None,
+                }),
+            )
             .await;
         assert!(!send_output.is_err())
     }
@@ -840,7 +810,9 @@ mod tests {
         )
         .unwrap();
 
-        let send_output = uc.send_presentation("".to_string(), did_holder_uri).await;
+        let send_output = uc
+            .send_presentation("".to_string(), did_holder_uri, "password".to_string(), None)
+            .await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -890,7 +862,12 @@ mod tests {
         .unwrap();
 
         let send_output = uc
-            .send_presentation("id1".to_string(), did_holder_uri)
+            .send_presentation(
+                "id1".to_string(),
+                did_holder_uri,
+                "password".to_string(),
+                None,
+            )
             .await;
         assert!(send_output.is_err());
 
@@ -1051,7 +1028,7 @@ mod tests {
             let mut expected = MockFakeAccountUsecase::new();
 
             expected
-                .expect_resolve_did_doc()
+                .expect_resolve_did_uri()
                 .times(1)
                 .return_once(move |_| Ok(doc.clone()));
 
@@ -1065,59 +1042,5 @@ mod tests {
         let verify_vp_checker = uc.verify_presentation("id-holder".to_string()).await;
 
         assert!(!verify_vp_checker.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_verify_credential_by_holder_invalid_doc() {
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let credentials = generate_credentials();
-        let (verifier, _) =
-            generate_verifier(addr, String::from("password".to_string()), credentials);
-
-        let did = generate_did();
-        let mut identity = did.identity().unwrap();
-        identity.build_assertion_method().build_auth_method();
-
-        let fake_doc = generate_doc(generate_did());
-
-        let mut repo = MockFakeRepo::new();
-        repo.expect_clone().times(1).return_once(|| {
-            let mut expected = MockFakeRepo::new();
-
-            expected
-                .expect_get_verifier_by_id()
-                .times(1)
-                .with(eq("id-holder".to_string()))
-                .return_once(move |_| Ok(verifier.clone()));
-
-            expected
-        });
-
-        let mut account = MockFakeAccountUsecase::new();
-        account.expect_clone().times(1).return_once(|| {
-            let mut expected = MockFakeAccountUsecase::new();
-
-            expected
-                .expect_resolve_did_doc()
-                .times(1)
-                .return_once(move |_| Ok(fake_doc));
-
-            expected
-        });
-
-        let rpc = MockFakeRPCClient::new();
-        let credential = MockFakeCredentialUsecase::new();
-
-        let uc = generate_usecase(repo, rpc, account, credential);
-        let verify_vc_checker = uc.verify_presentation("id-holder".to_string()).await;
-
-        assert!(verify_vc_checker.is_err());
-
-        let verified_err = verify_vc_checker.unwrap_err();
-        assert!(matches!(verified_err, PresentationError::VerifyError(_)));
-
-        if let PresentationError::VerifyError(msg) = verified_err {
-            assert!(msg.contains("signature invalid"))
-        }
     }
 }

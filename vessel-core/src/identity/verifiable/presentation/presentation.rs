@@ -1,3 +1,4 @@
+use prople_did_core::verifiable::proof::types::Proofable;
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::uuid::Uuid;
@@ -119,17 +120,11 @@ impl Presentation {
         }
 
         let account_doc_private_key_pairs = account.get_doc_private_keys();
-        let proof_builder = ProofBuilder::build_proof(
-            vp.clone(),
-            password,
-            account_doc_private_key_pairs.clone(),
-        )
-        .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
+        let secured =
+            ProofBuilder::build_proof(vp.clone(), password, account_doc_private_key_pairs.clone())
+                .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
-        if let Some(proof) = proof_builder {
-            vp.add_proof(proof);
-        }
-
+        vp.setup_proof(secured.unwrap());
         let presentation = Presentation::new(vp, account_doc_private_key_pairs);
         Ok(presentation)
     }
@@ -221,7 +216,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_generate_without_params() {
+    async fn test_generate() {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 

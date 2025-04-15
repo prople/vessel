@@ -68,9 +68,11 @@ mod tests {
 
     use prople_did_core::did::DID;
     use prople_did_core::doc::types::ToDoc;
-    use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
+    use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
     use prople_did_core::verifiable::objects::VC;
+    use prople_did_core::verifiable::proof::eddsa::EddsaJcs2022;
+    use prople_did_core::verifiable::proof::types::{CryptoSuiteBuilder, Proofable};
 
     use rst_common::standard::serde::{self, Deserialize, Serialize};
     use rst_common::standard::serde_json;
@@ -85,8 +87,27 @@ mod tests {
         DID::new()
     }
 
+    fn generate_keypair(keypairs: IdentityPrivateKeyPairs) -> Result<KeyPair, ProofError> {
+        let account_doc_verification_pem_bytes = keypairs
+            .clone()
+            .assertion
+            .map(|val| {
+                val.decrypt_verification("password".to_string())
+                    .map_err(|err| ProofError::BuildError(err.to_string()))
+            })
+            .ok_or(ProofError::BuildError(
+                "PrivateKeyPairs is missing".to_string(),
+            ))??;
+
+        let account_doc_verification_pem = String::from_utf8(account_doc_verification_pem_bytes)
+            .map_err(|err| ProofError::BuildError(err.to_string()))?;
+
+        KeyPair::from_pem(account_doc_verification_pem)
+            .map_err(|err| ProofError::BuildError(err.to_string()))
+    }
+
     #[test]
-    fn test_build_proof() {
+    fn test_build_and_verify() {
         let did_issuer = generate_did();
         let did_issue_identity = did_issuer.identity().unwrap();
 
@@ -114,38 +135,19 @@ mod tests {
             .add_type("VerifiableCredential".to_string())
             .set_credential(credential);
 
-        let proof_builder = Builder::build_proof(
+        let secured = Builder::build_proof(
             vc.clone(),
             "password".to_string(),
             did_vc_doc_private_keys.clone(),
         );
 
-        assert!(!proof_builder.is_err());
+        vc.setup_proof(secured.unwrap().unwrap());
 
-        let proof = proof_builder.unwrap();
-        assert!(proof.is_some());
+        let keypair = generate_keypair(did_vc_doc_private_keys).unwrap();
+        let pubkey = keypair.pub_key();
 
-        let account_doc_verification_pem_bytes = did_vc_doc_private_keys
-            .clone()
-            .assertion
-            .map(|val| {
-                val.decrypt_verification("password".to_string())
-                    .map_err(|err| ProofError::BuildError(err.to_string()))
-            })
-            .ok_or(ProofError::BuildError(
-                "PrivateKeyPairs is missing".to_string(),
-            ));
-        assert!(!account_doc_verification_pem_bytes.is_err());
-
-        let account_doc_verification_pem_bytes_unwrap =
-            account_doc_verification_pem_bytes.unwrap().unwrap();
-        let account_doc_verification_pem =
-            String::from_utf8(account_doc_verification_pem_bytes_unwrap)
-                .map_err(|err| ProofError::BuildError(err.to_string()));
-        assert!(!account_doc_verification_pem.is_err());
-
-        let account_doc_keypair = KeyPair::from_pem(account_doc_verification_pem.unwrap())
-            .map_err(|err| ProofError::BuildError(err.to_string()));
-        assert!(!account_doc_keypair.is_err());
+        let eddsa_di = EddsaJcs2022::new();
+        let try_verify_proof = eddsa_di.verify_proof(pubkey, vc);
+        assert!(try_verify_proof.is_ok());
     }
 }

@@ -4,4 +4,7 @@ use rst_common::with_errors::thiserror::{self, Error};
 pub enum ProofError {
     #[error("build proof error: {0}")]
     BuildError(String),
+
+    #[error("verify proof error: {0}")]
+    VerificationError(String),
 }

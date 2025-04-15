@@ -1,3 +1,4 @@
+use prople_did_core::verifiable::proof::types::Proofable;
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::uuid::Uuid;
@@ -90,17 +91,11 @@ impl Credential {
             .add_type("VerifiableCredential".to_string())
             .set_credential(claims);
 
-        let proof_builder = ProofBuilder::build_proof(
-            vc.clone(),
-            password,
-            account_doc_private_key_pairs.clone(),
-        )
-        .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
+        let secured =
+            ProofBuilder::build_proof(vc.clone(), password, account_doc_private_key_pairs.clone())
+                .map_err(|err| CredentialError::GenerateError(err.to_string()))?;
 
-        if let Some(proof) = proof_builder {
-            vc.proof(proof);
-        }
-
+        vc.setup_proof(secured.unwrap());
         let cred = Credential::new(
             did_issuer,
             account_did,

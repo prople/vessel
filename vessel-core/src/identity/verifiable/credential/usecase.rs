@@ -1,6 +1,7 @@
 use rst_common::standard::async_trait::async_trait;
 use rst_common::standard::serde_json::Value;
 
+use prople_did_core::did::query::Params as QueryParams;
 use prople_did_core::verifiable::objects::VC;
 
 use crate::identity::account::types::AccountAPI;
@@ -9,7 +10,6 @@ use crate::identity::account::URI;
 
 use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
-use super::types::HolderEntityAccessor;
 use super::types::{CredentialAPI, CredentialError, RepoBuilder, RpcBuilder, UsecaseBuilder};
 use super::{Credential, Holder};
 
@@ -133,7 +133,13 @@ where
         self.repo().save_credential_holder(&cred_holder).await
     }
 
-    async fn send_credential(&self, id: String, did_uri: String) -> Result<(), CredentialError> {
+    async fn send_credential(
+        &self,
+        id: String,
+        did_uri: String,
+        password: String,
+        params: Option<QueryParams>,
+    ) -> Result<(), CredentialError> {
         if id.is_empty() {
             return Err(CredentialError::CommonError(
                 VerifiableError::ValidationError("id was missing".to_string()),
@@ -154,40 +160,28 @@ where
             VerifiableError::ParseMultiAddrError("uri address was missing".to_string()),
         ))?;
 
-        let cred = self.repo().get_credential_by_id(id).await?;
+        // replace `VC::id` with the `DID URI`
+        let cred = {
+            let cred_repo = self.repo().get_credential_by_id(id).await?;
+            let cred_vc = cred_repo.vc.clone();
+            let cred_vc_did = self
+                .account()
+                .build_did_uri(cred_vc.id, password, params)
+                .await
+                .map_err(|err| CredentialError::SendError(err.to_string()))?;
+
+            let mut new_vc = cred_repo.vc.clone();
+            new_vc.id = cred_vc_did;
+
+            let mut new_cred = cred_repo.clone();
+            new_cred.vc = new_vc;
+
+            new_cred
+        };
+
         self.rpc()
             .send_credential_to_holder(uri_did, uri_addr_checked, cred.vc)
             .await
-    }
-
-    async fn verify_credential(&self, id: String) -> Result<(), CredentialError> {
-        if id.is_empty() {
-            return Err(CredentialError::CommonError(
-                VerifiableError::ValidationError("id was missing".to_string()),
-            ));
-        }
-
-        let repo = self.repo();
-        let holder = repo
-            .get_holder_by_id(id)
-            .await
-            .map(|vc_holder| {
-                if vc_holder.get_is_verified() {
-                    return Err(CredentialError::HolderError(
-                        "credential already been verified".to_string(),
-                    ));
-                }
-
-                Ok(vc_holder)
-            })
-            .map_err(|err| CredentialError::HolderError(err.to_string()))??;
-
-        let verified_holder = holder.clone().verify_vc(self.account()).await?;
-        let _ = repo
-            .set_credential_holder_verified(&verified_holder)
-            .await?;
-
-        Ok(())
     }
 }
 
@@ -195,7 +189,7 @@ where
 mod tests {
     use super::*;
     use mockall::mock;
-    use mockall::predicate::eq;
+    use mockall::predicate::{eq, function};
 
     use prople_did_core::verifiable::proof::types::Proofable;
     use rst_common::standard::async_trait::async_trait;
@@ -214,11 +208,9 @@ mod tests {
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
-    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
 
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
-    use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 
     mock!(
         FakeRepo{}
@@ -360,49 +352,6 @@ mod tests {
         (did_holder_account, did_holder)
     }
 
-    fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc) {
-        let did_issuer = generate_did();
-        let did_issuer_value = did_issuer.identity().unwrap().value();
-
-        let did = generate_did();
-        let did_value = did.identity().unwrap().value();
-
-        let mut did_identity = did.identity().unwrap();
-        did_identity.build_assertion_method().build_auth_method();
-
-        let did_doc = did_identity.to_doc();
-        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
-
-        let mut query_params = Params::default();
-        query_params.address = Some(addr.to_string());
-
-        let did_uri = did.build_uri(Some(query_params)).unwrap();
-
-        let cred_value = serde_json::to_value(FakeCredential {
-            msg: "hello world".to_string(),
-        })
-        .unwrap();
-
-        let mut vc = VC::new(did_uri, did_issuer_value);
-        vc.add_context(CONTEXT_VC.to_string())
-            .add_context(CONTEXT_VC_V2.to_string())
-            .add_type("VerifiableCredential".to_string())
-            .set_credential(cred_value);
-
-        let proof_builder = ProofBuilder::build_proof(
-            vc.clone(),
-            password,
-            did_privkeys.clone(),
-        )
-        .unwrap()
-        .unwrap();
-
-        vc.proof(proof_builder);
-        let holder = Holder::new(did_value, vc);
-
-        (holder, did_doc)
-    }
-
     #[tokio::test]
     async fn test_generate_success_without_params() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
@@ -486,7 +435,6 @@ mod tests {
 
         let credential = vc.unwrap();
 
-        assert!(credential.vc.proof.is_none());
         assert_eq!(
             credential.did_issuer,
             did_issuer.identity().unwrap().value()
@@ -753,12 +701,13 @@ mod tests {
                 .expect_generate_did()
                 .with(eq("password".to_string()))
                 .return_once(move |_| {
-                    let did_vc_value_cloned = did_vc.identity().unwrap().value();
-                    let did_vc_doc = did_vc.identity().unwrap().to_doc();
+                    let mut did_vc_identity = did_vc.identity().unwrap();
+                    let _ = did_vc_identity.build_assertion_method().build_auth_method();
 
-                    let did_vc_doc_private_keys = did_vc
-                        .identity()
-                        .unwrap()
+                    let did_vc_value_cloned = did_vc_identity.value();
+                    let did_vc_doc = did_vc_identity.to_doc();
+
+                    let did_vc_doc_private_keys = did_vc_identity
                         .build_private_keys("password".to_string())
                         .unwrap();
 
@@ -793,6 +742,7 @@ mod tests {
         let vc = uc
             .generate_credential("password".to_string(), did_issuer_uri, cred_value.clone())
             .await;
+
         assert!(vc.is_err());
         assert!(matches!(vc.unwrap_err(), CredentialError::CommonError(_)))
     }
@@ -811,33 +761,34 @@ mod tests {
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
         let vc_cloned = vc.clone();
 
+        let expected_cred = Credential {
+            id: "cred-id".to_string(),
+            did_issuer: did_issuer_value,
+            did_vc: did_vc.to_owned().identity().unwrap().value(),
+            did_vc_doc_private_keys: did_vc
+                .to_owned()
+                .identity()
+                .unwrap()
+                .build_private_keys("password".to_string())
+                .unwrap(),
+            vc: vc_cloned,
+            keysecure: did_vc_cloned
+                .account()
+                .privkey()
+                .to_keysecure(Password::from("password".to_string()))
+                .unwrap(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let expected_cred_repo = expected_cred.clone();
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeRepo::new();
             expected
                 .expect_get_credential_by_id()
                 .with(eq("cred-id".to_string()))
-                .return_once(move |_| {
-                    Ok(Credential {
-                        id: "cred-id".to_string(),
-                        did_issuer: did_issuer_value,
-                        did_vc: did_vc.to_owned().identity().unwrap().value(),
-                        did_vc_doc_private_keys: did_vc
-                            .to_owned()
-                            .identity()
-                            .unwrap()
-                            .build_private_keys("password".to_string())
-                            .unwrap(),
-                        vc: vc_cloned,
-                        keysecure: did_vc_cloned
-                            .account()
-                            .privkey()
-                            .to_keysecure(Password::from("password".to_string()))
-                            .unwrap(),
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
-                    })
-                });
+                .return_once(move |_| Ok(expected_cred_repo));
 
             expected
         });
@@ -845,12 +796,24 @@ mod tests {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
         let addr_cloned = addr.clone();
 
+        let expected_rpc_vc = vc.clone();
         let mut rpc = MockFakeRPCClient::new();
         rpc.expect_clone().times(1).return_once(move || {
+            let mut expected_rpc_vc_rebuild = expected_rpc_vc.clone();
+            expected_rpc_vc_rebuild.id = format!(
+                "{}?address={}",
+                expected_rpc_vc.clone().id,
+                addr_cloned.clone()
+            );
+
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_credential_to_holder()
-                .with(eq(did_holder_value), eq(addr_cloned.clone()), eq(vc))
+                .with(
+                    eq(did_holder_value),
+                    eq(addr_cloned.clone()),
+                    eq(expected_rpc_vc_rebuild),
+                )
                 .times(1)
                 .returning(|_, _, _| Ok(()));
 
@@ -868,10 +831,46 @@ mod tests {
             Some(did_uri_params),
         )
         .unwrap();
-        let account = MockFakeAccountUsecase::new();
+
+        let expected_cred_account = expected_cred.clone();
+        let expected_cred_account_addr = addr.clone();
+
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(move || {
+            let expected_vc = expected_cred_account.vc.clone();
+
+            let mut expected = MockFakeAccountUsecase::new();
+            expected
+                .expect_build_did_uri()
+                .with(
+                    eq(expected_vc.id.clone()),
+                    eq("password".to_string()),
+                    function(|val: &Option<QueryParams>| val.is_some()),
+                )
+                .times(1)
+                .return_once(move |_, _, _| {
+                    let vc_did = format!(
+                        "{}?address={}",
+                        expected_vc.id,
+                        expected_cred_account_addr.clone()
+                    );
+                    Ok(vc_did)
+                });
+
+            expected
+        });
+
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential("cred-id".to_string(), did_holder_uri)
+            .send_credential(
+                "cred-id".to_string(),
+                did_holder_uri,
+                "password".to_string(),
+                Some(QueryParams {
+                    address: Some(addr.clone().to_string()),
+                    hl: None,
+                }),
+            )
             .await;
         assert!(!send_output.is_err())
     }
@@ -883,7 +882,9 @@ mod tests {
         let account = MockFakeAccountUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account);
-        let send_output = uc.send_credential("".to_string(), "".to_string()).await;
+        let send_output = uc
+            .send_credential("".to_string(), "".to_string(), "password".to_string(), None)
+            .await;
         assert!(send_output.is_err());
 
         let send_output_err = send_output.unwrap_err();
@@ -932,7 +933,12 @@ mod tests {
 
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential("cred-id".to_string(), did_holder_uri)
+            .send_credential(
+                "cred-id".to_string(),
+                did_holder_uri,
+                "password".to_string(),
+                None,
+            )
             .await;
 
         assert!(send_output.clone().is_err());
@@ -953,33 +959,35 @@ mod tests {
         let vc = VC::new("vc-id".to_string(), did_issuer_value.clone());
         let vc_cloned = vc.clone();
 
+        let expected_cred = Credential {
+            id: "cred-id".to_string(),
+            did_issuer: did_issuer_value,
+            did_vc: did_vc.to_owned().identity().unwrap().value(),
+            did_vc_doc_private_keys: did_vc
+                .to_owned()
+                .identity()
+                .unwrap()
+                .build_private_keys("password".to_string())
+                .unwrap(),
+            vc: vc_cloned,
+            keysecure: did_vc_cloned
+                .account()
+                .privkey()
+                .to_keysecure(Password::from("password".to_string()))
+                .unwrap(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        let expected_cred_cloned = expected_cred.clone();
+
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(move || {
             let mut expected = MockFakeRepo::new();
             expected
                 .expect_get_credential_by_id()
                 .with(eq("cred-id".to_string()))
-                .return_once(move |_| {
-                    Ok(Credential {
-                        id: "cred-id".to_string(),
-                        did_issuer: did_issuer_value,
-                        did_vc: did_vc.to_owned().identity().unwrap().value(),
-                        did_vc_doc_private_keys: did_vc
-                            .to_owned()
-                            .identity()
-                            .unwrap()
-                            .build_private_keys("password".to_string())
-                            .unwrap(),
-                        vc: vc_cloned,
-                        keysecure: did_vc_cloned
-                            .account()
-                            .privkey()
-                            .to_keysecure(Password::from("password".to_string()))
-                            .unwrap(),
-                        created_at: Utc::now(),
-                        updated_at: Utc::now(),
-                    })
-                });
+                .return_once(move |_| Ok(expected_cred.clone()));
 
             expected
         });
@@ -1002,22 +1010,69 @@ mod tests {
         )
         .unwrap();
 
+        let expected_rpc_vc = vc.clone();
         let mut rpc = MockFakeRPCClient::new();
         rpc.expect_clone().times(1).return_once(move || {
+            let mut expected_rpc_vc_rebuild = expected_rpc_vc.clone();
+            expected_rpc_vc_rebuild.id = format!(
+                "{}?address={}",
+                expected_rpc_vc.clone().id,
+                addr_cloned.clone()
+            );
+
             let mut expected = MockFakeRPCClient::new();
             expected
                 .expect_send_credential_to_holder()
-                .with(eq(did_holder_value), eq(addr_cloned.clone()), eq(vc))
+                .with(
+                    eq(did_holder_value),
+                    eq(addr_cloned.clone()),
+                    eq(expected_rpc_vc_rebuild),
+                )
                 .times(1)
                 .returning(|_, _, _| Err(CredentialError::SendError("send error".to_string())));
 
             expected
         });
 
-        let account = MockFakeAccountUsecase::new();
+        let expected_cred_account = expected_cred_cloned.clone();
+        let expected_cred_account_addr = addr.clone();
+
+        let mut account = MockFakeAccountUsecase::new();
+        account.expect_clone().times(1).return_once(move || {
+            let expected_vc = expected_cred_account.vc.clone();
+
+            let mut expected = MockFakeAccountUsecase::new();
+            expected
+                .expect_build_did_uri()
+                .with(
+                    eq(expected_vc.id.clone()),
+                    eq("password".to_string()),
+                    function(|val: &Option<QueryParams>| val.is_some()),
+                )
+                .times(1)
+                .return_once(move |_, _, _| {
+                    let vc_did = format!(
+                        "{}?address={}",
+                        expected_vc.id,
+                        expected_cred_account_addr.clone()
+                    );
+                    Ok(vc_did)
+                });
+
+            expected
+        });
+
         let uc = generate_usecase(repo, rpc, account);
         let send_output = uc
-            .send_credential("cred-id".to_string(), did_holder_uri)
+            .send_credential(
+                "cred-id".to_string(),
+                did_holder_uri,
+                "password".to_string(),
+                Some(QueryParams {
+                    address: Some(addr.clone().to_string()),
+                    hl: None,
+                }),
+            )
             .await;
         assert!(send_output.is_err());
         assert!(matches!(
@@ -1060,100 +1115,5 @@ mod tests {
 
         let receive = uc.post_credential("".to_string(), vc).await;
         assert!(!receive.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_verify_credential_by_holder() {
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let (holder, doc) = generate_holder(addr, String::from("password".to_string()));
-
-        let mut repo = MockFakeRepo::new();
-        repo.expect_clone().times(1).return_once(|| {
-            let mut expected = MockFakeRepo::new();
-
-            expected
-                .expect_set_credential_holder_verified()
-                .times(1)
-                .returning(|holder| {
-                    assert!(holder.is_verified);
-                    Ok(())
-                });
-
-            expected
-                .expect_get_holder_by_id()
-                .times(1)
-                .with(eq("id-holder".to_string()))
-                .return_once(move |_| Ok(holder.clone()));
-
-            expected
-        });
-
-        let mut account = MockFakeAccountUsecase::new();
-        account.expect_clone().times(1).return_once(|| {
-            let mut expected = MockFakeAccountUsecase::new();
-
-            expected
-                .expect_resolve_did_doc()
-                .times(1)
-                .return_once(move |_| Ok(doc.clone()));
-
-            expected
-        });
-
-        let rpc = MockFakeRPCClient::new();
-        let uc = generate_usecase(repo, rpc, account);
-        let verify_vc_checker = uc.verify_credential("id-holder".to_string()).await;
-
-        assert!(!verify_vc_checker.is_err());
-    }
-
-    #[tokio::test]
-    async fn test_verify_credential_by_holder_invalid_doc() {
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let (holder, _) = generate_holder(addr, String::from("password".to_string()));
-
-        let did = generate_did();
-        let mut identity = did.identity().unwrap();
-        identity.build_assertion_method().build_auth_method();
-
-        let fake_doc = identity.to_doc();
-
-        let mut repo = MockFakeRepo::new();
-        repo.expect_clone().times(1).return_once(|| {
-            let mut expected = MockFakeRepo::new();
-
-            expected
-                .expect_get_holder_by_id()
-                .times(1)
-                .with(eq("id-holder".to_string()))
-                .return_once(move |_| Ok(holder.clone()));
-
-            expected
-        });
-
-        let mut account = MockFakeAccountUsecase::new();
-        account.expect_clone().times(1).return_once(|| {
-            let mut expected = MockFakeAccountUsecase::new();
-
-            expected
-                .expect_resolve_did_doc()
-                .times(1)
-                .return_once(move |_| Ok(fake_doc));
-
-            expected
-        });
-
-        let rpc = MockFakeRPCClient::new();
-        let uc = generate_usecase(repo, rpc, account);
-        let verify_vc_checker = uc.verify_credential("id-holder".to_string()).await;
-
-        assert!(verify_vc_checker.is_err());
-
-        let verified_err = verify_vc_checker.unwrap_err();
-        assert!(matches!(verified_err, CredentialError::VerifyError(_)));
-
-        if let CredentialError::VerifyError(msg) = verified_err {
-            assert!(msg.contains("signature invalid"))
-        }
     }
 }

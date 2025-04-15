@@ -7,9 +7,11 @@ use rst_common::standard::uuid::Uuid;
 use rstdev_domain::entity::ToJSON;
 use rstdev_domain::BaseError;
 
+use prople_did_core::doc::types::PublicKeyDecoded;
 use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::AccountAPI;
+use crate::identity::verifiable::proof::verifier::Verifier as ProofVerifier;
 
 use super::types::{PresentationError, VerifierEntityAccessor};
 
@@ -55,11 +57,55 @@ impl Verifier {
         self
     }
 
-    pub async fn verify_vp(&self, _: impl AccountAPI) -> Result<Self, PresentationError> {
-        let mut verifier_verified = self.clone();
-        verifier_verified.is_verified = true;
+    pub async fn verify_vp(&self, account: impl AccountAPI) -> Result<Self, PresentationError> {
+        // get VP from verifier
+        let vp = self.vp.clone();
 
-        Ok(verifier_verified)
+        // get the holder from VP
+        let holder = vp.clone().holder.ok_or(PresentationError::HolderNotFound)?;
+
+        // resolve the holder DID doc
+        let did_doc = account
+            .resolve_did_uri(holder)
+            .await
+            .map_err(|err| PresentationError::VerifyError(err.to_string()))?;
+
+        // start iterate over doc assertions
+        // for each iteration, it will contain a `Primary` object
+        // and we will check if the `Primary` object is a `PublicKeyDecoded`
+        // if it is, we will check if the `PublicKeyDecoded` is a `EdDSA` key
+        // if it is, we will verify the proof using the `ProofVerifier`
+        let assertions: Vec<_> = did_doc
+            .assertion
+            .ok_or(PresentationError::VerifyError(
+                "assertion key not found".to_string(),
+            ))?
+            .iter()
+            .map(|val| val.decode_pub_key().ok())
+            .filter(|val| match val {
+                Some(PublicKeyDecoded::EdDSA(pubkey)) => {
+                    let verified = ProofVerifier::verify_proof(vp.clone(), pubkey.clone());
+
+                    match verified {
+                        Ok(_) => true,
+                        Err(_) => false,
+                    }
+                }
+                _ => false,
+            })
+            .collect();
+
+        match assertions.len() {
+            0 => Err(PresentationError::VerifyError(
+                "signature invalid".to_string(),
+            )),
+            _ => {
+                // if all assertions are valid, set the verifier to verified
+                let mut verifier = self.clone();
+                verifier.set_verified();
+                Ok(verifier)
+            }
+        }
     }
 }
 
@@ -123,24 +169,84 @@ mod tests {
     use super::*;
 
     use mockall::mock;
-
-    use multiaddr::{multiaddr, Multiaddr};
+    use mockall::predicate::*;
 
     use rst_common::standard::async_trait::async_trait;
+    use rst_common::standard::serde_json::Value;
     use rst_common::with_tokio::tokio;
 
-    use prople_crypto::keysecure::types::{Password, ToKeySecure};
+    use prople_crypto::eddsa::keypair::KeyPair;
 
-    use prople_did_core::did::{query::Params, DID};
-    use prople_did_core::doc::types::{Doc, ToDoc};
-    use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
-    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
-    use prople_did_core::verifiable::objects::{VC, VP};
+    use prople_did_core::did::query::Params;
+    use prople_did_core::did::DID;
+    use prople_did_core::doc::types::Doc;
+    use prople_did_core::keys::IdentityPrivateKeyPairs;
 
+    use crate::identity::account::types::AccountEntityAccessor;
     use crate::identity::account::types::{AccountAPI, AccountError};
     use crate::identity::account::Account as AccountIdentity;
-    use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
-    use crate::identity::verifiable::Credential;
+    use crate::identity::verifiable::credential::types::CredentialEntityAccessor;
+    use crate::identity::verifiable::proof::types::ProofError;
+    use crate::identity::verifiable::proof::verifier::Verifier as ProofVerifier;
+    use crate::identity::verifiable::{Credential, Presentation};
+
+    #[derive(Deserialize, Serialize)]
+    #[serde(crate = "self::serde")]
+    struct FakeCredential {
+        pub msg: String,
+    }
+
+    async fn generate_creds(
+        did_issuer: DID,
+        claims: Value,
+        account: AccountIdentity,
+    ) -> Vec<impl CredentialEntityAccessor> {
+        let did_issuer_identity = did_issuer.clone().identity().unwrap();
+        let cred = Credential::generate(
+            account,
+            "password".to_string(),
+            did_issuer_identity.value(),
+            claims,
+        )
+        .await
+        .unwrap();
+
+        vec![cred]
+    }
+
+    fn generate_presentation(
+        did_issuer: DID,
+        account: impl AccountEntityAccessor,
+        creds: Vec<impl CredentialEntityAccessor>,
+    ) -> Presentation {
+        let presentation = Presentation::generate(
+            "password".to_string(),
+            did_issuer.identity().unwrap().value(),
+            account,
+            creds,
+        );
+
+        presentation.unwrap()
+    }
+
+    fn generate_keypair(keypairs: IdentityPrivateKeyPairs) -> Result<KeyPair, ProofError> {
+        let account_doc_verification_pem_bytes = keypairs
+            .clone()
+            .assertion
+            .map(|val| {
+                val.decrypt_verification("password".to_string())
+                    .map_err(|err| ProofError::BuildError(err.to_string()))
+            })
+            .ok_or(ProofError::BuildError(
+                "PrivateKeyPairs is missing".to_string(),
+            ))??;
+
+        let account_doc_verification_pem = String::from_utf8(account_doc_verification_pem_bytes)
+            .map_err(|err| ProofError::BuildError(err.to_string()))?;
+
+        KeyPair::from_pem(account_doc_verification_pem)
+            .map_err(|err| ProofError::BuildError(err.to_string()))
+    }
 
     mock!(
         FakeAccountUsecase{}
@@ -167,139 +273,173 @@ mod tests {
         }
     );
 
-    fn generate_did() -> DID {
-        DID::new()
-    }
+    mod expect_success {
+        use super::*;
 
-    fn generate_doc(did: DID) -> Doc {
-        let mut did_identity = did.identity().unwrap();
-        did_identity.build_assertion_method().build_auth_method();
+        #[tokio::test]
+        async fn test_verify_vp_using_raw_verifier() {
+            let issuer_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let issuer_doc = issuer_account.get_doc();
+            let issuer_did =
+                DID::from_keysecure("password".to_string(), issuer_account.get_keysecure())
+                    .unwrap();
+            let issuer_doc_private_keys = issuer_account.get_doc_private_keys();
 
-        did_identity.to_doc()
-    }
+            let issuer_doc_cloned = issuer_doc.clone();
+            let issuer_did_cloned = issuer_did.clone();
 
-    fn generate_credentials() -> Vec<Credential> {
-        let mut creds = Vec::<Credential>::new();
+            let mut mocked_account = MockFakeAccountUsecase::new();
+            mocked_account
+                .expect_resolve_did_uri()
+                .with(eq(issuer_did_cloned.identity().unwrap().value()))
+                .return_once(|_| Ok(issuer_doc_cloned));
 
-        let did1 = generate_did();
-        let did1_keysecure = did1
-            .account()
-            .privkey()
-            .to_keysecure(Password::from("password".to_string()))
-            .unwrap();
+            let claims = FakeCredential {
+                msg: "hello world".to_string(),
+            };
 
-        let did2 = generate_did();
-        let did2_keysecure = did2
-            .account()
-            .privkey()
-            .to_keysecure(Password::from("password".to_string()))
-            .unwrap();
+            let credential = serde_json::to_value(claims).unwrap();
+            let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let presentation =
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
 
-        let vc1 = VC::new("id1".to_string(), did1.identity().unwrap().value());
-        let vc2 = VC::new("id2".to_string(), did2.identity().unwrap().value());
-
-        let cred1 = Credential::new(
-            "did1".to_string(),
-            "did_vc1".to_string(),
-            IdentityPrivateKeyPairs::new("id1".to_string()),
-            vc1,
-            did1_keysecure,
-        );
-
-        let cred2 = Credential::new(
-            "did2".to_string(),
-            "did_vc2".to_string(),
-            IdentityPrivateKeyPairs::new("id2".to_string()),
-            vc2,
-            did2_keysecure,
-        );
-
-        creds.push(cred1);
-        creds.push(cred2);
-        creds
-    }
-
-    fn generate_verifier(
-        addr: Multiaddr,
-        password: String,
-        vcs: Vec<Credential>,
-    ) -> (Verifier, Doc) {
-        let did = generate_did();
-        let did_value = did.identity().unwrap().value();
-
-        let mut did_identity = did.identity().unwrap();
-        did_identity.build_assertion_method().build_auth_method();
-
-        let did_doc = did_identity.to_doc();
-        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
-
-        let mut query_params = Params::default();
-        query_params.address = Some(addr.to_string());
-
-        let did_uri = did.build_uri(Some(query_params)).unwrap();
-
-        let mut vp = VP::new();
-        vp.add_context(CONTEXT_VC.to_string())
-            .add_context(CONTEXT_VC_V2.to_string())
-            .add_type("VerifiableCredential".to_string())
-            .set_holder(did_uri.clone());
-
-        for credential in vcs.iter() {
-            vp.add_credential(credential.vc.to_owned());
+            let keypair = generate_keypair(issuer_doc_private_keys).unwrap();
+            let pubkey = keypair.pub_key();
+            let verifier = ProofVerifier::verify_proof(presentation.vp.clone(), pubkey.clone());
+            assert!(!verifier.is_err());
         }
 
-        let proof_builder = ProofBuilder::build_proof(
-            vp.clone(),
-            password,
-            did_privkeys.clone(),
-        )
-        .unwrap()
-        .unwrap();
+        #[tokio::test]
+        async fn test_verify_vp() {
+            let issuer_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let issuer_doc = issuer_account.get_doc();
+            let issuer_did =
+                DID::from_keysecure("password".to_string(), issuer_account.get_keysecure())
+                    .unwrap();
 
-        vp.add_proof(proof_builder);
-        let verifier = Verifier::new(did_value, vp);
+            let issuer_doc_cloned = issuer_doc.clone();
+            let issuer_did_cloned = issuer_did.clone();
 
-        (verifier, did_doc)
+            let mut mocked_account = MockFakeAccountUsecase::new();
+            mocked_account.expect_clone().once().return_once(move || {
+                let did_str = issuer_did_cloned.identity().unwrap().value();
+
+                let mut mocked = MockFakeAccountUsecase::new();
+                mocked
+                    .expect_resolve_did_uri()
+                    .with(eq(did_str))
+                    .return_once(|_| Ok(issuer_doc_cloned));
+
+                mocked
+            });
+
+            let claims = FakeCredential {
+                msg: "hello world".to_string(),
+            };
+
+            let credential = serde_json::to_value(claims).unwrap();
+            let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let presentation =
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
+
+            let verifier = Verifier::new(issuer_account.get_did(), presentation.vp);
+            let verified = verifier.verify_vp(mocked_account.clone()).await;
+            assert!(!verified.is_err());
+            assert!(verified.clone().unwrap().is_verified());
+        }
     }
 
-    #[tokio::test]
-    async fn test_verify_vp_success() {
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let credentials = generate_credentials();
-        let (verifier, doc) =
-            generate_verifier(addr, String::from("password".to_string()), credentials);
+    mod expect_error {
+        use super::*;
 
-        let mut mock_account = MockFakeAccountUsecase::new();
-        mock_account
-            .expect_resolve_did_doc()
-            .returning(move |_| Ok(doc.clone()));
+        #[tokio::test]
+        async fn test_verify_vp_error_resolve() {
+            let issuer_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let issuer_did =
+                DID::from_keysecure("password".to_string(), issuer_account.get_keysecure())
+                    .unwrap();
 
-        let verified = verifier.verify_vp(mock_account).await;
-        assert!(!verified.is_err())
-    }
+            let issuer_did_cloned = issuer_did.clone();
 
-    #[tokio::test]
-    async fn test_verify_vp_invalid_doc() {
-        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let credentials = generate_credentials();
-        let (verifier, _) =
-            generate_verifier(addr, String::from("password".to_string()), credentials);
+            let mut mock_account = MockFakeAccountUsecase::new();
+            mock_account.expect_clone().once().return_once(move || {
+                let did_str = issuer_did_cloned.identity().unwrap().value();
 
-        let fake_doc = generate_doc(generate_did());
+                let mut mocked = MockFakeAccountUsecase::new();
+                mocked
+                    .expect_resolve_did_uri()
+                    .with(eq(did_str))
+                    .return_once(|_| {
+                        Err(AccountError::ResolveDIDError("error resolve".to_string()))
+                    });
 
-        let mut mock_account = MockFakeAccountUsecase::new();
-        mock_account
-            .expect_resolve_did_doc()
-            .returning(move |_| Ok(fake_doc.clone()));
+                mocked
+            });
 
-        let verified = verifier.verify_vp(mock_account).await;
-        assert!(verified.is_err());
+            let claims = FakeCredential {
+                msg: "hello world".to_string(),
+            };
 
-        let verified_err = verified.unwrap_err();
-        assert!(matches!(verified_err, PresentationError::VerifyError(_)));
+            let credential = serde_json::to_value(claims).unwrap();
+            let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let presentation =
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
 
-        if let PresentationError::VerifyError(msg) = verified_err {
-            assert!(msg.contains("signature invalid"))
+            // create a verifier with the vp
+            let verifier = Verifier::new(issuer_account.get_did(), presentation.vp);
+
+            // verify the vp
+            let verified = verifier.verify_vp(mock_account.clone()).await;
+            assert!(verified.is_err());
+            assert!(matches!(verified, Err(PresentationError::VerifyError(_))));
+            assert!(verified.unwrap_err().to_string().contains("error resolve"));
+        }
+
+        #[tokio::test]
+        async fn test_verify_vp_invalid() {
+            let issuer_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let issuer_did =
+                DID::from_keysecure("password".to_string(), issuer_account.get_keysecure())
+                    .unwrap();
+
+            let issuer_did_cloned = issuer_did.clone();
+
+            let mut mock_account = MockFakeAccountUsecase::new();
+            mock_account.expect_clone().once().return_once(move || {
+                let issuer_fake = AccountIdentity::generate("password".to_string()).unwrap();
+                let did_str = issuer_did_cloned.identity().unwrap().value();
+                assert_ne!(issuer_fake.get_did().to_string(), did_str);
+
+                let mut mocked = MockFakeAccountUsecase::new();
+                mocked
+                    .expect_resolve_did_uri()
+                    .with(eq(did_str))
+                    .return_once(move |_| Ok(issuer_fake.get_doc()));
+
+                mocked
+            });
+
+            let claims = FakeCredential {
+                msg: "hello world".to_string(),
+            };
+
+            let credential = serde_json::to_value(claims).unwrap();
+            let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
+            let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let presentation =
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
+
+            let verifier = Verifier::new(issuer_account.get_did(), presentation.vp);
+            let verified = verifier.verify_vp(mock_account.clone()).await;
+            assert!(verified.is_err());
+            assert!(matches!(verified, Err(PresentationError::VerifyError(_))));
+            assert!(verified
+                .unwrap_err()
+                .to_string()
+                .contains("signature invalid"));
         }
     }
 }

@@ -11,6 +11,7 @@ use rst_common::with_errors::thiserror::{self, Error};
 use rstdev_domain::entity::ToJSON;
 
 use prople_crypto::keysecure::KeySecure;
+use prople_did_core::did::query::Params as QueryParams;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::verifiable::objects::VC;
 
@@ -110,14 +111,19 @@ pub trait CredentialAPI: Clone {
     ///
     /// The `VC` that need to send to the `Holder` should be loaded from our persistent storage
     /// based on given `id` which is the id of [`Credential`]
-    async fn send_credential(&self, id: String, did_uri: String) -> Result<(), CredentialError>;
+    ///
+    /// This method need `password` and `params` to build `DID URI` form the `VC::id`
+    async fn send_credential(
+        &self,
+        id: String,
+        did_uri: String,
+        password: String,
+        params: Option<QueryParams>,
+    ) -> Result<(), CredentialError>;
 
     /// `post_credential` used by `Holder` to receive incoming [`VC`] from an `Issuer` and save it
     /// to the persistent storage through `CredentialHolder`
     async fn post_credential(&self, did_holder: String, vc: VC) -> Result<(), CredentialError>;
-
-    /// `verify_credential_by_holder` used by `Holder` to verify its received `VC`
-    async fn verify_credential(&self, id: String) -> Result<(), CredentialError>;
 
     /// `list_credentials_by_did` used to load a list of saved `VC` based on `DID` issuer
     ///
