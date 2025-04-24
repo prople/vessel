@@ -107,7 +107,7 @@ pub trait ConnectionAPI: Clone {
         &self,
         peer_did_uri: String,
         own_did_uri: String,
-    ) -> Result<ConnectionChallenge, ConnectionChallenge>;
+    ) -> Result<ConnectionChallenge, ConnectionError>;
 
     async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
     async fn get_connection(&self, id: String) -> Result<Self::EntityAccessor, ConnectionError>;
