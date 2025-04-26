@@ -1,9 +1,13 @@
 use clap::{Args, Subcommand};
 
 mod account;
+mod verifiable;
 
 pub use account::handler::handle_commands as account_handler;
 pub use account::{AccountArgs, AccountCommands};
+
+pub use verifiable::credential::handler::handle_commands as credential_handler;
+pub use verifiable::{VerifiableArgs, VerifiableCommands};
 
 #[derive(Args)]
 pub struct IdentityArgs {
@@ -16,4 +20,7 @@ pub struct IdentityArgs {
 pub enum IdentityCommands {
     /// Used to manage Identity DID Account
     Account(AccountArgs),
+
+    /// Used to manage verifiable credentials and presentations
+    Verifiable(VerifiableArgs),
 }

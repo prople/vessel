@@ -15,7 +15,8 @@ use prople_vessel_cli::commands::agents::AgentArgs;
 use prople_vessel_cli::commands::ping::ping_handler;
 use prople_vessel_cli::commands::ping::PingArgs;
 
-use prople_vessel_cli::commands::identity::account_handler;
+use prople_vessel_cli::commands::identity::VerifiableCommands;
+use prople_vessel_cli::commands::identity::{account_handler, credential_handler};
 use prople_vessel_cli::commands::identity::{IdentityArgs, IdentityCommands};
 
 use prople_vessel_cli::types::{CliError, VESSEL_CF_NAME, VESSEL_DATA_DIR, VESSEL_DEFAULT_DIR};
@@ -73,6 +74,11 @@ async fn main() -> Result<(), CliError> {
     match &cli.commands {
         Commands::Identity(args) => match &args.commands {
             IdentityCommands::Account(args) => account_handler(&ctx, args.commands.clone()).await?,
+            IdentityCommands::Verifiable(args) => match &args.commands {
+                VerifiableCommands::Credential(args) => {
+                    credential_handler(&ctx, args.commands.clone()).await?
+                }
+            },
         },
         Commands::Agent(args) => agent_handler(&ctx, args.commands.clone())?,
         Commands::Ping(args) => ping_handler(&ctx, args.commands.clone()).await?,

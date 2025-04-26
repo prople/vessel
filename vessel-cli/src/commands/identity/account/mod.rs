@@ -1,6 +1,6 @@
 use clap::{Args, Subcommand};
 
-pub mod handler;
+pub(crate) mod handler;
 
 #[derive(Args)]
 pub struct AccountArgs {
