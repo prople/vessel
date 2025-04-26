@@ -69,7 +69,7 @@ mod tests {
     use prople_did_core::did::DID;
     use prople_did_core::doc::types::ToDoc;
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
-    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
+    use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2, Validator};
     use prople_did_core::verifiable::objects::VC;
     use prople_did_core::verifiable::proof::eddsa::EddsaJcs2022;
     use prople_did_core::verifiable::proof::types::{CryptoSuiteBuilder, Proofable};
@@ -141,8 +141,11 @@ mod tests {
             did_vc_doc_private_keys.clone(),
         );
 
-        vc.setup_proof(secured.unwrap().unwrap());
+        let generated_proof = secured.clone().unwrap().unwrap();
+        assert!(generated_proof.validate().is_ok());
+        assert!(generated_proof.proof_purpose == ProofPurpose::AssertionMethod);
 
+        vc.setup_proof(secured.unwrap().unwrap());
         let keypair = generate_keypair(did_vc_doc_private_keys).unwrap();
         let pubkey = keypair.pub_key();
 
