@@ -59,12 +59,4 @@ pub struct ListCredentialByIdsArgs {
     /// ids is the list of credential ids 
     #[arg(long, short, value_delimiter = ',', num_args = 1..)]
     pub ids: Vec<String>,
-
-    /// page is the page number to load 
-    #[arg(long, short)]
-    pub page: usize,
-
-    /// limit is the number of items to load
-    #[arg(long, short)]
-    pub limit: usize,
 }

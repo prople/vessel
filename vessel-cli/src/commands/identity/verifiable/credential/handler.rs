@@ -131,7 +131,47 @@ pub async fn handle_commands(
             let _ = print_stdout(credential_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
         },
-        _ => {}
+        CredentialCommands::ListCredentialsIds(args) => {
+            let method = build_rpc_method(Method::Domain(MethodDomain::ListCredentialsByIDs));
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<Vec<CoreCredentialModel>>();
+
+            let resp = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::ListCredentialsByIDs {
+                        ids: args.ids,
+                    })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            let rpc_resp = resp
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
+
+            let credential_list: Vec<CredentialWrapper> = rpc_resp
+                .iter()
+                .map(|credential| {
+                    let mut did_vc = credential.get_did_vc();
+                    did_vc.truncate(did_vc.len() / 2);
+                    did_vc.push_str("...");
+                    
+
+                    CredentialWrapper {
+                        id: credential.get_id(),
+                        did_vc,
+                        created_at: credential.get_created_at(),
+                        updated_at: credential.get_updated_at(),
+                    }
+                })
+                .collect();
+
+            let _ = print_stdout(credential_list.with_title())
+                .map_err(|err| CliError::AgentError(err.to_string()))?;
+        },
     }
     Ok(())
 }
