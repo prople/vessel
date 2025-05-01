@@ -23,7 +23,7 @@ use prople_vessel_cli::types::{CliError, VESSEL_CF_NAME, VESSEL_DATA_DIR, VESSEL
 
 #[derive(Parser)]
 #[command(name = "prople-vessel-cli")]
-#[command(version = "0.1.0")]
+#[command(version = "0.2.0")]
 #[command(long_about = None)]
 struct Cli {
     #[command(subcommand)]
@@ -38,8 +38,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    // Manage your identity and credentials
     Identity(IdentityArgs),
+
+    // Manage your prople agent entities
     Agent(AgentArgs),
+
+    // Ping to some of your agents
     Ping(PingArgs),
 }
 
