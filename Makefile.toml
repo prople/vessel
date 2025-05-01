@@ -5,6 +5,11 @@ CARGO_MAKE = true
 default_to_workspace = false
 skip_core_tasks = true
 
+[tasks.vessel-cli]
+description = "Prople Vesseld Flows"
+command = "cargo"
+args = ["make", "--env", "PROPLE_CRATE_NAME=prople-vessel-cli", "--makefile", "./vessel-cli/make.toml", "${@}"]
+
 [tasks.vesseld]
 description = "Prople Vesseld Flows"
 command = "cargo"
