@@ -135,10 +135,10 @@ pub trait CredentialAPI: Clone {
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::EntityAccessor>, CredentialError>;
 
-    /// `list_credentials_by_ids` used to load a list of saved `VC` based on `DID` issuer
+    /// `list_credentials_by_ids` used to load a list of saved `VC` based on list of credetial `id` 
     ///
     /// This method doesn't contain any logic, actually this method is just a simple proxy
-    /// to the repository method, [`VerifiableRepoBuilder::list_by_did`]
+    /// to the repository method, [`VerifiableRepoBuilder::list_by_ids`]
     async fn list_credentials_by_ids(
         &self,
         ids: Vec<String>,
