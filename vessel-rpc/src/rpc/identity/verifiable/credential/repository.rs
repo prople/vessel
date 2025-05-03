@@ -1,4 +1,5 @@
 use rst_common::standard::async_trait::async_trait;
+use rst_common::standard::serde::{Serialize, de::DeserializeOwned};
 use rstdev_storage::engine::rocksdb::executor::Executor;
 use rstdev_storage::engine::rocksdb::types::{
     Instruction as DbInstruction, OutputOpts as DbOutput,
@@ -15,6 +16,7 @@ use crate::rpc::shared::db::{Bucket as DbBucket, DbError};
 
 const CREDENTIAL_KEY_ID: &str = "credential_id";
 const CREDENTIAL_MERGE_KEY_DID: &str = "merge_credential";
+const HOLDER_MERGE_KEY_DID: &str = "merge_holder";
 const HOLDER_KEY_ID: &str = "holder_id";
 
 #[derive(Clone)]
@@ -27,19 +29,26 @@ impl Repository {
         Self { db }
     }
 
-    fn build_credential_id_key(&self, val: String) -> String {
-        format!("{}:{}", CREDENTIAL_KEY_ID.to_string(), val)
-    }
-
     fn build_holder_key(&self, val: String) -> String {
         format!("{}:{}", HOLDER_KEY_ID.to_string(), val)
+    }
+
+    fn build_holder_merge_did_key(&self, val: String) -> String {
+        format!("{}:{}", HOLDER_MERGE_KEY_DID.to_string(), val)
+    }
+
+    fn build_credential_id_key(&self, val: String) -> String {
+        format!("{}:{}", CREDENTIAL_KEY_ID.to_string(), val)
     }
 
     fn build_credential_merge_did_key(&self, val: String) -> String {
         format!("{}:{}", CREDENTIAL_MERGE_KEY_DID.to_string(), val)
     }
 
-    async fn check_merge_credential_did_exists(&self, key: String) -> bool {
+    async fn check_merge_key_exists<T>(&self, key: String) -> bool
+    where
+        T: Serialize + DeserializeOwned + TryInto<Vec<u8>>,
+    {
         let value_cred = self
             .db
             .exec(DbInstruction::GetCf { key })
@@ -57,9 +66,8 @@ impl Repository {
                 DbOutput::SingleByte { value } => {
                     let output = value
                         .map(|val| {
-                            let bucket: Result<DbBucket<Credential>, DbError> =
-                                DbBucket::try_from(val)
-                                    .map_err(|err| DbError::BucketError(err.to_string()));
+                            let bucket: Result<DbBucket<T>, DbError> = DbBucket::try_from(val)
+                                .map_err(|err| DbError::BucketError(err.to_string()));
 
                             bucket
                         })
@@ -109,7 +117,7 @@ impl RepoBuilder for Repository {
 
         // before we're able to merge some values, we need to make sure that given bucket already exists or not
         let check_bucket_exists = self
-            .check_merge_credential_did_exists(credential_did_merge_key.clone())
+            .check_merge_key_exists::<Credential>(credential_did_merge_key.clone())
             .await;
 
         match check_bucket_exists {
@@ -160,17 +168,57 @@ impl RepoBuilder for Repository {
         })?;
 
         let holder_key = self.build_holder_key(data.get_id());
+        let holder_did_merge_key = self.build_holder_merge_did_key(data.get_did_holder());
 
         let _ = self
             .db
             .exec(DbInstruction::SaveCf {
                 key: holder_key,
-                value: holder_bytes,
+                value: holder_bytes.clone(),
             })
             .await
             .map_err(|err| {
                 CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
             })?;
+
+        // before we're able to merge some values, we need to make sure that given bucket already exists or not
+        let check_bucket_exists = self
+            .check_merge_key_exists::<Holder>(holder_did_merge_key.clone())
+            .await;
+
+        match check_bucket_exists {
+            true => {
+                let _ = self
+                    .db
+                    .exec(DbInstruction::MergeCf {
+                        key: holder_did_merge_key.clone(),
+                        value: holder_bytes.clone(),
+                    })
+                    .await
+                    .map_err(|err| {
+                        CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+                    })?;
+            }
+            false => {
+                let mut bucket = DbBucket::<Holder>::new();
+                bucket.add(data.to_owned());
+
+                let bucket_bytes: Vec<u8> = bucket
+                    .try_into()
+                    .map_err(|err: DbError| CredentialError::GenerateJSONError(err.to_string()))?;
+
+                let _ = self
+                    .db
+                    .exec(DbInstruction::SaveCf {
+                        key: holder_did_merge_key.clone(),
+                        value: bucket_bytes,
+                    })
+                    .await
+                    .map_err(|err| {
+                        CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+                    })?;
+            }
+        }
 
         Ok(())
     }
@@ -340,7 +388,6 @@ impl RepoBuilder for Repository {
         _pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError> {
         let credential_merge_key = self.build_credential_merge_did_key(did);
-
         let value_cred = self
             .db
             .exec(DbInstruction::GetCf {
@@ -377,6 +424,109 @@ impl RepoBuilder for Repository {
 
         Ok(output)
     }
+
+    async fn list_holders_by_did(
+        &self,
+        did: String,
+        _pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError> {
+        let holder_merge_key = self.build_holder_merge_did_key(did);
+        let value_cred = self
+            .db
+            .exec(DbInstruction::GetCf {
+                key: holder_merge_key,
+            })
+            .await
+            .map_err(|err| {
+                CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+            })?;
+
+        let holder = {
+            match value_cred {
+                DbOutput::SingleByte { value } => {
+                    let output = value
+                        .map(|val| {
+                            let bucket: Result<DbBucket<Holder>, DbError> = val.try_into();
+                            bucket
+                        })
+                        .ok_or(CredentialError::HolderNotfound)?
+                        .map_err(|err| CredentialError::ListError(err.to_string()))?;
+
+                    Ok(output)
+                }
+                _ => Err(CredentialError::UnserializeError(
+                    "unknown output type".to_string(),
+                )),
+            }
+        }?;
+
+        let mut output: Vec<Holder> = Vec::new();
+        for cred in holder.iterate() {
+            output.push(cred.to_owned())
+        }
+
+        Ok(output)
+    }
+
+    async fn list_holders_by_ids(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError> {
+        let holder_keys = ids.iter().map(|val| self.build_holder_key(val.to_owned()));
+
+        let values = self
+            .db
+            .exec(DbInstruction::MultiGetCf {
+                keys: holder_keys.collect(),
+            })
+            .await
+            .map_err(|err| {
+                CredentialError::CommonError(VerifiableError::RepoError(err.to_string()))
+            })?;
+
+        let holders = {
+            match values {
+                DbOutput::MultiBytes { values } => {
+                    let mut creds: Vec<Holder> = Vec::new();
+
+                    let _ = values
+                        .iter()
+                        .map(|val| {
+                            let cred_val = val.as_ref().map_or(None, |val| {
+                                let cred_val_bytes = val
+                                    .clone()
+                                    .map(|val| {
+                                        let cred = Holder::try_from(val)
+                                            .map_err(|err| {
+                                                CredentialError::CommonError(
+                                                    VerifiableError::RepoError(err.to_string()),
+                                                )
+                                            })
+                                            .map_or(None, |cred| Some(cred));
+
+                                        cred
+                                    })
+                                    .flatten();
+
+                                cred_val_bytes
+                            });
+
+                            cred_val
+                        })
+                        .for_each(|val| {
+                            val.map(|cred| creds.push(cred));
+                        });
+
+                    Ok(creds)
+                }
+                _ => Err(CredentialError::UnserializeError(
+                    "unknown output bytes".to_string(),
+                )),
+            }
+        }?;
+
+        Ok(holders)
+    }
 }
 
 #[cfg(test)]
@@ -394,6 +544,7 @@ mod tests {
     use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
+    use prople_did_core::identity::types::Identity;
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
@@ -457,7 +608,7 @@ mod tests {
         credential_builder.unwrap()
     }
 
-    fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc) {
+    fn generate_holder(addr: Multiaddr, password: String) -> (Holder, Doc, DID) {
         let did_issuer = generate_did();
         let did_issuer_value = did_issuer.identity().unwrap().value();
 
@@ -492,6 +643,40 @@ mod tests {
 
         vc.proof(proof_builder);
         let holder = Holder::new(did_value, vc);
+
+        (holder, did_doc, did)
+    }
+
+    fn generate_holder_by_did(did: DID, identity: Identity, addr: Multiaddr, password: String) -> (Holder, Doc) {
+        let mut did_identity = identity.clone();
+        did_identity.build_assertion_method().build_auth_method();
+
+        let did_issuer_value = did_identity.value();
+        let did_doc = did_identity.to_doc();
+        let did_privkeys = did_identity.build_private_keys(password.clone()).unwrap();
+
+        let mut query_params = Params::default();
+        query_params.address = Some(addr.to_string());
+
+        let did_uri = did.build_uri(Some(query_params)).unwrap();
+
+        let cred_value = serde_json::to_value(FakeCredential {
+            msg: "hello world".to_string(),
+        })
+        .unwrap();
+
+        let mut vc = VC::new(did_uri, did_issuer_value.clone());
+        vc.add_context(CONTEXT_VC.to_string())
+            .add_context(CONTEXT_VC_V2.to_string())
+            .add_type("VerifiableCredential".to_string())
+            .set_credential(cred_value);
+
+        let proof_builder = ProofBuilder::build_proof(vc.clone(), password, did_privkeys.clone())
+            .unwrap()
+            .unwrap();
+
+        vc.proof(proof_builder);
+        let holder = Holder::new(did_issuer_value, vc);
 
         (holder, did_doc)
     }
@@ -530,7 +715,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_get_holder() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let (holder, _) = generate_holder(addr, "password".to_string());
+        let (holder, _, _) = generate_holder(addr, "password".to_string());
 
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
@@ -546,7 +731,7 @@ mod tests {
     #[tokio::test]
     async fn test_save_update_holder() {
         let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
-        let (mut holder, _) = generate_holder(addr, "password".to_string());
+        let (mut holder, _, _) = generate_holder(addr, "password".to_string());
 
         let db_builder = testdb::global_db_builder().to_owned();
         let repo = Repository::new(db_builder);
@@ -678,5 +863,115 @@ mod tests {
 
         let credentials = credentials_finder.unwrap();
         assert_eq!(credentials.len(), 3)
+    }
+
+    #[tokio::test]
+    async fn test_save_merge_list_holders_by_did() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let did = generate_did();
+        let did_identity = did.identity().unwrap();
+        let did_value = did_identity.value();
+
+        let (holder1, _) =
+            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
+        assert!(holder1.get_did_holder() == did_value);       
+
+        let (holder2, _) =
+            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
+        assert!(holder2.get_did_holder() == did_value);        
+        
+        let (holder3, _) =
+            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
+        assert!(holder3.get_did_holder() == did_value);    
+
+        assert!(holder1.clone().get_id() != holder2.clone().get_id());    
+        assert!(holder1.clone().get_id() != holder3.clone().get_id());
+        assert!(holder2.clone().get_id() != holder3.clone().get_id());
+
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+
+        let try_save_1 = repo.save_credential_holder(&holder1).await;
+        assert!(!try_save_1.is_err());
+
+        let try_save_2 = repo.save_credential_holder(&holder2).await;
+        assert!(!try_save_2.is_err());
+        
+        let try_save_3 = repo.save_credential_holder(&holder3).await;
+        assert!(!try_save_3.is_err());
+       
+        let get_holder1 = repo.get_holder_by_id(holder1.get_id()).await; 
+        assert!(!get_holder1.is_err());
+        
+        let get_holder2 = repo.get_holder_by_id(holder2.get_id()).await;
+        assert!(!get_holder2.is_err());
+
+        let get_holder3 = repo.get_holder_by_id(holder3.get_id()).await;
+        assert!(!get_holder3.is_err());
+
+        assert!(get_holder1.clone().unwrap().get_did_holder() == did_value);
+        assert!(get_holder2.clone().unwrap().get_did_holder() == did_value);
+        assert!(get_holder3.clone().unwrap().get_did_holder() == did_value);
+
+        assert!(get_holder1.clone().unwrap().get_id() == holder1.get_id());
+
+        let holders_finder = repo
+            .list_holders_by_did(did_value, None)
+            .await;
+        assert!(!holders_finder.is_err());
+
+        let holders = holders_finder.unwrap();
+        assert!(holders.len() == 3);
+    }
+
+    #[tokio::test]
+    async fn test_save_merge_list_holders_by_ids() {
+        let addr = multiaddr!(Ip4([127, 0, 0, 1]), Udp(10500u16), QuicV1);
+
+        let did = generate_did();
+        let did_identity = did.identity().unwrap();
+        let did_value = did_identity.value();
+
+        let (holder1, _) =
+            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
+        assert!(holder1.get_did_holder() == did_value);       
+
+        let (holder2, _) =
+            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
+        assert!(holder2.get_did_holder() == did_value);        
+        
+        let (holder3, _) =
+            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
+        assert!(holder3.get_did_holder() == did_value);    
+
+        let holders_ids = vec![
+            holder1.clone().get_id(),
+            holder2.clone().get_id(),
+            holder3.clone().get_id(),
+        ];
+
+        let db_builder = testdb::global_db_builder().to_owned();
+        let repo = Repository::new(db_builder);
+
+        let try_save_1 = repo.save_credential_holder(&holder1).await;
+        assert!(!try_save_1.is_err());
+
+        let try_save_2 = repo.save_credential_holder(&holder2).await;
+        assert!(!try_save_2.is_err());
+        
+        let try_save_3 = repo.save_credential_holder(&holder3).await;
+        assert!(!try_save_3.is_err());
+        
+        let credentials_finder = repo.list_holders_by_ids(holders_ids.clone()).await;
+        assert!(!credentials_finder.is_err());
+        
+        let holders_from_db = credentials_finder.unwrap();
+        assert_eq!(holders_from_db.len(), 3);
+
+        let holders_ids_slice = holders_ids.as_slice();
+        for cred in holders_from_db.iter() {
+            assert!(holders_ids_slice.contains(&cred.get_id()))
+        }
     }
 }

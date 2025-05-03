@@ -4,7 +4,7 @@ use rst_common::standard::serde::Serialize;
 use rstdev_storage::engine::rocksdb::lib::rust_rocksdb::merge_operator::MergeOperands;
 
 use prople_vessel_core::identity::verifiable::credential::types::CredentialError;
-use prople_vessel_core::identity::verifiable::Credential;
+use prople_vessel_core::identity::verifiable::{Credential, Holder};
 
 use prople_vessel_core::identity::verifiable::presentation::types::PresentationError;
 use prople_vessel_core::identity::verifiable::presentation::Verifier;
@@ -33,6 +33,33 @@ fn merge_bucket_builder<T: TryInto<Vec<u8>> + Serialize + DeserializeOwned>(
     }?;
 
     Some(bucket)
+}
+
+fn merge_bucket_holder(existing: Option<&[u8]>, operands: &MergeOperands) -> Option<Vec<u8>> {
+    let mut bucket: DbBucket<Holder> = merge_bucket_builder(existing)?;
+    for op in operands {
+        let op_credential = {
+            let credential_builder: Result<Holder, CredentialError> = op.to_vec().try_into();
+            match credential_builder {
+                Ok(credential) => Some(credential),
+                Err(_) => None,
+            }
+        };
+
+        op_credential.map(|cred| {
+            bucket.add(cred);
+        });
+    }
+
+    let output = {
+        let bucket_bin_builder: Result<Vec<u8>, DbError> = bucket.try_into();
+        match bucket_bin_builder {
+            Ok(bin) => Some(bin),
+            Err(_) => None,
+        }
+    };
+
+    output
 }
 
 fn merge_bucket_credential(existing: Option<&[u8]>, operands: &MergeOperands) -> Option<Vec<u8>> {
@@ -96,11 +123,13 @@ pub fn merge_bucket(
     existing: Option<&[u8]>,
     operands: &MergeOperands,
 ) -> Option<Vec<u8>> {
-    let allowed_keys = vec!["merge_credential", "merge_presentation"];
+    let allowed_keys = vec!["merge_credential", "merge_holder", "merge_presentation"];
 
     let key = {
         match String::from_utf8(new_key.to_vec()) {
-            Ok(key_val) => Some(key_val),
+            Ok(key_val) => {
+                Some(key_val)
+            },
             Err(_) => None,
         }
     }
@@ -129,6 +158,10 @@ pub fn merge_bucket(
                 match first_index {
                     Some("merge_credential") => {
                         let output = merge_bucket_credential(existing, operands);
+                        output
+                    }
+                    Some("merge_holder") => {
+                        let output = merge_bucket_holder(existing, operands);
                         output
                     }
                     Some("merge_presentation") => {
