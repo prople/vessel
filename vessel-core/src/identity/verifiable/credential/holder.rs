@@ -100,4 +100,8 @@ impl HolderEntityAccessor for Holder {
     fn get_updated_at(&self) -> DateTime<Utc> {
         self.updated_at.to_owned()
     }
+
+    fn get_did_holder(&self) -> String {
+        self.did_holder.to_owned()
+    }
 }

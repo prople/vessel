@@ -68,6 +68,7 @@ where
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
 {
     type EntityAccessor = Credential;
+    type HolderEntityAccessor = Holder;
 
     async fn generate_credential(
         &self,
@@ -119,6 +120,21 @@ where
         ids: Vec<String>,
     ) -> Result<Vec<Credential>, CredentialError> {
         self.repo().list_credentials_by_ids(ids).await
+    }
+
+    async fn list_holders_by_did(
+        &self,
+        did: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Holder>, CredentialError> {
+        self.repo().list_holders_by_did(did, pagination).await
+    }
+
+    async fn list_holders_by_ids(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<Holder>, CredentialError> {
+        self.repo().list_holders_by_ids(ids).await
     }
 
     async fn post_credential(&self, did_holder: String, vc: VC) -> Result<(), CredentialError> {
@@ -246,6 +262,17 @@ mod tests {
                 did: String,
                 pagination: Option<PaginationParams>,
             ) -> Result<Vec<Credential>, CredentialError>;
+    
+            async fn list_holders_by_did(
+                &self,
+                did: String,
+                pagination: Option<PaginationParams>,
+            ) -> Result<Vec<Holder>, CredentialError>;
+            
+            async fn list_holders_by_ids(
+                &self,
+                ids: Vec<String>,
+            ) -> Result<Vec<Holder>, CredentialError>;
         }
     );
 

@@ -56,6 +56,9 @@ pub enum CredentialError {
 
     #[error("credential not found")]
     CredentialNotFound,
+
+    #[error("holder not found")]
+    HolderNotfound,
 }
 
 /// `CredentialEntityAccessor` it's an interface used as a getter objects
@@ -79,6 +82,7 @@ pub trait HolderEntityAccessor:
     Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>>
 {
     fn get_id(&self) -> String;
+    fn get_did_holder(&self) -> String;
     fn get_vc(&self) -> VC;
     fn get_is_verified(&self) -> bool;
     fn get_created_at(&self) -> DateTime<Utc>;
@@ -88,6 +92,7 @@ pub trait HolderEntityAccessor:
 #[async_trait]
 pub trait CredentialAPI: Clone {
     type EntityAccessor: CredentialEntityAccessor;
+    type HolderEntityAccessor: HolderEntityAccessor;
 
     /// `generate_credential` used to generate the `Verifiable Credential` and [`Credential`] object
     /// entity. The generated credential entity should be saved into persistent storage through
@@ -143,6 +148,19 @@ pub trait CredentialAPI: Clone {
         &self,
         ids: Vec<String>,
     ) -> Result<Vec<Self::EntityAccessor>, CredentialError>;
+
+    /// `list_holders_by_did` used to load a list of saved `Holder` based on `DID` issuer 
+    async fn list_holders_by_did(
+        &self,
+        did: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError>;
+
+    /// `list_holders_by_ids` used to load a list of saved `Holder` based on list of holder `id` 
+    async fn list_holders_by_ids(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError>;
 }
 
 #[async_trait]
@@ -187,6 +205,17 @@ pub trait RepoBuilder: Clone + Sync + Send {
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError>;
+    
+    async fn list_holders_by_did(
+        &self,
+        did: String,
+        pagination: Option<PaginationParams>,
+    ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError>;
+    
+    async fn list_holders_by_ids(
+        &self,
+        ids: Vec<String>,
+    ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError>;
 }
 
 #[async_trait]

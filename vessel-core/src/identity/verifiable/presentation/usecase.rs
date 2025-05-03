@@ -292,6 +292,7 @@ mod tests {
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::credential::types::CredentialError;
+    use crate::identity::verifiable::credential::Holder;
     use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
     use crate::identity::verifiable::types::{PaginationParams, VerifiableError};
 
@@ -383,6 +384,7 @@ mod tests {
         #[async_trait]
         impl CredentialAPI for FakeCredentialUsecase {
             type EntityAccessor = Credential;
+            type HolderEntityAccessor = Holder;
 
             async fn generate_credential(
                 &self,
@@ -415,6 +417,17 @@ mod tests {
                 &self,
                 ids: Vec<String>,
             ) -> Result<Vec<Credential>, CredentialError>;
+    
+            async fn list_holders_by_did(
+                &self,
+                did: String,
+                pagination: Option<PaginationParams>,
+            ) -> Result<Vec<Holder>, CredentialError>;
+    
+            async fn list_holders_by_ids(
+                &self,
+                ids: Vec<String>,
+            ) -> Result<Vec<Holder>, CredentialError>;
         }
     );
 
