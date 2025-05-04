@@ -42,6 +42,13 @@ pub enum Domain {
     ListCredentialsByIDs {
         ids: Vec<String>,
     },
+    ListHoldersByDID {
+        did: String,
+        pagination_params: Option<PaginationParams>,
+    },
+    ListHoldersByIDs {
+        ids: Vec<String>,
+    },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

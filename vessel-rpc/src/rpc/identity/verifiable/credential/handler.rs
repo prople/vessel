@@ -4,7 +4,7 @@ use rst_common::standard::serde_json::Value;
 use prople_jsonrpc_core::types::{RpcError, RpcHandler, RpcHandlerOutput, RpcMethod};
 
 use prople_vessel_core::identity::verifiable::credential::types::CredentialAPI;
-use prople_vessel_core::identity::verifiable::Credential;
+use prople_vessel_core::identity::verifiable::{Credential, Holder};
 
 use super::rpc_method::{Domain as DomainMethod, Method, Vessel as VesselMethod};
 use super::rpc_param::{Domain, Param, Vessel as VesselParam};
@@ -19,7 +19,7 @@ where
 
 impl<TCredential> CredentialHandler<TCredential>
 where
-    TCredential: CredentialAPI<EntityAccessor = Credential>,
+    TCredential: CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder>,
 {
     pub fn new(credential_api: TCredential) -> Self {
         Self { credential_api }
@@ -126,12 +126,51 @@ where
             _ => Err(RpcError::InvalidParams),
         }
     }
+
+    async fn list_holders_by_did(&self, param: Param) -> RpcHandlerOutput {
+        match param {
+            Param::Domain(domain) => match domain {
+                Domain::ListHoldersByDID {
+                    did,
+                    pagination_params,
+                } => {
+                    let result = self
+                        .credential_api
+                        .list_holders_by_did(did, pagination_params)
+                        .await
+                        .map_err(|err| RpcError::HandlerError(err.to_string()))?;
+
+                    Ok(Some(Box::new(result)))
+                }
+                _ => Err(RpcError::InvalidParams),
+            },
+            _ => Err(RpcError::InvalidParams),
+        }
+    }
+
+    async fn list_holders_by_ids(&self, param: Param) -> RpcHandlerOutput {
+        match param {
+            Param::Domain(domain) => match domain {
+                Domain::ListHoldersByIDs { ids } => {
+                    let result = self
+                        .credential_api
+                        .list_holders_by_ids(ids)
+                        .await
+                        .map_err(|err| RpcError::HandlerError(err.to_string()))?;
+
+                    Ok(Some(Box::new(result)))
+                }
+                _ => Err(RpcError::InvalidParams),
+            },
+            _ => Err(RpcError::InvalidParams),
+        }
+    }
 }
 
 #[async_trait]
 impl<TCredential> RpcHandler for CredentialHandler<TCredential>
 where
-    TCredential: CredentialAPI<EntityAccessor = Credential> + Send + Sync,
+    TCredential: CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Send + Sync,
 {
     async fn call(&self, method: RpcMethod, params: Option<Value>) -> RpcHandlerOutput {
         let rpc_method = Method::try_from(method).map_err(|_| RpcError::InternalError)?;
@@ -148,6 +187,8 @@ where
                 DomainMethod::ListCredentialsByDID => self.list_credentials_by_did(rpc_param).await,
                 DomainMethod::ListCredentialsByIDs => self.list_credentials_by_ids(rpc_param).await,
                 DomainMethod::SendCredential => self.send_credential_to_holder(rpc_param).await,
+                DomainMethod::ListHoldersByDID => self.list_holders_by_did(rpc_param).await,
+                DomainMethod::ListHoldersByIDs => self.list_holders_by_ids(rpc_param).await,
             },
         }
     }

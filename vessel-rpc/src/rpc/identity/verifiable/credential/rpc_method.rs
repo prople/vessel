@@ -10,6 +10,8 @@ const METHOD_DOMAIN_GENERATE_CREDENTIAL: &str = "identity.vc.generate_credential
 const METHOD_DOMAIN_SEND_CREDENTIAL: &str = "identity.vc.send_credential";
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID: &str = "identity.vc.list_credentials_by_did";
 const METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS: &str = "identity.vc.list_credential_by_ids";
+const METHOD_DOMAIN_LIST_HOLDERS_BY_DID: &str = "identity.vc.list_holders_by_did";
+const METHOD_DOMAIN_LIST_HOLDERS_BY_IDS: &str = "identity.vc.list_holders_by_ids";
 
 #[derive(Clone)]
 pub enum Vessel {
@@ -32,6 +34,8 @@ pub enum Domain {
     SendCredential,
     ListCredentialsByDID,
     ListCredentialsByIDs,
+    ListHoldersByDID,
+    ListHoldersByIDs,
 }
 
 impl RpcMethodBuilder for Domain {
@@ -41,6 +45,8 @@ impl RpcMethodBuilder for Domain {
             Domain::ListCredentialsByDID => METHOD_DOMAIN_LIST_CREDENTIALS_BY_DID,
             Domain::ListCredentialsByIDs => METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS,
             Domain::SendCredential => METHOD_DOMAIN_SEND_CREDENTIAL,
+            Domain::ListHoldersByDID => METHOD_DOMAIN_LIST_HOLDERS_BY_DID,
+            Domain::ListHoldersByIDs => METHOD_DOMAIN_LIST_HOLDERS_BY_IDS,
         }
     }
 }
@@ -86,6 +92,12 @@ impl TryFrom<RpcMethod> for Method {
                 .contains(METHOD_DOMAIN_LIST_CREDENTIALS_BY_IDS) =>
             {
                 Ok(Self::Domain(Domain::ListCredentialsByIDs))
+            }
+            _ if given.as_str().contains(METHOD_DOMAIN_LIST_HOLDERS_BY_DID) => {
+                Ok(Self::Domain(Domain::ListHoldersByDID))
+            }
+            _ if given.as_str().contains(METHOD_DOMAIN_LIST_HOLDERS_BY_IDS) => {
+                Ok(Self::Domain(Domain::ListHoldersByIDs))
             }
             _ if given.as_str().contains(METHOD_DOMAIN_SEND_CREDENTIAL) => {
                 Ok(Self::Domain(Domain::SendCredential))

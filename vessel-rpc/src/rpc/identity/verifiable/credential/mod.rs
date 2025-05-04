@@ -129,6 +129,20 @@ impl RPCService for Credential<CredentialAPIImplementer> {
             )),
             controller.clone(),
         ));
+        
+        self.routes.push(RpcRoute::new(
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::ListHoldersByDID,
+            )),
+            controller.clone(),
+        ));
+
+        self.routes.push(RpcRoute::new(
+            build_rpc_method(components::Method::Domain(
+                components::MethodDomain::ListHoldersByIDs,
+            )),
+            controller.clone(),
+        ));
 
         Ok(())
     }

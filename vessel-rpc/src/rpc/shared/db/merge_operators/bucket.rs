@@ -127,9 +127,7 @@ pub fn merge_bucket(
 
     let key = {
         match String::from_utf8(new_key.to_vec()) {
-            Ok(key_val) => {
-                Some(key_val)
-            },
+            Ok(key_val) => Some(key_val),
             Err(_) => None,
         }
     }

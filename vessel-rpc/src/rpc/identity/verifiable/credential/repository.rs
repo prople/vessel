@@ -1,5 +1,5 @@
 use rst_common::standard::async_trait::async_trait;
-use rst_common::standard::serde::{Serialize, de::DeserializeOwned};
+use rst_common::standard::serde::{de::DeserializeOwned, Serialize};
 use rstdev_storage::engine::rocksdb::executor::Executor;
 use rstdev_storage::engine::rocksdb::types::{
     Instruction as DbInstruction, OutputOpts as DbOutput,
@@ -544,8 +544,8 @@ mod tests {
     use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
     use prople_did_core::did::{query::Params, DID};
-    use prople_did_core::identity::types::Identity;
     use prople_did_core::doc::types::{Doc, ToDoc};
+    use prople_did_core::identity::types::Identity;
     use prople_did_core::keys::IdentityPrivateKeyPairsBuilder;
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
     use prople_did_core::verifiable::objects::VC;
@@ -647,7 +647,12 @@ mod tests {
         (holder, did_doc, did)
     }
 
-    fn generate_holder_by_did(did: DID, identity: Identity, addr: Multiaddr, password: String) -> (Holder, Doc) {
+    fn generate_holder_by_did(
+        did: DID,
+        identity: Identity,
+        addr: Multiaddr,
+        password: String,
+    ) -> (Holder, Doc) {
         let mut did_identity = identity.clone();
         did_identity.build_assertion_method().build_auth_method();
 
@@ -873,19 +878,31 @@ mod tests {
         let did_identity = did.identity().unwrap();
         let did_value = did_identity.value();
 
-        let (holder1, _) =
-            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
-        assert!(holder1.get_did_holder() == did_value);       
+        let (holder1, _) = generate_holder_by_did(
+            did.clone(),
+            did_identity.clone(),
+            addr.clone(),
+            "password".to_string(),
+        );
+        assert!(holder1.get_did_holder() == did_value);
 
-        let (holder2, _) =
-            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
-        assert!(holder2.get_did_holder() == did_value);        
-        
-        let (holder3, _) =
-            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
-        assert!(holder3.get_did_holder() == did_value);    
+        let (holder2, _) = generate_holder_by_did(
+            did.clone(),
+            did_identity.clone(),
+            addr.clone(),
+            "password".to_string(),
+        );
+        assert!(holder2.get_did_holder() == did_value);
 
-        assert!(holder1.clone().get_id() != holder2.clone().get_id());    
+        let (holder3, _) = generate_holder_by_did(
+            did.clone(),
+            did_identity.clone(),
+            addr.clone(),
+            "password".to_string(),
+        );
+        assert!(holder3.get_did_holder() == did_value);
+
+        assert!(holder1.clone().get_id() != holder2.clone().get_id());
         assert!(holder1.clone().get_id() != holder3.clone().get_id());
         assert!(holder2.clone().get_id() != holder3.clone().get_id());
 
@@ -897,13 +914,13 @@ mod tests {
 
         let try_save_2 = repo.save_credential_holder(&holder2).await;
         assert!(!try_save_2.is_err());
-        
+
         let try_save_3 = repo.save_credential_holder(&holder3).await;
         assert!(!try_save_3.is_err());
-       
-        let get_holder1 = repo.get_holder_by_id(holder1.get_id()).await; 
+
+        let get_holder1 = repo.get_holder_by_id(holder1.get_id()).await;
         assert!(!get_holder1.is_err());
-        
+
         let get_holder2 = repo.get_holder_by_id(holder2.get_id()).await;
         assert!(!get_holder2.is_err());
 
@@ -916,9 +933,7 @@ mod tests {
 
         assert!(get_holder1.clone().unwrap().get_id() == holder1.get_id());
 
-        let holders_finder = repo
-            .list_holders_by_did(did_value, None)
-            .await;
+        let holders_finder = repo.list_holders_by_did(did_value, None).await;
         assert!(!holders_finder.is_err());
 
         let holders = holders_finder.unwrap();
@@ -933,17 +948,29 @@ mod tests {
         let did_identity = did.identity().unwrap();
         let did_value = did_identity.value();
 
-        let (holder1, _) =
-            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
-        assert!(holder1.get_did_holder() == did_value);       
+        let (holder1, _) = generate_holder_by_did(
+            did.clone(),
+            did_identity.clone(),
+            addr.clone(),
+            "password".to_string(),
+        );
+        assert!(holder1.get_did_holder() == did_value);
 
-        let (holder2, _) =
-            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
-        assert!(holder2.get_did_holder() == did_value);        
-        
-        let (holder3, _) =
-            generate_holder_by_did(did.clone(), did_identity.clone(), addr.clone(), "password".to_string());
-        assert!(holder3.get_did_holder() == did_value);    
+        let (holder2, _) = generate_holder_by_did(
+            did.clone(),
+            did_identity.clone(),
+            addr.clone(),
+            "password".to_string(),
+        );
+        assert!(holder2.get_did_holder() == did_value);
+
+        let (holder3, _) = generate_holder_by_did(
+            did.clone(),
+            did_identity.clone(),
+            addr.clone(),
+            "password".to_string(),
+        );
+        assert!(holder3.get_did_holder() == did_value);
 
         let holders_ids = vec![
             holder1.clone().get_id(),
@@ -959,13 +986,13 @@ mod tests {
 
         let try_save_2 = repo.save_credential_holder(&holder2).await;
         assert!(!try_save_2.is_err());
-        
+
         let try_save_3 = repo.save_credential_holder(&holder3).await;
         assert!(!try_save_3.is_err());
-        
+
         let credentials_finder = repo.list_holders_by_ids(holders_ids.clone()).await;
         assert!(!credentials_finder.is_err());
-        
+
         let holders_from_db = credentials_finder.unwrap();
         assert_eq!(holders_from_db.len(), 3);
 
