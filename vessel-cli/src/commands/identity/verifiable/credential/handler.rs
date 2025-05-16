@@ -3,6 +3,7 @@ use cli_table::{print_stdout, WithTitle};
 use rst_common::standard::serde_json;
 use rst_common::with_logging::log::{debug, info};
 
+use prople_did_core::did::query::Params as QueryParams;
 use prople_jsonrpc_client::types::Executor;
 
 use prople_vessel_rpc::build_rpc_method;
@@ -21,7 +22,7 @@ use crate::models::types::AgentName;
 
 use crate::models::db::DB;
 use crate::types::CliError;
-use crate::utils::rpc::build_client;
+use crate::utils::rpc::{build_client, http_to_multiaddr};
 
 use super::CredentialCommands;
 use super::types::CredentialWrapper;
@@ -151,7 +152,7 @@ pub async fn handle_commands(
             let rpc_resp = resp
                 .result
                 .ok_or(CliError::RpcError(String::from("missing result")))?;
-
+ 
             let credential_list: Vec<CredentialWrapper> = rpc_resp
                 .iter()
                 .map(|credential| {
@@ -171,6 +172,34 @@ pub async fn handle_commands(
 
             let _ = print_stdout(credential_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
+        },
+        CredentialCommands::Send(args) => {
+            let method = build_rpc_method(Method::Domain(MethodDomain::SendCredential));
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<()>();
+
+            let addr = http_to_multiaddr(args.address)?;
+            debug!("Multiaddr format: {}", addr.to_string());
+            
+            let mut query_params = QueryParams::default();
+            query_params.address = Some(addr.to_string());
+
+            let _ = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::SendCredential {
+                        password: args.password,
+                        did_uri: args.to_did,
+                        id: args.credential_id,
+                        params: Some(query_params),
+                    })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            info!("Credential sent successfully");
         },
     }
     Ok(())

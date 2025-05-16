@@ -15,6 +15,10 @@ pub enum CredentialCommands {
     #[command(name = "generate")]
     Generate(GenerateArgs),
 
+    /// Send a credential
+    #[command(name = "send")]
+    Send(SendArgs),
+
     /// Get list of credentials by issuer DID
     #[command(name = "list-by-did")]
     ListCredentialsByDID(ListCredentialByDIDArgs),
@@ -22,6 +26,26 @@ pub enum CredentialCommands {
     /// Get list of credentials by list of credential ids 
     #[command(name = "list-by-ids")]
     ListCredentialsIds(ListCredentialByIdsArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct SendArgs {
+    /// password is a password used when build your account
+    #[arg(long, short, required = true)]
+    pub password: String,
+
+    /// to_did is the DID of the recipient
+    #[arg(long, short, required = true)]
+    pub to_did: String,
+
+    /// credential_id is the id of the credential to send
+    #[arg(long, short, required = true)]
+    pub credential_id: String,
+    
+    /// address format: https://<host>:<port>/<params> or
+    /// https://<domain>/<params>
+    #[arg(long, short, required = true)]
+    address: String,
 }
 
 #[derive(Args, Debug, Clone)]

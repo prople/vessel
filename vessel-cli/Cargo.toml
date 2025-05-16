@@ -1,6 +1,6 @@
 [package]
 name = "prople-vessel-cli"
-version = "0.2.0"
+version = "0.2.1"
 description = "A Vessel CLI client to communicate with the prople/vessel RPC server"
 readme = "README.md"
 keywords = ["prople", "vessel", "cli"]
