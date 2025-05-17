@@ -29,6 +29,7 @@ pub mod components {
     use super::*;
 
     pub use prople_vessel_core::identity::verifiable::Credential as CoreCredentialModel;
+    pub use prople_vessel_core::identity::verifiable::Holder as CoreHolderModel;
 
     pub use rpc_method::{Domain as MethodDomain, Method, Vessel as MethodVessel};
     pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
