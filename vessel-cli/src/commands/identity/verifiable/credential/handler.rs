@@ -7,10 +7,10 @@ use prople_did_core::did::query::Params as QueryParams;
 use prople_jsonrpc_client::types::Executor;
 
 use prople_vessel_rpc::build_rpc_method;
-use prople_vessel_core::identity::verifiable::credential::types::CredentialEntityAccessor;
+use prople_vessel_core::identity::verifiable::credential::types::{CredentialEntityAccessor, HolderEntityAccessor};
 use prople_vessel_core::identity::verifiable::types::PaginationParams;
 use prople_vessel_rpc::components::credential::{
-    CoreCredentialModel, Method, MethodDomain, Param, ParamDomain,
+    CoreCredentialModel, CoreHolderModel, Method, MethodDomain, Param, ParamDomain,
 };
 
 use crate::commands::agents::get_agent_address;
@@ -25,7 +25,7 @@ use crate::types::CliError;
 use crate::utils::rpc::{build_client, http_to_multiaddr};
 
 use super::CredentialCommands;
-use super::types::CredentialWrapper;
+use super::types::{CredentialWrapper, HolderWrapper};
 
 pub async fn handle_commands(
     ctx: &ContextHandler,
@@ -200,6 +200,104 @@ pub async fn handle_commands(
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
             info!("Credential sent successfully");
+        },
+        CredentialCommands::ListHoldersByDID(args) => {
+            let method = build_rpc_method(Method::Domain(MethodDomain::ListHoldersByDID));
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<Vec<CoreHolderModel>>();
+            let pagination_params = PaginationParams {
+                page: args.page.unwrap_or(0),
+                limit: args.limit.unwrap_or(10),
+                skip: 0
+            };
+
+            let resp = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::ListHoldersByDID {
+                        did: args.did,
+                        pagination_params: Some(pagination_params),
+                    })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            let rpc_resp = resp
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
+
+            let holder_list: Vec<HolderWrapper> = rpc_resp
+                .iter()
+                .map(|holder| {
+                    let mut did_vc = holder.get_vc().id;
+                    did_vc.truncate(did_vc.len() / 5);
+                    did_vc.push_str("...");
+
+                    let mut did_holder = holder.get_did_holder(); 
+                    did_holder.truncate(did_holder.len() / 3);
+                    did_holder.push_str("...");
+                    
+
+                    HolderWrapper {
+                        id: holder.get_id(),
+                        vc: did_vc,
+                        did_holder,
+                        created_at: holder.get_created_at(),
+                        updated_at: holder.get_updated_at(),
+                    }
+                })
+                .collect();
+
+            let _ = print_stdout(holder_list.with_title())
+                .map_err(|err| CliError::AgentError(err.to_string()))?;
+        },
+        CredentialCommands::ListHoldersIds(args) => {
+            let method = build_rpc_method(Method::Domain(MethodDomain::ListHoldersByIDs));
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<Vec<CoreHolderModel>>();
+
+            let resp = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::ListHoldersByIDs {
+                        ids: args.ids,
+                    })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            let rpc_resp = resp
+                .result
+                .ok_or(CliError::RpcError(String::from("missing result")))?;
+ 
+            let holder_list: Vec<HolderWrapper> = rpc_resp
+                .iter()
+                .map(|holder| {
+                    let mut did_vc = holder.get_vc().id;
+                    did_vc.truncate(did_vc.len() / 5);
+                    did_vc.push_str("...");
+
+                    let mut did_holder = holder.get_did_holder(); 
+                    did_holder.truncate(did_holder.len() / 3);
+                    did_holder.push_str("...");
+                    
+
+                    HolderWrapper {
+                        id: holder.get_id(),
+                        vc: did_vc,
+                        did_holder,
+                        created_at: holder.get_created_at(),
+                        updated_at: holder.get_updated_at(),
+                    }
+                })
+                .collect();
+
+            let _ = print_stdout(holder_list.with_title())
+                .map_err(|err| CliError::AgentError(err.to_string()))?;
         },
     }
     Ok(())

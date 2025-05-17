@@ -23,3 +23,19 @@ pub(crate) struct CredentialWrapper {
     #[serde(rename = "updatedAt")]
     pub(crate) updated_at: DateTime<Utc>,
 }
+
+#[derive(Serialize, Deserialize, Table, Clone)]
+#[serde(crate = "self::serde")]
+pub(crate) struct HolderWrapper {
+    pub(crate) id: String,
+    pub(crate) did_holder: String,
+    pub(crate) vc: String,
+
+    #[serde(with = "ts_seconds")]
+    #[serde(rename = "createdAt")]
+    pub(crate) created_at: DateTime<Utc>,
+
+    #[serde(with = "ts_seconds")]
+    #[serde(rename = "updatedAt")]
+    pub(crate) updated_at: DateTime<Utc>,
+}

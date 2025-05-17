@@ -27,5 +27,5 @@ Options:
 
 ```toml
 [dependencies]
-prople-vessel-cli = {version = "0.2.1"}
+prople-vessel-cli = {version = "0.2.2"}
 ```
