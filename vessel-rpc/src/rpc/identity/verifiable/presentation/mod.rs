@@ -33,7 +33,10 @@ pub use rpc_client::RpcClient;
 pub mod components {
     use super::*;
 
-    pub use prople_vessel_core::identity::verifiable::presentation::{Presentation, Verifier};
+    pub use prople_vessel_core::identity::verifiable::presentation::{
+        Presentation as CorePresentationModel, 
+        Verifier as CoreVerifierModel,
+    };
 
     pub use rpc_method::{Domain as MethodDomain, Method, Vessel as MethodVessel};
     pub use rpc_param::{Domain as ParamDomain, Param, Vessel as ParamVessel};
