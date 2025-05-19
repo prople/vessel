@@ -1,1 +1,2 @@
-pub mod credential;
+pub(crate) mod credential;
+pub(crate) mod presentation;

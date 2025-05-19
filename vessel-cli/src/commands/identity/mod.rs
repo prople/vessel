@@ -7,6 +7,7 @@ pub use account::handler::handle_commands as account_handler;
 pub use account::{AccountArgs, AccountCommands};
 
 pub use verifiable::credential::handler::handle_commands as credential_handler;
+pub use verifiable::presentation::handler::handle_commands as presentation_handler;
 pub use verifiable::{VerifiableArgs, VerifiableCommands};
 
 #[derive(Args)]
