@@ -7,6 +7,8 @@ use rst_common::with_errors::thiserror::{self, Error};
 
 use rstdev_domain::entity::ToJSON;
 
+use prople_crypto::keysecure::KeySecure;
+
 /// ConnectionError is a base error types for the `Connection` domain
 ///
 /// It will contains any possible errors for the `connection`
@@ -36,6 +38,10 @@ pub enum State {
 /// This entity  will be useful from the outside of this crate
 /// to access those fields because we need to protect the properties from direct
 /// access or manipulation from outside
+/// 
+/// This trait contain `get_own_keysecure` method which will return the `KeySecure` object of the "own key"
+/// Each time a connection request is sent, it will generate a new ECDH key pairs, including the private key
+/// for the self keys, we need to save the private key in a secure storage which is using [`KeySecure`] object
 pub trait ConnectionEntityAccessor:
     Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>>
 {
@@ -44,6 +50,7 @@ pub trait ConnectionEntityAccessor:
     fn get_peer_key(&self) -> String;
     fn get_own_did_uri(&self) -> String;
     fn get_own_key(&self) -> String;
+    fn get_own_keysecure(&self) -> KeySecure;
     fn get_state(&self) -> State;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
@@ -82,7 +89,6 @@ pub trait ConnectionAPI: Clone {
         &self,
         own_did_uri: String,
         peer_did_uri: String,
-        public_key: String,
     ) -> Result<ConnectionChallenge, ConnectionError>;
 
     /// response_challenge is an RPC call method used by the sender to send back their public key with a challenge

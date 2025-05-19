@@ -18,6 +18,7 @@ use crate::identity::verifiable::types::VerifiableError;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
+/// PresentationError is a base error types for the `Presentation` domain 
 #[derive(Debug, Error, Clone, Serialize, Deserialize)]
 #[serde(crate = "self::serde")]
 pub enum PresentationError {
@@ -67,6 +68,7 @@ pub trait PresentationEntityAccessor:
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
 
+/// `VerifierEntityAccessor` is a getter object used to access all `Verifier` property fields
 pub trait VerifierEntityAccessor:
     Clone + Debug + ToJSON + TryInto<Vec<u8>> + TryFrom<Vec<u8>>
 {
@@ -85,6 +87,8 @@ pub trait PresentationAPI: Clone {
     type PresentationEntityAccessor: PresentationEntityAccessor;
     type VerifierEntityAccessor: VerifierEntityAccessor;
 
+    /// `generate` is method used to generate a new `Presentation` object
+    /// this method will depends on the list of `credentials` that passed 
     async fn generate(
         &self,
         password: String,
@@ -92,6 +96,8 @@ pub trait PresentationAPI: Clone {
         credentials: Vec<String>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
+    /// `send_presentation` is method used to send the `Presentation` object
+    /// to some `verifier` address
     async fn send_presentation(
         &self,
         id: String,
@@ -100,19 +106,27 @@ pub trait PresentationAPI: Clone {
         params: Option<QueryParams>,
     ) -> Result<(), PresentationError>;
 
+    /// `verify_presentation` is method used to verify the `Presentation` object
+    /// This method should be used by a `verifier` to verify the `Presentation`
     async fn verify_presentation(&self, id: String) -> Result<(), PresentationError>;
 
+    /// `get_by_id` is method used to get the `Presentation` object by id from persistent storage
     async fn get_by_id(
         &self,
         id: String,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
+    /// `post_presentation` is method used to save incoming `Presentation` object
+    /// This method should be used by a `verifier` to save the incoming `Presentation`
+    /// 
+    /// This method will generate the `Verifier` object and save it to the persistent storage
     async fn post_presentation(
         &self,
         did_verifier: String,
         vp: VP,
     ) -> Result<(), PresentationError>;
 
+    /// `list_vps_by_did_verifier` is method used to list all saved `Presentation` object
     async fn list_vps_by_did_verifier(
         &self,
         did_verifier: String,
@@ -156,6 +170,8 @@ pub trait RepoBuilder: Clone + Sync + Send {
 /// `RpcBuilder` it's an abstraction to cover Presentation's RPC needs
 #[async_trait]
 pub trait RpcBuilder: Clone + Sync + Send {
+    /// `send_to_verifier` is method used to send the `Presentation` object
+    /// It need the `did_verifier` which is a `DID URI` belongs to the `verifier`
     async fn send_to_verifier(
         &self,
         addr: Multiaddr,
