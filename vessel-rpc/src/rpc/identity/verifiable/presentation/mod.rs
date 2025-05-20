@@ -147,7 +147,7 @@ impl RPCService for Presentation<PresentationAPIImplementer> {
 
         self.routes.push(RpcRoute::new(
             build_rpc_method(components::Method::Domain(
-                components::MethodDomain::ListVPsByDIDVerifier,
+                components::MethodDomain::ListVerifiersByDID,
             )),
             controller.clone(),
         ));

@@ -9,7 +9,7 @@ const METHOD_DOMAIN_GENERATE: &str = "identity.vp.generate";
 const METHOD_DOMAIN_SEND_PRESENTATION: &str = "identity.vp.send_presentation";
 const METHOD_DOMAIN_GET_BY_ID: &str = "identity.vp.get_by_id";
 const METHOD_DOMAIN_VERIFY_PRESENTATION: &str = "identity.vp.verify_presentation";
-const METHOD_DOMAIN_LIST_VPS_BY_DID_VERIFIER: &str = "identity.vp.list_vps_by_did_verifier";
+const METHOD_DOMAIN_LIST_VERIFIERS_BY_DID: &str = "identity.vp.list_verifiers_by_did";
 
 #[derive(Clone)]
 pub enum Vessel {
@@ -30,7 +30,7 @@ pub enum Domain {
     SendPresentation,
     GetByID,
     VerifyPersentation,
-    ListVPsByDIDVerifier,
+    ListVerifiersByDID,
 }
 
 impl RpcMethodBuilder for Domain {
@@ -40,7 +40,7 @@ impl RpcMethodBuilder for Domain {
             Domain::SendPresentation => METHOD_DOMAIN_SEND_PRESENTATION,
             Domain::GetByID => METHOD_DOMAIN_GET_BY_ID,
             Domain::VerifyPersentation => METHOD_DOMAIN_VERIFY_PRESENTATION,
-            Domain::ListVPsByDIDVerifier => METHOD_DOMAIN_LIST_VPS_BY_DID_VERIFIER,
+            Domain::ListVerifiersByDID => METHOD_DOMAIN_LIST_VERIFIERS_BY_DID,
         }
     }
 }
@@ -77,9 +77,9 @@ impl TryFrom<RpcMethod> for Method {
             }
             _ if given
                 .as_str()
-                .contains(METHOD_DOMAIN_LIST_VPS_BY_DID_VERIFIER) =>
+                .contains(METHOD_DOMAIN_LIST_VERIFIERS_BY_DID) =>
             {
-                Ok(Self::Domain(Domain::ListVPsByDIDVerifier))
+                Ok(Self::Domain(Domain::ListVerifiersByDID))
             }
             _ if given.as_str().contains(METHOD_DOMAIN_SEND_PRESENTATION) => {
                 Ok(Self::Domain(Domain::SendPresentation))

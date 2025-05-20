@@ -6,5 +6,5 @@
 
 ```toml
 [dependencies]
-prople-vessel-rpc = {version = "0.4.4"}
+prople-vessel-rpc = {version = "0.4.5"}
 ```

@@ -135,7 +135,7 @@ where
                 Domain::ListVPsByDIDVerifier { did_verifier } => {
                     let result = self
                         .presentation_api
-                        .list_vps_by_did_verifier(did_verifier)
+                        .list_verifiers_by_did(did_verifier)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -171,7 +171,7 @@ where
             Method::Domain(domain) => match domain {
                 DomainMethod::Generate => self.generate(rpc_param).await,
                 DomainMethod::GetByID => self.get_by_id(rpc_param).await,
-                DomainMethod::ListVPsByDIDVerifier => {
+                DomainMethod::ListVerifiersByDID => {
                     self.list_vps_by_did_verifier(rpc_param).await
                 }
                 DomainMethod::SendPresentation => self.send_to_verifier(rpc_param).await,

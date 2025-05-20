@@ -248,7 +248,7 @@ impl RepoBuilder for Repository {
         Ok(verifier)
     }
 
-    async fn list_vps_by_did_verifier(
+    async fn list_verifiers_by_did(
         &self,
         did_verifier: String,
     ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError> {
@@ -522,7 +522,7 @@ mod tests {
         assert!(!try_save3.is_err());
 
         let verifiers_finder = repo
-            .list_vps_by_did_verifier(verifier.get_did_verifier())
+            .list_verifiers_by_did(verifier.get_did_verifier())
             .await;
         assert!(!verifiers_finder.is_err());
 
