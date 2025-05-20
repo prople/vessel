@@ -1,6 +1,7 @@
 use clap::{Args, Subcommand};
 
 pub(crate) mod handler;
+pub(crate) mod types;
 
 #[derive(Args, Clone)]
 pub struct PresentationArgs {
@@ -17,6 +18,10 @@ pub enum PresentationCommands {
     /// Send presentation to the verifier 
     #[command(name = "send")]
     Send(SendArgs),
+    
+    /// Get list of credentials by issuer DID
+    #[command(name = "list-verifiers-by-did")]
+    ListVerifiersByDID(ListVerifiersByDIDArgs),
 }
 
 #[derive(Args, Debug, Clone)]
@@ -33,6 +38,7 @@ pub struct GenerateArgs {
     #[arg(long, short, value_delimiter = ',', num_args = 1..)]
     pub credentials: Vec<String>,
 }
+
 #[derive(Args, Debug, Clone)]
 pub struct SendArgs {
     /// password is a password used when build your account
@@ -51,4 +57,11 @@ pub struct SendArgs {
     /// https://<domain>/<params>
     #[arg(long, short, required = true)]
     address: String,
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct ListVerifiersByDIDArgs {
+    /// did is the DID of the issuer
+    #[arg(long, short, required = true)]
+    pub did: String,
 }
