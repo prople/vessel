@@ -108,6 +108,8 @@ pub trait PresentationAPI: Clone {
 
     /// `verify_presentation` is method used to verify the `Presentation` object
     /// This method should be used by a `verifier` to verify the `Presentation`
+    /// 
+    /// The `id` is the verifier id
     async fn verify_presentation(&self, id: String) -> Result<(), PresentationError>;
 
     /// `get_by_id` is method used to get the `Presentation` object by id from persistent storage
@@ -127,7 +129,7 @@ pub trait PresentationAPI: Clone {
     ) -> Result<(), PresentationError>;
 
     /// `list_vps_by_did_verifier` is method used to list all saved `Presentation` object
-    async fn list_vps_by_did_verifier(
+    async fn list_verifiers_by_did(
         &self,
         did_verifier: String,
     ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError>;
@@ -159,11 +161,11 @@ pub trait RepoBuilder: Clone + Sync + Send {
         id: String,
     ) -> Result<Self::VerifierEntityAccessor, PresentationError>;
 
-    async fn list_vps_by_did_verifier(
+    async fn list_verifiers_by_did(
         &self,
         did_verifier: String,
     ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError>;
-
+    
     async fn save(&self, data: &Self::PresentationEntityAccessor) -> Result<(), PresentationError>;
 }
 

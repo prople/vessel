@@ -249,7 +249,7 @@ where
         Ok(())
     }
 
-    async fn list_vps_by_did_verifier(
+    async fn list_verifiers_by_did(
         &self,
         did_verifier: String,
     ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError> {
@@ -259,7 +259,7 @@ where
             ));
         }
 
-        self.repo().list_vps_by_did_verifier(did_verifier).await
+        self.repo().list_verifiers_by_did(did_verifier).await
     }
 }
 
@@ -270,24 +270,22 @@ mod tests {
     use mockall::predicate::{eq, function};
 
     use multiaddr::{multiaddr, Multiaddr};
-
-    use prople_did_core::verifiable::proof::types::Proofable;
+    
     use rst_common::standard::serde_json::value::Value;
+    use rst_common::standard::serde::{self, Deserialize, Serialize};
+    use rst_common::with_tokio::tokio;
 
     use prople_crypto::eddsa::keypair::KeyPair;
     use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
+    use prople_did_core::verifiable::proof::types::Proofable;
     use prople_did_core::did::query::Params as QueryParams;
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
     use prople_did_core::hashlink;
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
-    use prople_did_core::verifiable::objects::VC;
-    use prople_did_core::verifiable::objects::VP;
-
-    use rst_common::standard::serde::{self, Deserialize, Serialize};
-    use rst_common::with_tokio::tokio;
+    use prople_did_core::verifiable::objects::{VC, VP};
 
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
@@ -327,7 +325,7 @@ mod tests {
                 id: String,
             ) -> Result<Verifier, PresentationError>;
 
-            async fn list_vps_by_did_verifier(
+            async fn list_verifiers_by_did(
                 &self,
                 did_verifier: String,
             ) -> Result<Vec<Verifier>, PresentationError>;
@@ -971,7 +969,7 @@ mod tests {
 
             let mut expected = MockFakeRepo::new();
             expected
-                .expect_list_vps_by_did_verifier()
+                .expect_list_verifiers_by_did()
                 .with(eq(did_verifier_value_cloned))
                 .times(1)
                 .return_once(move |_| Ok(verifiers));
@@ -984,7 +982,7 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let output = uc.list_vps_by_did_verifier(did_verifier_value).await;
+        let output = uc.list_verifiers_by_did(did_verifier_value).await;
         assert!(!output.is_err());
         assert_eq!(output.unwrap().len(), 2)
     }
@@ -997,7 +995,7 @@ mod tests {
         let credential = MockFakeCredentialUsecase::new();
 
         let uc = generate_usecase(repo, rpc, account, credential);
-        let output = uc.list_vps_by_did_verifier("".to_string()).await;
+        let output = uc.list_verifiers_by_did("".to_string()).await;
         assert!(output.is_err());
 
         let send_output_err = output.unwrap_err();
