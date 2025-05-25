@@ -6,9 +6,11 @@ use rst_common::with_logging::log::{debug, info};
 use prople_did_core::did::query::Params as QueryParams;
 use prople_jsonrpc_client::types::Executor;
 
-use prople_vessel_rpc::build_rpc_method;
-use prople_vessel_core::identity::verifiable::credential::types::{CredentialEntityAccessor, HolderEntityAccessor};
+use prople_vessel_core::identity::verifiable::credential::types::{
+    CredentialEntityAccessor, HolderEntityAccessor,
+};
 use prople_vessel_core::identity::verifiable::types::PaginationParams;
+use prople_vessel_rpc::build_rpc_method;
 use prople_vessel_rpc::components::credential::{
     CoreCredentialModel, CoreHolderModel, Method, MethodDomain, Param, ParamDomain,
 };
@@ -24,8 +26,8 @@ use crate::models::db::DB;
 use crate::types::CliError;
 use crate::utils::rpc::{build_client, http_to_multiaddr};
 
-use super::CredentialCommands;
 use super::types::{CredentialWrapper, HolderWrapper};
+use super::CredentialCommands;
 
 pub async fn handle_commands(
     ctx: &ContextHandler,
@@ -74,17 +76,17 @@ pub async fn handle_commands(
                 DID::from(rpc_resp.get_did_issuer().as_str()),
                 rpc_resp.clone(),
             );
-            
+
             let _ = db
                 .save(AgentName::from(agent.clone()), credential.clone())
                 .await
                 .map_err(|err| CliError::DBError(err.to_string()))?;
-            
+
             let out = serde_json::to_string_pretty(&rpc_resp)
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
             info!("Credential generated successfully: {:?}", out);
-        },
+        }
         CredentialCommands::ListCredentialsByDID(args) => {
             let method = build_rpc_method(Method::Domain(MethodDomain::ListCredentialsByDID));
             let agent_addr = get_agent_address(ctx)?;
@@ -92,7 +94,7 @@ pub async fn handle_commands(
             let pagination_params = PaginationParams {
                 page: args.page.unwrap_or(0),
                 limit: args.limit.unwrap_or(10),
-                skip: 0
+                skip: 0,
             };
 
             let resp = client
@@ -118,7 +120,6 @@ pub async fn handle_commands(
                     let mut did_vc = credential.get_did_vc();
                     did_vc.truncate(did_vc.len() / 2);
                     did_vc.push_str("...");
-                    
 
                     CredentialWrapper {
                         id: credential.get_id(),
@@ -131,7 +132,7 @@ pub async fn handle_commands(
 
             let _ = print_stdout(credential_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
-        },
+        }
         CredentialCommands::ListCredentialsIds(args) => {
             let method = build_rpc_method(Method::Domain(MethodDomain::ListCredentialsByIDs));
             let agent_addr = get_agent_address(ctx)?;
@@ -152,14 +153,13 @@ pub async fn handle_commands(
             let rpc_resp = resp
                 .result
                 .ok_or(CliError::RpcError(String::from("missing result")))?;
- 
+
             let credential_list: Vec<CredentialWrapper> = rpc_resp
                 .iter()
                 .map(|credential| {
                     let mut did_vc = credential.get_did_vc();
                     did_vc.truncate(did_vc.len() / 2);
                     did_vc.push_str("...");
-                    
 
                     CredentialWrapper {
                         id: credential.get_id(),
@@ -172,7 +172,7 @@ pub async fn handle_commands(
 
             let _ = print_stdout(credential_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
-        },
+        }
         CredentialCommands::Send(args) => {
             let method = build_rpc_method(Method::Domain(MethodDomain::SendCredential));
             let agent_addr = get_agent_address(ctx)?;
@@ -180,7 +180,7 @@ pub async fn handle_commands(
 
             let addr = http_to_multiaddr(args.address)?;
             debug!("Multiaddr format: {}", addr.to_string());
-            
+
             let mut query_params = QueryParams::default();
             query_params.address = Some(addr.to_string());
 
@@ -200,7 +200,7 @@ pub async fn handle_commands(
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
             info!("Credential sent successfully");
-        },
+        }
         CredentialCommands::ListHoldersByDID(args) => {
             let method = build_rpc_method(Method::Domain(MethodDomain::ListHoldersByDID));
             let agent_addr = get_agent_address(ctx)?;
@@ -208,7 +208,7 @@ pub async fn handle_commands(
             let pagination_params = PaginationParams {
                 page: args.page.unwrap_or(0),
                 limit: args.limit.unwrap_or(10),
-                skip: 0
+                skip: 0,
             };
 
             let resp = client
@@ -235,10 +235,9 @@ pub async fn handle_commands(
                     did_vc.truncate(did_vc.len() / 5);
                     did_vc.push_str("...");
 
-                    let mut did_holder = holder.get_did_holder(); 
+                    let mut did_holder = holder.get_did_holder();
                     did_holder.truncate(did_holder.len() / 3);
                     did_holder.push_str("...");
-                    
 
                     HolderWrapper {
                         id: holder.get_id(),
@@ -252,7 +251,7 @@ pub async fn handle_commands(
 
             let _ = print_stdout(holder_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
-        },
+        }
         CredentialCommands::ListHoldersIds(args) => {
             let method = build_rpc_method(Method::Domain(MethodDomain::ListHoldersByIDs));
             let agent_addr = get_agent_address(ctx)?;
@@ -273,7 +272,7 @@ pub async fn handle_commands(
             let rpc_resp = resp
                 .result
                 .ok_or(CliError::RpcError(String::from("missing result")))?;
- 
+
             let holder_list: Vec<HolderWrapper> = rpc_resp
                 .iter()
                 .map(|holder| {
@@ -281,10 +280,9 @@ pub async fn handle_commands(
                     did_vc.truncate(did_vc.len() / 5);
                     did_vc.push_str("...");
 
-                    let mut did_holder = holder.get_did_holder(); 
+                    let mut did_holder = holder.get_did_holder();
                     did_holder.truncate(did_holder.len() / 3);
                     did_holder.push_str("...");
-                    
 
                     HolderWrapper {
                         id: holder.get_id(),
@@ -298,7 +296,7 @@ pub async fn handle_commands(
 
             let _ = print_stdout(holder_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
-        },
+        }
     }
     Ok(())
 }

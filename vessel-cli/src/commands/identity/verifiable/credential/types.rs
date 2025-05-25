@@ -9,10 +9,10 @@ use rst_common::standard::serde::{self, Deserialize, Serialize};
 pub(crate) struct CredentialWrapper {
     #[table(title = "id")]
     pub(crate) id: String,
-     
+
     #[table(title = "DID VC")]
     pub(crate) did_vc: String,
-    
+
     #[table(title = "Created At")]
     #[serde(with = "ts_seconds")]
     #[serde(rename = "createdAt")]

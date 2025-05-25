@@ -1,3 +1,5 @@
+use formatjson::format_json;
+
 use rst_common::standard::serde_json;
 use rst_common::with_logging::log::{debug, info};
 
@@ -159,7 +161,10 @@ pub async fn handle_commands(
             let out = serde_json::to_string_pretty(&rpc_resp)
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
-            info!("Doc: \n{}", out)
+            let formatted_json = format_json(&out)
+                .map_err(|err| CliError::JSONError(err.to_string()))?;
+
+            info!("Doc: \n{}", formatted_json)
         }
 
         AccountCommands::ResolveDIDDoc { did } => {
@@ -191,7 +196,10 @@ pub async fn handle_commands(
             let out = serde_json::to_string_pretty(&rpc_resp)
                 .map_err(|err| CliError::RpcError(err.to_string()))?;
 
-            info!("Doc: \n{}", out)
+            let formatted_json = format_json(&out)
+                .map_err(|err| CliError::JSONError(err.to_string()))?;
+
+            info!("Doc: \n{}", formatted_json);
         }
 
         AccountCommands::RemoveDID { did } => {
@@ -245,7 +253,10 @@ pub async fn handle_commands(
             let jsonstr = serde_json::to_string_pretty(&rpc_resp)
                 .map_err(|err| CliError::JSONError(err.to_string()))?;
 
-            info!("Account JSON: \n{}", jsonstr)
+            let formatted_json = format_json(&jsonstr)
+                .map_err(|err| CliError::JSONError(err.to_string()))?;
+
+            info!("Account JSON: \n{}", formatted_json)
         }
     }
 

@@ -15,24 +15,32 @@ pub enum PresentationCommands {
     #[command(name = "generate")]
     Generate(GenerateArgs),
 
-    /// Send presentation to the verifier 
+    /// Send presentation to the verifier
     #[command(name = "send")]
     Send(SendArgs),
 
-    /// Send presentation to the verifier 
+    /// Send presentation to the verifier
     #[command(name = "verify")]
     Verify(VerifyArgs),
-    
+
     /// Get list of credentials by issuer DID
     #[command(name = "list-verifiers-by-did")]
     ListVerifiersByDID(ListVerifiersByDIDArgs),
+
+    /// Get list of credentials by issuer DID
+    #[command(name = "get-by-id")]
+    GetPresentationByID {
+        /// id is the id of the presentation
+        #[arg(long, required = true)]
+        id: String,
+    },
 }
 
 #[derive(Args, Debug, Clone)]
 pub struct VerifyArgs {
-    /// id is a verifier id 
+    /// id is a verifier id
     #[arg(long, required = true)]
-    pub id: String
+    pub id: String,
 }
 
 #[derive(Args, Debug, Clone)]
@@ -45,7 +53,7 @@ pub struct GenerateArgs {
     #[arg(long, short, required = true)]
     pub from_did: String,
 
-    /// credentials is a list of credential's ids to generate 
+    /// credentials is a list of credential's ids to generate
     #[arg(long, value_delimiter = ',', num_args = 1..)]
     pub holders: Vec<String>,
 }
@@ -63,7 +71,7 @@ pub struct SendArgs {
     /// presentation_id is the id of the credential to send
     #[arg(long, required = true)]
     pub presentation_id: String,
-    
+
     /// address format: https://<host>:<port>/<params> or
     /// https://<domain>/<params>
     #[arg(long, short, required = true)]

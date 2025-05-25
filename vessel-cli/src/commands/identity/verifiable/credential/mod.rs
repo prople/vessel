@@ -22,16 +22,16 @@ pub enum CredentialCommands {
     /// Get list of credentials by issuer DID
     #[command(name = "list-credentials-by-did")]
     ListCredentialsByDID(ListCredentialByDIDArgs),
-    
-    /// Get list of credentials by list of credential ids 
+
+    /// Get list of credentials by list of credential ids
     #[command(name = "list-credentials-by-ids")]
     ListCredentialsIds(ListCredentialByIdsArgs),
-    
+
     /// Get list of holders by issuer DID
     #[command(name = "list-holders-by-did")]
     ListHoldersByDID(ListHolderByDIDArgs),
-    
-    /// Get list of holders by list of holder ids 
+
+    /// Get list of holders by list of holder ids
     #[command(name = "list-holders-by-ids")]
     ListHoldersIds(ListHolderByIdsArgs),
 }
@@ -49,7 +49,7 @@ pub struct SendArgs {
     /// credential_id is the id of the credential to send
     #[arg(long, short, required = true)]
     pub credential_id: String,
-    
+
     /// address format: https://<host>:<port>/<params> or
     /// https://<domain>/<params>
     #[arg(long, short, required = true)]
@@ -77,7 +77,7 @@ pub struct ListCredentialByDIDArgs {
     #[arg(long, short, required = true)]
     pub did: String,
 
-    /// page is the page number to load 
+    /// page is the page number to load
     #[arg(long, short)]
     pub page: Option<usize>,
 
@@ -88,7 +88,7 @@ pub struct ListCredentialByDIDArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct ListCredentialByIdsArgs {
-    /// ids is the list of credential ids 
+    /// ids is the list of credential ids
     #[arg(long, short, value_delimiter = ',', num_args = 1..)]
     pub ids: Vec<String>,
 }
@@ -99,7 +99,7 @@ pub struct ListHolderByDIDArgs {
     #[arg(long, short, required = true)]
     pub did: String,
 
-    /// page is the page number to load 
+    /// page is the page number to load
     #[arg(long, short)]
     pub page: Option<usize>,
 
@@ -110,7 +110,7 @@ pub struct ListHolderByDIDArgs {
 
 #[derive(Args, Debug, Clone)]
 pub struct ListHolderByIdsArgs {
-    /// ids is the list of holder ids 
+    /// ids is the list of holder ids
     #[arg(long, short, value_delimiter = ',', num_args = 1..)]
     pub ids: Vec<String>,
 }

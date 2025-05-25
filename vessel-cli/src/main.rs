@@ -16,7 +16,9 @@ use prople_vessel_cli::commands::ping::ping_handler;
 use prople_vessel_cli::commands::ping::PingArgs;
 
 use prople_vessel_cli::commands::identity::VerifiableCommands;
-use prople_vessel_cli::commands::identity::{account_handler, credential_handler, presentation_handler};
+use prople_vessel_cli::commands::identity::{
+    account_handler, credential_handler, presentation_handler,
+};
 use prople_vessel_cli::commands::identity::{IdentityArgs, IdentityCommands};
 
 use prople_vessel_cli::types::{CliError, VESSEL_CF_NAME, VESSEL_DATA_DIR, VESSEL_DEFAULT_DIR};

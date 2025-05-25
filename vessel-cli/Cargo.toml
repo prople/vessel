@@ -1,6 +1,6 @@
 [package]
 name = "prople-vessel-cli"
-version = "0.3.2"
+version = "0.3.3"
 description = "A Vessel CLI client to communicate with the prople/vessel RPC server"
 readme = "README.md"
 keywords = ["prople", "vessel", "cli"]
@@ -27,6 +27,7 @@ prople-did-core.workspace = true
 
 # rst-common & #rstdev-* specific libraries
 rst-common.workspace = true
+rstdev-domain.workspace = true
 rstdev-config.workspace = true
 rstdev-storage.workspace = true
 
@@ -37,3 +38,4 @@ toml.workspace = true
 cli-table.workspace = true
 multiaddr.workspace = true
 http.workspace = true
+formatjson.workspace = true
