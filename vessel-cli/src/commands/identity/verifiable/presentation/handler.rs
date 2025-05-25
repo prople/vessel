@@ -53,7 +53,7 @@ pub async fn handle_commands(
                     Some(Param::Domain(ParamDomain::Generate {
                         password: args.password,
                         did_issuer: args.from_did,
-                        credentials: args.credentials,
+                        holders: args.holders,
                     })),
                     method.to_string(),
                     None,
@@ -106,7 +106,7 @@ pub async fn handle_commands(
                         id: args.presentation_id,
                         did_uri: args.to_did,
                         password: args.password,
-                        params: None,
+                        params: Some(query_params),
                     })),
                     method.to_string(),
                     None,
@@ -160,7 +160,31 @@ pub async fn handle_commands(
 
             let _ = print_stdout(verifier_list.with_title())
                 .map_err(|err| CliError::AgentError(err.to_string()))?;
-        }
+        },
+        PresentationCommands::Verify(args) => {
+            debug!(
+                "[presentation:verify] agent from context: {}",
+                ctx.agent().unwrap_or(String::from("empty agent"))
+            );
+
+            let method = build_rpc_method(Method::Domain(MethodDomain::VerifyPresentation));
+            let agent_addr = get_agent_address(ctx)?;
+            let client = build_client::<()>();
+
+            let _ = client
+                .call(
+                    agent_addr,
+                    Some(Param::Domain(ParamDomain::VerifyPresentation {
+                        id: args.id,
+                    })),
+                    method.to_string(),
+                    None,
+                )
+                .await
+                .map_err(|err| CliError::RpcError(err.to_string()))?;
+
+            info!("Presentation verified successfully");
+        },
     }
     Ok(())
 }

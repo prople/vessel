@@ -18,10 +18,21 @@ pub enum PresentationCommands {
     /// Send presentation to the verifier 
     #[command(name = "send")]
     Send(SendArgs),
+
+    /// Send presentation to the verifier 
+    #[command(name = "verify")]
+    Verify(VerifyArgs),
     
     /// Get list of credentials by issuer DID
     #[command(name = "list-verifiers-by-did")]
     ListVerifiersByDID(ListVerifiersByDIDArgs),
+}
+
+#[derive(Args, Debug, Clone)]
+pub struct VerifyArgs {
+    /// id is a verifier id 
+    #[arg(long, required = true)]
+    pub id: String
 }
 
 #[derive(Args, Debug, Clone)]
@@ -35,8 +46,8 @@ pub struct GenerateArgs {
     pub from_did: String,
 
     /// credentials is a list of credential's ids to generate 
-    #[arg(long, short, value_delimiter = ',', num_args = 1..)]
-    pub credentials: Vec<String>,
+    #[arg(long, value_delimiter = ',', num_args = 1..)]
+    pub holders: Vec<String>,
 }
 
 #[derive(Args, Debug, Clone)]
