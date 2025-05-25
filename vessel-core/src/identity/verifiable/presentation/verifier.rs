@@ -11,6 +11,8 @@ use prople_did_core::doc::types::PublicKeyDecoded;
 use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::AccountAPI;
+use crate::identity::account::URI;
+use crate::identity::verifiable::types::VerifiableError;
 use crate::identity::verifiable::proof::verifier::Verifier as ProofVerifier;
 
 use super::types::{PresentationError, VerifierEntityAccessor};
@@ -59,16 +61,25 @@ impl Verifier {
 
     pub async fn verify_vp(&self, account: impl AccountAPI) -> Result<Self, PresentationError> {
         // get VP from verifier
-        let vp = self.vp.clone();
+        let mut vp = self.vp.clone();
 
         // get the holder from VP
         let holder = vp.clone().holder.ok_or(PresentationError::HolderNotFound)?;
 
         // resolve the holder DID doc
         let did_doc = account
-            .resolve_did_uri(holder)
+            .resolve_did_uri(holder.clone())
             .await
             .map_err(|err| PresentationError::VerifyError(err.to_string()))?;
+
+        let (_, _, uri_did) = URI::parse(holder).map_err(|err| {
+            PresentationError::CommonError(VerifiableError::ParseMultiAddrError(err.to_string()))
+        })?;
+
+        // need to change the holder back to its original value which is an DID Account
+        // this step is important because the generated proof is based on the DID Account not the DID URI
+        // if this step ignored, the proof will not be verified
+        vp.set_holder(uri_did);
 
         // start iterate over doc assertions
         // for each iteration, it will contain a `Primary` object
@@ -85,7 +96,6 @@ impl Verifier {
             .filter(|val| match val {
                 Some(PublicKeyDecoded::EdDSA(pubkey)) => {
                     let verified = ProofVerifier::verify_proof(vp.clone(), pubkey.clone());
-
                     match verified {
                         Ok(_) => true,
                         Err(_) => false,
@@ -186,9 +196,10 @@ mod tests {
     use crate::identity::account::types::{AccountAPI, AccountError};
     use crate::identity::account::Account as AccountIdentity;
     use crate::identity::verifiable::credential::types::CredentialEntityAccessor;
+    use crate::identity::verifiable::credential::types::HolderEntityAccessor;
     use crate::identity::verifiable::proof::types::ProofError;
     use crate::identity::verifiable::proof::verifier::Verifier as ProofVerifier;
-    use crate::identity::verifiable::{Credential, Presentation};
+    use crate::identity::verifiable::{Credential, Presentation, Holder};
 
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
@@ -214,16 +225,26 @@ mod tests {
         vec![cred]
     }
 
+    async fn generate_holders(did_holder: String, creds: Vec<impl CredentialEntityAccessor>) -> Vec<impl HolderEntityAccessor> {
+        let holders: Vec<Holder> = creds
+            .into_iter()
+            .map(|cred| {
+                Holder::new(did_holder.clone(), cred.get_vc())
+            }).collect();
+
+        holders
+    }
+
     fn generate_presentation(
         did_issuer: DID,
         account: impl AccountEntityAccessor,
-        creds: Vec<impl CredentialEntityAccessor>,
+        holders: Vec<impl HolderEntityAccessor>,
     ) -> Presentation {
         let presentation = Presentation::generate(
             "password".to_string(),
             did_issuer.identity().unwrap().value(),
             account,
-            creds,
+            holders,
         );
 
         presentation.unwrap()
@@ -301,8 +322,9 @@ mod tests {
             let credential = serde_json::to_value(claims).unwrap();
             let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
             let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let holders = generate_holders(issuer_account.get_did(), creds).await;
             let presentation =
-                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), holders);
 
             let keypair = generate_keypair(issuer_doc_private_keys).unwrap();
             let pubkey = keypair.pub_key();
@@ -341,8 +363,9 @@ mod tests {
             let credential = serde_json::to_value(claims).unwrap();
             let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
             let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let holders = generate_holders(issuer_account.get_did(), creds).await;
             let presentation =
-                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), holders);
 
             let verifier = Verifier::new(issuer_account.get_did(), presentation.vp);
             let verified = verifier.verify_vp(mocked_account.clone()).await;
@@ -385,8 +408,9 @@ mod tests {
             let credential = serde_json::to_value(claims).unwrap();
             let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
             let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let holders = generate_holders(issuer_account.get_did(), creds).await;
             let presentation =
-                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), holders);
 
             // create a verifier with the vp
             let verifier = Verifier::new(issuer_account.get_did(), presentation.vp);
@@ -429,8 +453,9 @@ mod tests {
             let credential = serde_json::to_value(claims).unwrap();
             let vc_account = AccountIdentity::generate("password".to_string()).unwrap();
             let creds = generate_creds(issuer_did.clone(), credential, vc_account.clone()).await;
+            let holders = generate_holders(issuer_account.get_did(), creds).await;
             let presentation =
-                generate_presentation(issuer_did.clone(), issuer_account.clone(), creds.clone());
+                generate_presentation(issuer_did.clone(), issuer_account.clone(), holders);
 
             let verifier = Verifier::new(issuer_account.get_did(), presentation.vp);
             let verified = verifier.verify_vp(mock_account.clone()).await;

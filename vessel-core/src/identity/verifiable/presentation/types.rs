@@ -93,7 +93,7 @@ pub trait PresentationAPI: Clone {
         &self,
         password: String,
         did_issuer: String,
-        credentials: Vec<String>,
+        holders: Vec<String>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError>;
 
     /// `send_presentation` is method used to send the `Presentation` object

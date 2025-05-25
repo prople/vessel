@@ -1,4 +1,3 @@
-use prople_did_core::verifiable::proof::types::Proofable;
 use rst_common::standard::chrono::serde::ts_seconds;
 use rst_common::standard::chrono::{DateTime, Utc};
 use rst_common::standard::uuid::Uuid;
@@ -9,12 +8,13 @@ use rst_common::standard::serde_json;
 use rstdev_domain::entity::ToJSON;
 use rstdev_domain::BaseError;
 
+use prople_did_core::verifiable::proof::types::Proofable;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::CONTEXT_VC_V2;
 use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::AccountEntityAccessor;
-use crate::identity::verifiable::credential::types::CredentialEntityAccessor;
+use crate::identity::verifiable::credential::types::HolderEntityAccessor;
 use crate::identity::verifiable::proof::builder::Builder as ProofBuilder;
 use crate::identity::verifiable::types::VerifiableError;
 
@@ -102,7 +102,7 @@ impl Presentation {
         password: String,
         did_issuer: String,
         account: impl AccountEntityAccessor,
-        credentials: Vec<impl CredentialEntityAccessor>,
+        holders: Vec<impl HolderEntityAccessor>,
     ) -> Result<Presentation, PresentationError> {
         if password.is_empty() {
             return Err(PresentationError::CommonError(
@@ -110,14 +110,18 @@ impl Presentation {
             ));
         }
 
-        let mut vp = VP::new();
-        vp.add_context(CONTEXT_VC_V2.to_string())
-            .add_type(String::from(VP_TYPE.to_string()))
-            .set_holder(did_issuer.clone());
+        let mut vp = {
+            let mut presentation = VP::new();
+            presentation.add_context(CONTEXT_VC_V2.to_string())
+                .add_type(String::from(VP_TYPE.to_string()))
+                .set_holder(did_issuer.clone());
 
-        for credential in credentials.iter() {
-            vp.add_credential(credential.get_vc());
-        }
+            for holder in holders.iter() {
+                presentation.add_credential(holder.get_vc());
+            }
+
+            presentation
+        };
 
         let account_doc_private_key_pairs = account.get_doc_private_keys();
         let secured =
@@ -125,7 +129,8 @@ impl Presentation {
                 .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
         vp.setup_proof(secured.unwrap());
-        let presentation = Presentation::new(vp, account_doc_private_key_pairs);
+
+        let presentation = Presentation::new(vp.clone(), account_doc_private_key_pairs);
         Ok(presentation)
     }
 }
@@ -148,7 +153,8 @@ mod tests {
 
     use crate::identity::account::types::{AccountAPI, AccountError};
     use crate::identity::account::Account as AccountIdentity;
-    use crate::identity::verifiable::Credential;
+    use crate::identity::verifiable::credential::types::CredentialEntityAccessor;
+    use crate::identity::verifiable::{Credential, Holder};
 
     mock!(
         FakeAccountUsecase{}
@@ -272,16 +278,20 @@ mod tests {
         .await;
         assert!(!credential_builder.is_err());
 
+        let holder = Holder::new(
+            did_issuer_value.clone(),
+            credential_builder.unwrap().get_vc(),
+        ); 
+
         let account_builder = AccountIdentity::generate("password".to_string());
         assert!(!account_builder.is_err());
 
         let account = account_builder.unwrap();
-        let credential = credential_builder.unwrap();
         let presentation_builder = Presentation::generate(
             "password".to_string(),
             did_issuer_value,
             account,
-            vec![credential],
+            vec![holder],
         );
         assert!(!presentation_builder.is_err());
     }

@@ -9,7 +9,7 @@ use crate::identity::account::URI;
 
 use crate::identity::verifiable::credential::types::CredentialAPI;
 use crate::identity::verifiable::types::VerifiableError;
-use crate::identity::verifiable::Credential;
+use crate::identity::verifiable::{Credential, Holder};
 
 use super::types::{PresentationAPI, PresentationError, RepoBuilder, RpcBuilder, UsecaseBuilder};
 use super::{Presentation, Verifier};
@@ -60,7 +60,7 @@ where
     TRepo:
         RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
-    TCredentialAPI: CredentialAPI<EntityAccessor = Credential> + Sync + Send,
+    TCredentialAPI: CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync + Send,
 {
     type AccountAPIImplementer = TAccountAPI;
     type CredentialAPIImplementer = TCredentialAPI;
@@ -92,7 +92,7 @@ where
     TRepo:
         RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
-    TCredentialAPI: CredentialAPI<EntityAccessor = Credential> + Sync + Send,
+    TCredentialAPI: CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync + Send,
 {
     type PresentationEntityAccessor = Presentation;
     type VerifierEntityAccessor = Verifier;
@@ -140,7 +140,7 @@ where
                     let mut presentation_rebuild = presentation_repo.clone();
                     let holder_did_uri = self
                         .account()
-                        .build_did_uri(holder, password, params)
+                        .build_did_uri(holder.clone(), password.clone(), params)
                         .await
                         .map_err(|err| PresentationError::SendError(err.to_string()))?;
 
@@ -162,7 +162,7 @@ where
         &self,
         password: String,
         did_issuer: String,
-        credentials: Vec<String>,
+        holder_ids: Vec<String>,
     ) -> Result<Self::PresentationEntityAccessor, PresentationError> {
         if password.is_empty() {
             return Err(PresentationError::CommonError(
@@ -176,9 +176,9 @@ where
             ));
         }
 
-        let vcs = self
+        let holders = self
             .credential()
-            .list_credentials_by_ids(credentials)
+            .list_holders_by_ids(holder_ids)
             .await
             .map_err(|err| PresentationError::GenerateError(err.to_string()))?;
 
@@ -190,7 +190,7 @@ where
                 PresentationError::CommonError(VerifiableError::DIDError(err.to_string()))
             })?;
 
-        let presentation = Presentation::generate(password, did_issuer, account, vcs)?;
+        let presentation = Presentation::generate(password, did_issuer, account, holders)?;
 
         let _ = self.repo().save(&presentation.clone()).await?;
         Ok(presentation)
@@ -241,7 +241,7 @@ where
             })
             .map_err(|err| PresentationError::VerifyError(err.to_string()))??;
 
-        let verifier_verified = verifier.clone().verify_vp(self.account()).await?;
+        let verifier_verified = verifier.verify_vp(self.account()).await?;
         let _ = repo
             .set_presentation_verifier_verified(&verifier_verified)
             .await?;
@@ -494,6 +494,23 @@ mod tests {
         creds
     }
 
+    fn generate_holders(credentials: Vec<Credential>) -> Vec<Holder> {
+        let mut holders = Vec::<Holder>::new();
+
+        for credential in credentials.iter() {
+            let did_issuer = generate_did(); 
+
+            let holder = Holder::new(
+                did_issuer.identity().unwrap().value(),
+                credential.vc.to_owned(),
+            );
+            
+            holders.push(holder);
+        }
+
+        holders
+    }
+
     fn generate_presentation() -> Presentation {
         let did = generate_did();
 
@@ -560,7 +577,7 @@ mod tests {
         vp.add_context(CONTEXT_VC.to_string())
             .add_context(CONTEXT_VC_V2.to_string())
             .add_type("VerifiableCredential".to_string())
-            .set_holder(did_uri.clone());
+            .set_holder(did_value.clone());
 
         for credential in vcs.iter() {
             vp.add_credential(credential.vc.to_owned());
@@ -570,6 +587,8 @@ mod tests {
             ProofBuilder::build_proof(vp.clone(), password, did_privkeys.clone()).unwrap();
 
         vp.setup_proof(secured.unwrap());
+        vp.set_holder(did_uri);
+
         let verifier = Verifier::new(did_value, vp);
 
         (verifier, did_doc)
@@ -597,6 +616,7 @@ mod tests {
         let did_issuer_mock = did_issuer.clone();
 
         let creds = generate_credentials();
+        let holders = generate_holders(creds.clone());
 
         let mut repo = MockFakeRepo::new();
         repo.expect_clone().times(1).return_once(move || {
@@ -608,11 +628,10 @@ mod tests {
 
         let mut credential = MockFakeCredentialUsecase::new();
         credential.expect_clone().times(1).return_once(move || {
-            let creds = creds.clone();
             let mut expected = MockFakeCredentialUsecase::new();
             expected
-                .expect_list_credentials_by_ids()
-                .returning(move |_| Ok(creds.clone()));
+                .expect_list_holders_by_ids()
+                .returning(move |_| Ok(holders.clone()));
 
             expected
         });
