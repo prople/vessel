@@ -21,7 +21,7 @@ pub enum Domain {
     Generate {
         password: String,
         did_issuer: String,
-        credentials: Vec<String>,
+        holders: Vec<String>,
     },
     SendPresentation {
         id: String,

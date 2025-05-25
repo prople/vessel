@@ -1,6 +1,6 @@
 [package]
 name = "prople-vessel-rpc"
-version = "0.4.5"
+version = "0.4.6"
 description = "Prople Vessel RPC provides core RPC processor"
 readme = "README.md"
 keywords = ["prople", "vessel", "did", "decentralized", "identity"]

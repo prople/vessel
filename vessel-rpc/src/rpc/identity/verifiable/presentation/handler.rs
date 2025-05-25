@@ -37,11 +37,11 @@ where
                 Domain::Generate {
                     password,
                     did_issuer,
-                    credentials,
+                    holders,
                 } => {
                     let result = self
                         .presentation_api
-                        .generate(password, did_issuer, credentials)
+                        .generate(password, did_issuer, holders)
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
@@ -86,7 +86,7 @@ where
                         .await
                         .map_err(|err| RpcError::HandlerError(err.to_string()))?;
 
-                    Ok(None)
+                    Ok(Some(Box::new(())))
                 }
                 _ => Err(RpcError::InvalidParams),
             },
@@ -175,7 +175,7 @@ where
                     self.list_vps_by_did_verifier(rpc_param).await
                 }
                 DomainMethod::SendPresentation => self.send_to_verifier(rpc_param).await,
-                DomainMethod::VerifyPersentation => {
+                DomainMethod::VerifyPresentation => {
                     self.verify_presentation_by_verifier(rpc_param).await
                 }
             },

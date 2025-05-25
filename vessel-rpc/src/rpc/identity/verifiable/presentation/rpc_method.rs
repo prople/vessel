@@ -29,7 +29,7 @@ pub enum Domain {
     Generate,
     SendPresentation,
     GetByID,
-    VerifyPersentation,
+    VerifyPresentation,
     ListVerifiersByDID,
 }
 
@@ -39,7 +39,7 @@ impl RpcMethodBuilder for Domain {
             Domain::Generate => METHOD_DOMAIN_GENERATE,
             Domain::SendPresentation => METHOD_DOMAIN_SEND_PRESENTATION,
             Domain::GetByID => METHOD_DOMAIN_GET_BY_ID,
-            Domain::VerifyPersentation => METHOD_DOMAIN_VERIFY_PRESENTATION,
+            Domain::VerifyPresentation => METHOD_DOMAIN_VERIFY_PRESENTATION,
             Domain::ListVerifiersByDID => METHOD_DOMAIN_LIST_VERIFIERS_BY_DID,
         }
     }
@@ -85,7 +85,7 @@ impl TryFrom<RpcMethod> for Method {
                 Ok(Self::Domain(Domain::SendPresentation))
             }
             _ if given.as_str().contains(METHOD_DOMAIN_VERIFY_PRESENTATION) => {
-                Ok(Self::Domain(Domain::VerifyPersentation))
+                Ok(Self::Domain(Domain::VerifyPresentation))
             }
             _ => Err(CommonError::MethodError(format!(
                 "unknown method: {}",
