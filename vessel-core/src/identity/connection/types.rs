@@ -155,3 +155,16 @@ pub trait RpcBuilder: Clone {
         answer: String,
     ) -> Result<(), ConnectionError>;
 }
+
+/// `UsecaseBuilder` is a trait behavior that provides
+/// base application logic's handlers 
+pub trait UsecaseBuilder<TEntityAccessor>: ConnectionAPI<EntityAccessor = TEntityAccessor>
+where
+    TEntityAccessor: ConnectionEntityAccessor,
+{
+    type RepoImplementer: RepoBuilder<EntityAccessor = TEntityAccessor>;
+    type RPCImplementer: RpcBuilder;
+    
+    fn repo(&self) -> Self::RepoImplementer;
+    fn rpc(&self) -> Self::RPCImplementer;
+}
