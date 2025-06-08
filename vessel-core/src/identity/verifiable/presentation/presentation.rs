@@ -8,10 +8,10 @@ use rst_common::standard::serde_json;
 use rstdev_domain::entity::ToJSON;
 use rstdev_domain::BaseError;
 
-use prople_did_core::verifiable::proof::types::Proofable;
 use prople_did_core::keys::IdentityPrivateKeyPairs;
 use prople_did_core::types::CONTEXT_VC_V2;
 use prople_did_core::verifiable::objects::VP;
+use prople_did_core::verifiable::proof::types::Proofable;
 
 use crate::identity::account::types::AccountEntityAccessor;
 use crate::identity::verifiable::credential::types::HolderEntityAccessor;
@@ -112,7 +112,8 @@ impl Presentation {
 
         let mut vp = {
             let mut presentation = VP::new();
-            presentation.add_context(CONTEXT_VC_V2.to_string())
+            presentation
+                .add_context(CONTEXT_VC_V2.to_string())
                 .add_type(String::from(VP_TYPE.to_string()))
                 .set_holder(did_issuer.clone());
 
@@ -281,7 +282,7 @@ mod tests {
         let holder = Holder::new(
             did_issuer_value.clone(),
             credential_builder.unwrap().get_vc(),
-        ); 
+        );
 
         let account_builder = AccountIdentity::generate("password".to_string());
         assert!(!account_builder.is_err());

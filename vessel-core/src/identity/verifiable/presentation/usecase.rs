@@ -60,7 +60,8 @@ where
     TRepo:
         RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
-    TCredentialAPI: CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync + Send,
+    TCredentialAPI:
+        CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync + Send,
 {
     type AccountAPIImplementer = TAccountAPI;
     type CredentialAPIImplementer = TCredentialAPI;
@@ -92,7 +93,8 @@ where
     TRepo:
         RepoBuilder<PresentationEntityAccessor = Presentation, VerifierEntityAccessor = Verifier>,
     TAccountAPI: AccountAPI<EntityAccessor = Account> + Clone + Sync + Send,
-    TCredentialAPI: CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync + Send,
+    TCredentialAPI:
+        CredentialAPI<EntityAccessor = Credential, HolderEntityAccessor = Holder> + Sync + Send,
 {
     type PresentationEntityAccessor = Presentation;
     type VerifierEntityAccessor = Verifier;
@@ -270,15 +272,14 @@ mod tests {
     use mockall::predicate::{eq, function};
 
     use multiaddr::{multiaddr, Multiaddr};
-    
-    use rst_common::standard::serde_json::value::Value;
+
     use rst_common::standard::serde::{self, Deserialize, Serialize};
+    use rst_common::standard::serde_json::value::Value;
     use rst_common::with_tokio::tokio;
 
     use prople_crypto::eddsa::keypair::KeyPair;
     use prople_crypto::keysecure::types::{Password, ToKeySecure};
 
-    use prople_did_core::verifiable::proof::types::Proofable;
     use prople_did_core::did::query::Params as QueryParams;
     use prople_did_core::did::{query::Params, DID};
     use prople_did_core::doc::types::{Doc, ToDoc};
@@ -286,6 +287,7 @@ mod tests {
     use prople_did_core::keys::{IdentityPrivateKeyPairs, IdentityPrivateKeyPairsBuilder};
     use prople_did_core::types::{CONTEXT_VC, CONTEXT_VC_V2};
     use prople_did_core::verifiable::objects::{VC, VP};
+    use prople_did_core::verifiable::proof::types::Proofable;
 
     use crate::identity::account::types::{AccountEntityAccessor, AccountError};
     use crate::identity::account::Account as AccountIdentity;
@@ -415,13 +417,13 @@ mod tests {
                 &self,
                 ids: Vec<String>,
             ) -> Result<Vec<Credential>, CredentialError>;
-    
+
             async fn list_holders_by_did(
                 &self,
                 did: String,
                 pagination: Option<PaginationParams>,
             ) -> Result<Vec<Holder>, CredentialError>;
-    
+
             async fn list_holders_by_ids(
                 &self,
                 ids: Vec<String>,
@@ -498,13 +500,13 @@ mod tests {
         let mut holders = Vec::<Holder>::new();
 
         for credential in credentials.iter() {
-            let did_issuer = generate_did(); 
+            let did_issuer = generate_did();
 
             let holder = Holder::new(
                 did_issuer.identity().unwrap().value(),
                 credential.vc.to_owned(),
             );
-            
+
             holders.push(holder);
         }
 

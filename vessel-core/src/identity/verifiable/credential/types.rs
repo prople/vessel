@@ -140,7 +140,7 @@ pub trait CredentialAPI: Clone {
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::EntityAccessor>, CredentialError>;
 
-    /// `list_credentials_by_ids` used to load a list of saved `VC` based on list of credetial `id` 
+    /// `list_credentials_by_ids` used to load a list of saved `VC` based on list of credetial `id`
     ///
     /// This method doesn't contain any logic, actually this method is just a simple proxy
     /// to the repository method, [`VerifiableRepoBuilder::list_by_ids`]
@@ -149,14 +149,14 @@ pub trait CredentialAPI: Clone {
         ids: Vec<String>,
     ) -> Result<Vec<Self::EntityAccessor>, CredentialError>;
 
-    /// `list_holders_by_did` used to load a list of saved `Holder` based on `DID` issuer 
+    /// `list_holders_by_did` used to load a list of saved `Holder` based on `DID` issuer
     async fn list_holders_by_did(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError>;
 
-    /// `list_holders_by_ids` used to load a list of saved `Holder` based on list of holder `id` 
+    /// `list_holders_by_ids` used to load a list of saved `Holder` based on list of holder `id`
     async fn list_holders_by_ids(
         &self,
         ids: Vec<String>,
@@ -205,13 +205,13 @@ pub trait RepoBuilder: Clone + Sync + Send {
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::CredentialEntityAccessor>, CredentialError>;
-    
+
     async fn list_holders_by_did(
         &self,
         did: String,
         pagination: Option<PaginationParams>,
     ) -> Result<Vec<Self::HolderEntityAccessor>, CredentialError>;
-    
+
     async fn list_holders_by_ids(
         &self,
         ids: Vec<String>,

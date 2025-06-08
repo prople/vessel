@@ -12,8 +12,8 @@ use prople_did_core::verifiable::objects::VP;
 
 use crate::identity::account::types::AccountAPI;
 use crate::identity::account::URI;
-use crate::identity::verifiable::types::VerifiableError;
 use crate::identity::verifiable::proof::verifier::Verifier as ProofVerifier;
+use crate::identity::verifiable::types::VerifiableError;
 
 use super::types::{PresentationError, VerifierEntityAccessor};
 
@@ -199,7 +199,7 @@ mod tests {
     use crate::identity::verifiable::credential::types::HolderEntityAccessor;
     use crate::identity::verifiable::proof::types::ProofError;
     use crate::identity::verifiable::proof::verifier::Verifier as ProofVerifier;
-    use crate::identity::verifiable::{Credential, Presentation, Holder};
+    use crate::identity::verifiable::{Credential, Holder, Presentation};
 
     #[derive(Deserialize, Serialize)]
     #[serde(crate = "self::serde")]
@@ -225,12 +225,14 @@ mod tests {
         vec![cred]
     }
 
-    async fn generate_holders(did_holder: String, creds: Vec<impl CredentialEntityAccessor>) -> Vec<impl HolderEntityAccessor> {
+    async fn generate_holders(
+        did_holder: String,
+        creds: Vec<impl CredentialEntityAccessor>,
+    ) -> Vec<impl HolderEntityAccessor> {
         let holders: Vec<Holder> = creds
             .into_iter()
-            .map(|cred| {
-                Holder::new(did_holder.clone(), cred.get_vc())
-            }).collect();
+            .map(|cred| Holder::new(did_holder.clone(), cred.get_vc()))
+            .collect();
 
         holders
     }

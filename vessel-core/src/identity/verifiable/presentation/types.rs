@@ -18,7 +18,7 @@ use crate::identity::verifiable::types::VerifiableError;
 
 pub const VP_TYPE: &str = "VerifiablePresentation";
 
-/// PresentationError is a base error types for the `Presentation` domain 
+/// PresentationError is a base error types for the `Presentation` domain
 #[derive(Debug, Error, Clone, Serialize, Deserialize)]
 #[serde(crate = "self::serde")]
 pub enum PresentationError {
@@ -88,7 +88,7 @@ pub trait PresentationAPI: Clone {
     type VerifierEntityAccessor: VerifierEntityAccessor;
 
     /// `generate` is method used to generate a new `Presentation` object
-    /// this method will depends on the list of `credentials` that passed 
+    /// this method will depends on the list of `credentials` that passed
     async fn generate(
         &self,
         password: String,
@@ -108,7 +108,7 @@ pub trait PresentationAPI: Clone {
 
     /// `verify_presentation` is method used to verify the `Presentation` object
     /// This method should be used by a `verifier` to verify the `Presentation`
-    /// 
+    ///
     /// The `id` is the verifier id
     async fn verify_presentation(&self, id: String) -> Result<(), PresentationError>;
 
@@ -120,7 +120,7 @@ pub trait PresentationAPI: Clone {
 
     /// `post_presentation` is method used to save incoming `Presentation` object
     /// This method should be used by a `verifier` to save the incoming `Presentation`
-    /// 
+    ///
     /// This method will generate the `Verifier` object and save it to the persistent storage
     async fn post_presentation(
         &self,
@@ -165,7 +165,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         did_verifier: String,
     ) -> Result<Vec<Self::VerifierEntityAccessor>, PresentationError>;
-    
+
     async fn save(&self, data: &Self::PresentationEntityAccessor) -> Result<(), PresentationError>;
 }
 
