@@ -20,6 +20,18 @@ pub enum ConnectionError {
 
     #[error("invalid multiaddr: {0}")]
     InvalidMultiAddr(String),
+
+    #[error("entity error: {0}")]
+    EntityError(String),
+
+    #[error("shared secret error: {0}")]
+    SharedSecretError(String),
+
+    #[error("shared secret error: {0}")]
+    JSONError(String),
+
+    #[error("shared secret error: {0}")]
+    JSONUnserializeError(String),
 }
 
 /// State represent connection's states between two peers
@@ -27,6 +39,8 @@ pub enum ConnectionError {
 /// When the connection request send for the first time, it will always on [`State::Pending`] state
 /// Once the peer able to answer the challenge successfully and correct it will update into [`State::Established`]
 /// which means the connection between both peers already been established successfully
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[serde(crate = "self::serde")]
 pub enum State {
     Pending,
     Established,
@@ -38,7 +52,7 @@ pub enum State {
 /// This entity  will be useful from the outside of this crate
 /// to access those fields because we need to protect the properties from direct
 /// access or manipulation from outside
-/// 
+///
 /// This trait contain `get_own_keysecure` method which will return the `KeySecure` object of the "own key"
 /// Each time a connection request is sent, it will generate a new ECDH key pairs, including the private key
 /// for the self keys, we need to save the private key in a secure storage which is using [`KeySecure`] object
@@ -51,6 +65,7 @@ pub trait ConnectionEntityAccessor:
     fn get_own_did_uri(&self) -> String;
     fn get_own_key(&self) -> String;
     fn get_own_keysecure(&self) -> KeySecure;
+    fn get_own_shared_secret(&self) -> String;
     fn get_state(&self) -> State;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
@@ -62,11 +77,13 @@ pub trait ConnectionEntityAccessor:
 ///
 /// - Connection id
 /// - Connection challenge
+/// - Own public key
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "self::serde")]
 pub struct ConnectionChallenge {
-    id: String,
+    connection_id: String,
     challenge: String,
+    own_public_key: String,
 }
 
 /// ConnectionAPI is main entrypoint to communicate with the `Connection` domain
@@ -76,8 +93,8 @@ pub trait ConnectionAPI: Clone {
 
     /// request_connect is an RPC call method used by peers to receive the connection request
     ///
-    /// The `own_did_uri` parameter is an URI address in DID format belongs to sender
     /// The `peer_did_uri` parameter is an URI address in DID format belongs to peer
+    /// The `peer_public_key` parameter is an *public key* of the peer that send the connection request in hex format
     ///
     /// Each time a peer send a connection request it will generate new ECDH key pairs, and use the public
     /// key as a payload.
@@ -87,8 +104,8 @@ pub trait ConnectionAPI: Clone {
     /// and re-encrypt it later as response challenge
     async fn request_connect(
         &self,
-        own_did_uri: String,
         peer_did_uri: String,
+        peer_public_key: String,
     ) -> Result<ConnectionChallenge, ConnectionError>;
 
     /// response_challenge is an RPC call method used by the sender to send back their public key with a challenge
@@ -107,12 +124,16 @@ pub trait ConnectionAPI: Clone {
 
     /// submit_request used by the sender to submit the connection request from their client app like from CLI or others
     ///
+    /// This method is used by the client application to submit a connection request. At this stage, the *sender* must be
+    /// generate their own ECDH key pairs, and use the public key as an additional parameter
+    ///
     /// When an user submit request it must able to generate the ECDH key pairs, and use the public as additional parameter
     /// to the peer through [`ConnectionAPI::request_connect`]
     async fn submit_request(
         &self,
         peer_did_uri: String,
         own_did_uri: String,
+        own_public_key: String,
     ) -> Result<ConnectionChallenge, ConnectionError>;
 
     async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
@@ -146,7 +167,7 @@ pub trait RpcBuilder: Clone {
         &self,
         own_did_uri: String,
         peer_did_uri: String,
-        public_key: String,
+        peer_public_key: String,
     ) -> Result<ConnectionChallenge, ConnectionError>;
 
     async fn response_challenge(
@@ -157,14 +178,14 @@ pub trait RpcBuilder: Clone {
 }
 
 /// `UsecaseBuilder` is a trait behavior that provides
-/// base application logic's handlers 
+/// base application logic's handlers
 pub trait UsecaseBuilder<TEntityAccessor>: ConnectionAPI<EntityAccessor = TEntityAccessor>
 where
     TEntityAccessor: ConnectionEntityAccessor,
 {
     type RepoImplementer: RepoBuilder<EntityAccessor = TEntityAccessor>;
     type RPCImplementer: RpcBuilder;
-    
+
     fn repo(&self) -> Self::RepoImplementer;
     fn rpc(&self) -> Self::RPCImplementer;
 }
