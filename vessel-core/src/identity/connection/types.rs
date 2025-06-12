@@ -32,6 +32,9 @@ pub enum ConnectionError {
 
     #[error("shared secret error: {0}")]
     JSONUnserializeError(String),
+
+    #[error("not implemented")]
+    NotImplementedError,
 }
 
 /// State represent connection's states between two peers
@@ -133,7 +136,6 @@ pub trait ConnectionAPI: Clone {
         &self,
         peer_did_uri: String,
         own_did_uri: String,
-        own_public_key: String,
     ) -> Result<ConnectionChallenge, ConnectionError>;
 
     async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
