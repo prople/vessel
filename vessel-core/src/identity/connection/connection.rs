@@ -28,6 +28,7 @@ pub struct Connection {
     own_keysecure: KeySecure,
     own_shared_secret: String,
     state: State,
+    challenge: String,
 
     #[serde(with = "ts_seconds")]
     created_at: DateTime<Utc>,
@@ -51,6 +52,7 @@ impl Connection {
         peer_did_uri: String,
         peer_key: String,
         own_did_uri: String,
+        challenge: String,
     ) -> Result<Self, ConnectionError> {
         let own_keypairs = KeyPair::generate();
         let own_keysecure = own_keypairs
@@ -72,6 +74,7 @@ impl Connection {
             own_key: own_keypairs.pub_key().to_hex().hex(),
             own_keysecure: own_keysecure,
             own_shared_secret,
+            challenge,
             state: State::Pending,
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -145,6 +148,10 @@ impl ConnectionEntityAccessor for Connection {
         self.state.to_owned()
     }
 
+    fn get_challenge(&self) -> String {
+        self.challenge.to_owned()
+    }
+
     fn get_created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
@@ -206,7 +213,7 @@ mod tests {
     fn test_success() {
         let (peer_uri, peer_key, peer_keypair) = generate_peer();
         let (own_uri, _) = generate_own();
-        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri);
+        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string());
 
         assert!(connection.is_ok());
         assert_eq!(connection.clone().unwrap().state, State::Pending);
@@ -221,7 +228,7 @@ mod tests {
         let (peer_uri, peer_key, _) = generate_peer();
         let (own_uri, _) = generate_own();
         let mut connection =
-            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri).unwrap();
+            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string()).unwrap();
 
         assert_eq!(connection.state, State::Pending);
 

@@ -59,7 +59,7 @@ where
         &self,
         _peer_did_uri: String,
         _own_did_uri: String,
-    ) -> Result<ConnectionChallenge, ConnectionError> {
+    ) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
 

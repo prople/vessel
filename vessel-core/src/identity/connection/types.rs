@@ -70,6 +70,7 @@ pub trait ConnectionEntityAccessor:
     fn get_own_keysecure(&self) -> KeySecure;
     fn get_own_shared_secret(&self) -> String;
     fn get_state(&self) -> State;
+    fn get_challenge(&self) -> String;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
@@ -86,7 +87,7 @@ pub trait ConnectionEntityAccessor:
 pub struct ConnectionChallenge {
     connection_id: String,
     challenge: String,
-    own_public_key: String,
+    public_key: String,
 }
 
 /// ConnectionAPI is main entrypoint to communicate with the `Connection` domain
@@ -131,12 +132,25 @@ pub trait ConnectionAPI: Clone {
     /// generate their own ECDH key pairs, and use the public key as an additional parameter
     ///
     /// When an user submit request it must able to generate the ECDH key pairs, and use the public as additional parameter
-    /// to the peer through [`ConnectionAPI::request_connect`]
+    /// to the peer through [`ConnectionAPI::request_connect`], and then it will generate a new connection
+    /// request with the state set to [`State::Pending`] from the peer's perspective, and also generate a new [`ConnectionChallenge`].
+    /// 
+    /// A *sender* will got the [`ConnectionChallenge`] as a response from the peer
+    /// and must be able to decrypt the challenge using their own shared secret key, which generated from the ECDH algorithm.
+    /// Once the challenge is decrypted, the *sender* will send the decrypted challenge back to the peer
+    /// using [`ConnectionAPI::response_challenge`], if the challenge is correct, the peer will update the connection state to [`State::Established`].
+    /// 
+    /// If the challenge is correct, the peer will update the connection state to [`State::Established`], and the sender also need
+    /// to generate the [`ConnectionEntityAccessor`] object and save it to the repository using [`RepoBuilder::save_request`], and 
+    /// the response will be an `Ok(())` result.
+    /// 
+    /// If the challenge is incorrect, the peer will not update the connection state and the connection will remain in [`State::Pending`], and the response
+    /// will be an error.
     async fn submit_request(
         &self,
         peer_did_uri: String,
         own_did_uri: String,
-    ) -> Result<ConnectionChallenge, ConnectionError>;
+    ) -> Result<(), ConnectionError>;
 
     async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
     async fn get_connection(&self, id: String) -> Result<Self::EntityAccessor, ConnectionError>;
