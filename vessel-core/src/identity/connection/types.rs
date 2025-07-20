@@ -71,7 +71,7 @@ pub trait ConnectionEntityAccessor:
     fn get_own_keysecure(&self) -> Option<KeySecure>;
     fn get_own_shared_secret(&self) -> Option<String>;
     fn get_state(&self) -> State;
-    fn get_proposal(&self) -> ConnectionProposal;
+    fn get_proposal(&self) -> Option<ConnectionProposal>;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }

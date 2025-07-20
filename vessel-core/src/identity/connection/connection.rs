@@ -29,7 +29,7 @@ pub struct Connection {
     own_shared_secret: Option<String>,
     state: State,
     challenge: String,
-    propopsal: ConnectionProposal,
+    propopsal: Option<ConnectionProposal>,
 
     #[serde(with = "ts_seconds")]
     created_at: DateTime<Utc>,
@@ -54,7 +54,6 @@ impl Connection {
         peer_key: String,
         own_did_uri: String,
         challenge: String,
-        proposal: ConnectionProposal,
     ) -> Result<Self, ConnectionError> {
         let own_keypairs = KeyPair::generate();
         let own_keysecure = own_keypairs
@@ -78,7 +77,7 @@ impl Connection {
             own_shared_secret: Some(own_shared_secret),
             challenge,
             state: State::Pending,
-            propopsal: proposal,
+            propopsal: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -86,9 +85,16 @@ impl Connection {
         Ok(out)
     }
 
-    pub fn update_state(&mut self, state: State) {
+    pub fn set_proposal(&mut self, proposal: ConnectionProposal) -> &mut Self {
+        self.propopsal = Some(proposal);
+        self.updated_at = Utc::now();
+        self
+    }   
+
+    pub fn update_state(&mut self, state: State) -> &mut Self {
         self.state = state;
         self.updated_at = Utc::now();
+        self
     }
 }
 
@@ -151,7 +157,7 @@ impl ConnectionEntityAccessor for Connection {
         self.state.to_owned()
     }
 
-    fn get_proposal(&self) -> ConnectionProposal {
+    fn get_proposal(&self) -> Option<ConnectionProposal> {
         self.propopsal.to_owned()
     }
 
@@ -216,7 +222,7 @@ mod tests {
     fn test_success() {
         let (peer_uri, peer_key, peer_keypair) = generate_peer();
         let (own_uri, _) = generate_own();
-        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string(), ConnectionProposal::default());
+        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string());
 
         assert!(connection.is_ok());
         assert_eq!(connection.clone().unwrap().state, State::Pending);
@@ -231,7 +237,7 @@ mod tests {
         let (peer_uri, peer_key, _) = generate_peer();
         let (own_uri, _) = generate_own();
         let mut connection =
-            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string(), ConnectionProposal::default()).unwrap();
+            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string()).unwrap();
 
         assert_eq!(connection.state, State::Pending);
 
