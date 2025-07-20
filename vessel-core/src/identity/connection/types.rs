@@ -46,6 +46,7 @@ pub enum ConnectionError {
 #[serde(crate = "self::serde")]
 pub enum State {
     Pending,
+    Challenged,
     Established,
 }
 
@@ -67,10 +68,10 @@ pub trait ConnectionEntityAccessor:
     fn get_peer_key(&self) -> String;
     fn get_own_did_uri(&self) -> String;
     fn get_own_key(&self) -> String;
-    fn get_own_keysecure(&self) -> KeySecure;
-    fn get_own_shared_secret(&self) -> String;
+    fn get_own_keysecure(&self) -> Option<KeySecure>;
+    fn get_own_shared_secret(&self) -> Option<String>;
     fn get_state(&self) -> State;
-    fn get_challenge(&self) -> String;
+    fn get_proposal(&self) -> ConnectionProposal;
     fn get_created_at(&self) -> DateTime<Utc>;
     fn get_updated_at(&self) -> DateTime<Utc>;
 }
@@ -85,9 +86,35 @@ pub trait ConnectionEntityAccessor:
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(crate = "self::serde")]
 pub struct ConnectionChallenge {
+    id: String,
     connection_id: String,
     challenge: String,
     public_key: String,
+}
+
+/// ConnectionProposal used by a sender as primary request to connect to the peer
+/// 
+/// The sender will generate a new ECDH key pairs, and use the public key as a parameter
+/// this public key will be used by the peer to generate the shared secret key
+/// 
+/// The id is a unique identifier for the connection proposal, it will be used by the peer
+/// later to they need to respond the request, either it is accepted or rejected 
+/// 
+/// The did_uri is the DID URI of the sender, it will be used by the peer to identify the sender
+/// and to establish the connection later
+/// 
+/// A context is a string that will be used to identify the context of the connection proposal
+/// it can be used to provide additional information about the connection proposal
+/// such as the purpose of the connection or any other relevant information. A same sender is possible
+/// to send multiple connection proposals to the same peer, so the context is useful to differentiate,
+/// and only the peer can decide which proposal to accept or reject based on the context
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
+#[serde(crate = "self::serde")]
+pub struct ConnectionProposal {
+    id: String,
+    public_key: String,
+    did_uri: String,
+    context: String,
 }
 
 /// ConnectionAPI is main entrypoint to communicate with the `Connection` domain
@@ -96,32 +123,100 @@ pub trait ConnectionAPI: Clone {
     type EntityAccessor: ConnectionEntityAccessor;
 
     /// request_connect is an RPC call method used by peers to receive the connection request
-    ///
-    /// The `peer_did_uri` parameter is an URI address in DID format belongs to peer
-    /// The `peer_public_key` parameter is an *public key* of the peer that send the connection request in hex format
-    ///
-    /// Each time a peer send a connection request it will generate new ECDH key pairs, and use the public
-    /// key as a payload.
-    ///
-    /// The expected result if success is a connection challenge which contains a connection id and an encrypted
-    /// value which is random of string that generated using shared secret key. The sender must be able to decrypt
-    /// and re-encrypt it later as response challenge
+    /// 
+    /// A peer that receive the connection proposal need to generate a new [`ConnectionEntityAccessor`] object
+    /// implementation, and save it to the local storage. The state should be set to [`State::Pending`], and
+    /// also without any keysecure, shared secret and the public key generated yet
     async fn request_connect(
         &self,
-        peer_did_uri: String,
-        peer_public_key: String,
-    ) -> Result<ConnectionChallenge, ConnectionError>;
+        proposal: ConnectionProposal,
+    ) -> Result<(), ConnectionError>;
+
+    /// list_proposals is an RPC call method used by the peer to list all new connection proposals
+    /// 
+    /// Each time a peer decide to accept or reject a connection proposal, it should remoeve the proposal
+    /// from the list, so that it won't be listed again
+    async fn list_requests(
+        &self,
+    ) -> Result<Vec<Self::EntityAccessor>, ConnectionError>;
+
+    /// response_proposal is an RPC call method used by the peer to respond the connection proposal
+    /// 
+    /// The `accepted` parameter is a boolean value that indicates whether the proposal is accepted or rejected
+    /// If the proposal is rejected, the peer should remove the proposal from the list
+    /// 
+    /// When the proposal is accepted, the peer will update the connection state to [`State::Challenged`], and save the
+    /// connection challenge into the local storage. The generated challenge should be contains the connection id
+    /// 
+    /// When this method called, the peer vessel node should be able to call the [`request_challenge`] method from the sender
+    async fn response_request(
+        &self,
+        connection_id: String,
+        accepted: bool,
+    ) -> Result<(), ConnectionError>;
+
+    /// request_challenge is an RPC call method used by the sender to receive a challenge from the peer
+    /// 
+    /// From the sender's perspective, it need to generate a new [`ConnectionEntityAccessor`] object
+    /// implementation, and save it to the local storage. The state should be set to [`State::Challenged`], and
+    /// also without any keysecure, shared secret and the public key generated yet
+    async fn request_challenge(
+        &self,
+        challenge: ConnectionChallenge,
+    ) -> Result<(), ConnectionError>;
+
+    /// list_challenges is an RPC call method used by the sender to list all new challenges
+    /// 
+    /// Each time a sender receive a challenge from the peer, it should save the challenge
+    /// to the local storage, so that it can be listed later, and each time a challenge is answered
+    /// it should be removed from the list
+    async fn list_challenges(
+        &self,
+    ) -> Result<Vec<ConnectionChallenge>, ConnectionError>;
+
+    /// cancel_request is an RPC call method used by the sender to cancel the connection request
+    /// 
+    /// The `proposal_id` is the unique identifier of the connection proposal. When the sender cancel the request,
+    /// it should remove the proposal from the list, and also remove the connection entity from the local storage
+    /// If the proposal is not found, it will throw an error
+    ///
+    /// When the sender call this method, its vessel should be able to call the [`remove_proposal`] method from the peer
+    /// to remove the connection entity from the peer's local storage
+    async fn cancel_request(
+        &self,
+        proposal_id: String,
+    ) -> Result<(), ConnectionError>;
+
+    /// answer_challenge is an RPC call method used by the sender to answer the challenge from the peer
+    /// 
+    /// This method used by the peer to check if the answer from the sender is correct or not. If the answer is correct,
+    /// the peer will update the connection state to [`State::Established`], if the answer is incorrect,
+    /// the peer will remove the connection entity from the local storage and throw an error
+    async fn answer_challenge(
+        &self,
+        connection_id: String,
+        answer: String,
+    ) -> Result<(), ConnectionError>;
 
     /// response_challenge is an RPC call method used by the sender to send back their public key with a challenge
+    /// 
+    /// This method is used by the sender to respond the challenge from the peer, the sender should be generate a new
+    /// ECDH key pairs, and use the public key as a parameter to generate the shared secret key, and update the connection
+    /// entity with the shared secret key and keysecure. The `password` parameter is used to encrypt the keysecure
     ///
     /// An answer parameter actually is an encrypted random text or characters
     /// with the sharedsecret key generated through ECDH algorithm. The ECDH algorithm may generate a shared secret key
     /// without never exchange their private keys
-    ///
+    /// 
     /// The expected condition if it's success is our peer must be able to re-encrypt the value using their shared
     /// secret key. Once it's correct it update the connection status to established
+    /// 
+    /// When the sender send the response, it should call the [`answer_challenge`] method from the peer, and waiting for the response
+    /// to check if the answer is correct or not. If the answer is correct, the peer will update the connection state to [`State::Established`],
+    /// if the answer is incorrect, the peer will remove the connection entity from the local storage and throw an error
     async fn response_challenge(
         &self,
+        password: String,
         connection_id: String,
         answer: String,
     ) -> Result<(), ConnectionError>;
@@ -132,28 +227,18 @@ pub trait ConnectionAPI: Clone {
     /// generate their own ECDH key pairs, and use the public key as an additional parameter
     ///
     /// When an user submit request it must able to generate the ECDH key pairs, and use the public as additional parameter
-    /// to the peer through [`ConnectionAPI::request_connect`], and then it will generate a new connection
-    /// request with the state set to [`State::Pending`] from the peer's perspective, and also generate a new [`ConnectionChallenge`].
-    /// 
-    /// A *sender* will got the [`ConnectionChallenge`] as a response from the peer
-    /// and must be able to decrypt the challenge using their own shared secret key, which generated from the ECDH algorithm.
-    /// Once the challenge is decrypted, the *sender* will send the decrypted challenge back to the peer
-    /// using [`ConnectionAPI::response_challenge`], if the challenge is correct, the peer will update the connection state to [`State::Established`].
-    /// 
-    /// If the challenge is correct, the peer will update the connection state to [`State::Established`], and the sender also need
-    /// to generate the [`ConnectionEntityAccessor`] object and save it to the repository using [`RepoBuilder::save_request`], and 
-    /// the response will be an `Ok(())` result.
-    /// 
-    /// If the challenge is incorrect, the peer will not update the connection state and the connection will remain in [`State::Pending`], and the response
-    /// will be an error.
+    /// for the [`ConnectionProposal`]. The `ConnectionProposal` will be sent to the peer.
     async fn submit_request(
         &self,
         peer_did_uri: String,
         own_did_uri: String,
     ) -> Result<(), ConnectionError>;
 
-    async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
-    async fn get_connection(&self, id: String) -> Result<Self::EntityAccessor, ConnectionError>;
+    /// remove_proposal is an RPC call method used by the sender to remove the connection proposal from the peer
+    async fn remove_proposal(&self, proposal_id: String) -> Result<(), ConnectionError>;
+
+    async fn get_connection(&self, connection_id: String) -> Result<Self::EntityAccessor, ConnectionError>;
+
     async fn list_connections(
         &self,
         state: Option<State>,
@@ -162,17 +247,26 @@ pub trait ConnectionAPI: Clone {
 
 /// RepoBuilder is a `Connection Repository` abstraction by implementing repository pattern
 #[async_trait]
-pub trait RepoBuilder: Clone + Sync + Send {
+pub trait RepoConnectionBuilder: Clone + Sync + Send {
     type EntityAccessor: ConnectionEntityAccessor;
 
-    async fn save_request(&self, connection: &Self::EntityAccessor) -> Result<(), ConnectionError>;
-    async fn update_state(&self, id: String, state: State) -> Result<(), ConnectionError>;
-    async fn remove_request(&self, id: String) -> Result<(), ConnectionError>;
-    async fn get_connection(&self, id: String) -> Result<Self::EntityAccessor, ConnectionError>;
-    async fn list_connections(
+    async fn save_connection(&self, connection: &Self::EntityAccessor) -> Result<(), ConnectionError>;
+    async fn update_connection_state(&self, id: String, state: State) -> Result<(), ConnectionError>;
+    async fn remove_connection(&self, connection_id: String) -> Result<(), ConnectionError>;
+    async fn remove_by_proposal(&self, proposal_id: String) -> Result<(), ConnectionError>;
+    async fn get_connection(&self, connection_id: String) -> Result<Self::EntityAccessor, ConnectionError>;
+    async fn list_connections_by_state(
         &self,
         state: Option<State>,
     ) -> Result<Vec<Self::EntityAccessor>, ConnectionError>;
+}
+
+#[async_trait]
+pub trait RepoChallengeBuilder: Clone + Sync + Send {
+    async fn save_challenge(&self, challenge: &ConnectionChallenge) -> Result<(), ConnectionError>;
+    async fn remove_challenge(&self, challenge_id: String) -> Result<(), ConnectionError>;
+    async fn get_challenge(&self, challenge_id: String) -> Result<ConnectionChallenge, ConnectionError>;
+    async fn list_challenges(&self) -> Result<Vec<ConnectionChallenge>, ConnectionError>;
 }
 
 /// `RpcBuilder` is a trait behavior used as `JSON-RPC` client builder
@@ -181,16 +275,21 @@ pub trait RepoBuilder: Clone + Sync + Send {
 pub trait RpcBuilder: Clone {
     async fn request_connect(
         &self,
-        own_did_uri: String,
-        peer_did_uri: String,
-        peer_public_key: String,
-    ) -> Result<ConnectionChallenge, ConnectionError>;
+        proposal: ConnectionProposal,
+    ) -> Result<(), ConnectionError>;
 
-    async fn response_challenge(
+    async fn request_challenge(
+        &self,
+        challenge: ConnectionChallenge,
+    ) -> Result<(), ConnectionError>;
+
+    async fn answer_challenge(
         &self,
         connection_id: String,
         answer: String,
     ) -> Result<(), ConnectionError>;
+
+    async fn remove_proposal(&self, proposal_id: String) -> Result<(), ConnectionError>;
 }
 
 /// `UsecaseBuilder` is a trait behavior that provides
@@ -199,9 +298,11 @@ pub trait UsecaseBuilder<TEntityAccessor>: ConnectionAPI<EntityAccessor = TEntit
 where
     TEntityAccessor: ConnectionEntityAccessor,
 {
-    type RepoImplementer: RepoBuilder<EntityAccessor = TEntityAccessor>;
+    type RepoConnectionImplementer: RepoConnectionBuilder<EntityAccessor = TEntityAccessor>;
+    type RepoChallengeImplementer: RepoChallengeBuilder;
     type RPCImplementer: RpcBuilder;
 
-    fn repo(&self) -> Self::RepoImplementer;
+    fn repo_connection(&self) -> Self::RepoConnectionImplementer;
+    fn repo_challenge(&self) -> Self::RepoChallengeImplementer;
     fn rpc(&self) -> Self::RPCImplementer;
 }

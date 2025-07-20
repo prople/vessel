@@ -13,7 +13,7 @@ use prople_crypto::keysecure::types::ToKeySecure;
 use prople_crypto::keysecure::KeySecure;
 use prople_crypto::types::{ByteHex, Hexer};
 
-use super::types::{ConnectionEntityAccessor, ConnectionError, State};
+use super::types::{ConnectionEntityAccessor, ConnectionError, State, ConnectionProposal};
 
 /// Connection is a struct that represents a connection between two peers
 /// It contains the necessary information to establish a connection, such as the peer's DID URI,
@@ -25,10 +25,11 @@ pub struct Connection {
     peer_key: String,
     own_did_uri: String,
     own_key: String,
-    own_keysecure: KeySecure,
-    own_shared_secret: String,
+    own_keysecure: Option<KeySecure>,
+    own_shared_secret: Option<String>,
     state: State,
     challenge: String,
+    propopsal: ConnectionProposal,
 
     #[serde(with = "ts_seconds")]
     created_at: DateTime<Utc>,
@@ -53,6 +54,7 @@ impl Connection {
         peer_key: String,
         own_did_uri: String,
         challenge: String,
+        proposal: ConnectionProposal,
     ) -> Result<Self, ConnectionError> {
         let own_keypairs = KeyPair::generate();
         let own_keysecure = own_keypairs
@@ -72,10 +74,11 @@ impl Connection {
             peer_key,
             own_did_uri,
             own_key: own_keypairs.pub_key().to_hex().hex(),
-            own_keysecure: own_keysecure,
-            own_shared_secret,
+            own_keysecure: Some(own_keysecure), 
+            own_shared_secret: Some(own_shared_secret),
             challenge,
             state: State::Pending,
+            propopsal: proposal,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -136,11 +139,11 @@ impl ConnectionEntityAccessor for Connection {
         self.own_key.to_owned()
     }
 
-    fn get_own_keysecure(&self) -> KeySecure {
+    fn get_own_keysecure(&self) -> Option<KeySecure> {
         self.own_keysecure.to_owned()
     }
 
-    fn get_own_shared_secret(&self) -> String {
+    fn get_own_shared_secret(&self) -> Option<String> {
         self.own_shared_secret.to_owned()
     }
 
@@ -148,8 +151,8 @@ impl ConnectionEntityAccessor for Connection {
         self.state.to_owned()
     }
 
-    fn get_challenge(&self) -> String {
-        self.challenge.to_owned()
+    fn get_proposal(&self) -> ConnectionProposal {
+        self.propopsal.to_owned()
     }
 
     fn get_created_at(&self) -> DateTime<Utc> {
@@ -213,14 +216,14 @@ mod tests {
     fn test_success() {
         let (peer_uri, peer_key, peer_keypair) = generate_peer();
         let (own_uri, _) = generate_own();
-        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string());
+        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string(), ConnectionProposal::default());
 
         assert!(connection.is_ok());
         assert_eq!(connection.clone().unwrap().state, State::Pending);
 
         let peer_secret =
             generate_peer_secret(peer_keypair, connection.clone().unwrap().get_own_key());
-        assert_eq!(connection.unwrap().own_shared_secret, peer_secret);
+        assert_eq!(connection.unwrap().own_shared_secret.unwrap(), peer_secret);
     }
 
     #[test]
@@ -228,7 +231,7 @@ mod tests {
         let (peer_uri, peer_key, _) = generate_peer();
         let (own_uri, _) = generate_own();
         let mut connection =
-            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string()).unwrap();
+            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string(), ConnectionProposal::default()).unwrap();
 
         assert_eq!(connection.state, State::Pending);
 
