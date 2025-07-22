@@ -13,7 +13,7 @@ use prople_crypto::keysecure::types::ToKeySecure;
 use prople_crypto::keysecure::KeySecure;
 use prople_crypto::types::{ByteHex, Hexer};
 
-use super::types::{ConnectionEntityAccessor, ConnectionError, State, ConnectionProposal};
+use super::types::{ConnectionEntityAccessor, ConnectionError, ConnectionProposal, State};
 
 /// Connection is a struct that represents a connection between two peers
 /// It contains the necessary information to establish a connection, such as the peer's DID URI,
@@ -21,14 +21,14 @@ use super::types::{ConnectionEntityAccessor, ConnectionError, State, ConnectionP
 #[serde(crate = "self::serde")]
 pub struct Connection {
     id: String,
-    peer_did_uri: String,
-    peer_key: String,
+    peer_did_uri: Option<String>,
+    peer_key: Option<String>,
     own_did_uri: String,
     own_key: String,
     own_keysecure: Option<KeySecure>,
     own_shared_secret: Option<String>,
     state: State,
-    challenge: String,
+    challenge: Option<String>,
     propopsal: Option<ConnectionProposal>,
 
     #[serde(with = "ts_seconds")]
@@ -39,7 +39,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    /// Generates a new Connection instance with the provided parameters.
+    /// Generates a new Connection instance with the provided parameters, especially with the [`ConnectionChallenge`] object.
     /// It should generate the ECDH keypair for the own entity and derive the shared secret with the peer's public key.
     /// The generated shared secret will in hashed binary format using the blake3 hashing algorithm.
     ///
@@ -48,17 +48,14 @@ impl Connection {
     /// * `peer_did_uri` - The DID URI of the peer.
     /// * `peer_key` - The public key of the peer.
     /// * `own_did_uri` - The DID URI of the own entity.
-    pub fn generate(
+    pub fn generate_with_challenge(
         password: String,
         peer_did_uri: String,
         peer_key: String,
         own_did_uri: String,
         challenge: String,
     ) -> Result<Self, ConnectionError> {
-        let own_keypairs = KeyPair::generate();
-        let own_keysecure = own_keypairs
-            .to_keysecure(Password::from(password))
-            .map_err(|err| ConnectionError::EntityError(err.to_string()))?;
+        let (own_keypairs, own_keysecure) = Self::generate_keys(password)?;
 
         let own_shared_secret = own_keypairs
             .clone()
@@ -69,13 +66,40 @@ impl Connection {
 
         let out = Self {
             id: Uuid::new_v4().to_string(),
-            peer_did_uri,
-            peer_key,
+            peer_did_uri: Some(peer_did_uri),
+            peer_key: Some(peer_key),
             own_did_uri,
             own_key: own_keypairs.pub_key().to_hex().hex(),
-            own_keysecure: Some(own_keysecure), 
+            own_keysecure: Some(own_keysecure),
             own_shared_secret: Some(own_shared_secret),
-            challenge,
+            challenge: Some(challenge),
+            state: State::Pending,
+            propopsal: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        Ok(out)
+    }
+
+    pub fn generate(
+        password: String,
+        peer_did_uri: String,
+        own_did_uri: String,
+    ) -> Result<Self, ConnectionError> {
+        // need to generate the keypair and shared secret
+        let (own_keypairs, own_keysecure) = Self::generate_keys(password)?;
+
+        // Create the connection instance
+        let out = Self {
+            id: Uuid::new_v4().to_string(),
+            peer_did_uri: Some(peer_did_uri),
+            peer_key: None,
+            own_did_uri,
+            own_key: own_keypairs.pub_key().to_hex().hex(),
+            own_keysecure: Some(own_keysecure),
+            own_shared_secret: None,
+            challenge: None,
             state: State::Pending,
             propopsal: None,
             created_at: Utc::now(),
@@ -89,12 +113,21 @@ impl Connection {
         self.propopsal = Some(proposal);
         self.updated_at = Utc::now();
         self
-    }   
+    }
 
     pub fn update_state(&mut self, state: State) -> &mut Self {
         self.state = state;
         self.updated_at = Utc::now();
         self
+    }
+
+    fn generate_keys(password: String) -> Result<(KeyPair, KeySecure), ConnectionError> {
+        let own_keypairs = KeyPair::generate();
+        let own_keysecure = own_keypairs
+            .to_keysecure(Password::from(password))
+            .map_err(|err| ConnectionError::EntityError(err.to_string()))?;
+
+        Ok((own_keypairs, own_keysecure))
     }
 }
 
@@ -129,11 +162,11 @@ impl ConnectionEntityAccessor for Connection {
         self.id.to_owned()
     }
 
-    fn get_peer_did_uri(&self) -> String {
+    fn get_peer_did_uri(&self) -> Option<String> {
         self.peer_did_uri.to_owned()
     }
 
-    fn get_peer_key(&self) -> String {
+    fn get_peer_key(&self) -> Option<String> {
         self.peer_key.to_owned()
     }
 
@@ -222,7 +255,13 @@ mod tests {
     fn test_success() {
         let (peer_uri, peer_key, peer_keypair) = generate_peer();
         let (own_uri, _) = generate_own();
-        let connection = Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string());
+        let connection = Connection::generate_with_challenge(
+            "testing".to_string(),
+            peer_uri,
+            peer_key,
+            own_uri,
+            "challenge".to_string(),
+        );
 
         assert!(connection.is_ok());
         assert_eq!(connection.clone().unwrap().state, State::Pending);
@@ -236,8 +275,14 @@ mod tests {
     fn test_update_state() {
         let (peer_uri, peer_key, _) = generate_peer();
         let (own_uri, _) = generate_own();
-        let mut connection =
-            Connection::generate("testing".to_string(), peer_uri, peer_key, own_uri, "challenge".to_string()).unwrap();
+        let mut connection = Connection::generate_with_challenge(
+            "testing".to_string(),
+            peer_uri,
+            peer_key,
+            own_uri,
+            "challenge".to_string(),
+        )
+        .unwrap();
 
         assert_eq!(connection.state, State::Pending);
 

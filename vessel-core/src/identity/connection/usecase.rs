@@ -1,9 +1,11 @@
 use rst_common::standard::async_trait::async_trait;
 
+use crate::identity::connection::types::ConnectionEntityAccessor;
+
 use super::connection::Connection;
 use super::types::{
-    ConnectionAPI, ConnectionChallenge, ConnectionError, RepoConnectionBuilder, RpcBuilder, State,
-    UsecaseBuilder, ConnectionProposal, RepoChallengeBuilder
+    ConnectionAPI, ConnectionChallenge, ConnectionError, ConnectionProposal, RepoChallengeBuilder,
+    RepoConnectionBuilder, RpcBuilder, State, UsecaseBuilder, CONTEXT_CONNECTION_REQUEST,
 };
 
 #[derive(Clone)]
@@ -21,19 +23,29 @@ where
     rpc: TRPCClient,
 }
 
-impl<TRepoConnection, TRepoChallenge, TRPCClient> Usecase<TRepoConnection, TRepoChallenge, TRPCClient>
+impl<TRepoConnection, TRepoChallenge, TRPCClient>
+    Usecase<TRepoConnection, TRepoChallenge, TRPCClient>
 where
     TRepoConnection: RepoConnectionBuilder<EntityAccessor = Connection>,
     TRepoChallenge: RepoChallengeBuilder,
     TRPCClient: RpcBuilder,
 {
-    pub fn new(repo_conn: TRepoConnection, repo_challenge: TRepoChallenge, rpc: TRPCClient) -> Self {
-        Self { repo_conn, repo_challenge, rpc }
+    pub fn new(
+        repo_conn: TRepoConnection,
+        repo_challenge: TRepoChallenge,
+        rpc: TRPCClient,
+    ) -> Self {
+        Self {
+            repo_conn,
+            repo_challenge,
+            rpc,
+        }
     }
 }
 
 #[async_trait]
-impl<TRepoConnection, TRepoChallenge, TRPCClient> UsecaseBuilder<Connection> for Usecase<TRepoConnection, TRepoChallenge, TRPCClient>
+impl<TRepoConnection, TRepoChallenge, TRPCClient> UsecaseBuilder<Connection>
+    for Usecase<TRepoConnection, TRepoChallenge, TRPCClient>
 where
     TRepoConnection: RepoConnectionBuilder<EntityAccessor = Connection>,
     TRepoChallenge: RepoChallengeBuilder,
@@ -57,7 +69,8 @@ where
 }
 
 #[async_trait]
-impl<TRepoConnection, TRepoChallenge, TRPCClient> ConnectionAPI for Usecase<TRepoConnection, TRepoChallenge, TRPCClient>
+impl<TRepoConnection, TRepoChallenge, TRPCClient> ConnectionAPI
+    for Usecase<TRepoConnection, TRepoChallenge, TRPCClient>
 where
     TRepoConnection: RepoConnectionBuilder<EntityAccessor = Connection>,
     TRepoChallenge: RepoChallengeBuilder,
@@ -67,10 +80,29 @@ where
 
     async fn submit_request(
         &self,
-        _peer_did_uri: String,
-        _own_did_uri: String,
+        password: String,
+        peer_did_uri: String,
+        own_did_uri: String,
     ) -> Result<(), ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+        let mut connection = Connection::generate(password, peer_did_uri.clone(), own_did_uri)?;
+
+        let proposal = ConnectionProposal::new(
+            connection.get_own_key(),
+            peer_did_uri,
+            CONTEXT_CONNECTION_REQUEST,
+        );
+
+        // use rpc to send the proposal to our peer
+        // we better to wait the response from the peer
+        // if the peer accepts the proposal, we continue to save the connection 
+        self.rpc().request_connect(proposal.clone()).await?;
+
+        // if the rpc call is successful, we save the connection including for its proposal
+        _ = connection.set_proposal(proposal);
+        self.repo_connection()
+            .save(&connection)
+            .await
+            .map_err(|err| ConnectionError::EntityError(err.to_string()))
     }
 
     async fn remove_proposal(&self, _proposal_id: String) -> Result<(), ConnectionError> {
@@ -88,10 +120,7 @@ where
         Err(ConnectionError::NotImplementedError)
     }
 
-    async fn request_connect(
-        &self,
-        _proposal: ConnectionProposal,
-    ) -> Result<(), ConnectionError> {
+    async fn request_connect(&self, _proposal: ConnectionProposal) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
 
@@ -103,13 +132,11 @@ where
     ) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
-     
-    async fn list_requests(
-        &self,
-    ) -> Result<Vec<Self::EntityAccessor>, ConnectionError> {
+
+    async fn list_requests(&self) -> Result<Vec<Self::EntityAccessor>, ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
-    
+
     async fn response_request(
         &self,
         _connection_id: String,
@@ -117,7 +144,7 @@ where
     ) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
-    
+
     async fn answer_challenge(
         &self,
         _connection_id: String,
@@ -125,24 +152,19 @@ where
     ) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
-    
+
     async fn request_challenge(
         &self,
         _challenge: ConnectionChallenge,
     ) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
-    
-    async fn list_challenges(
-        &self,
-    ) -> Result<Vec<ConnectionChallenge>, ConnectionError> {
+
+    async fn list_challenges(&self) -> Result<Vec<ConnectionChallenge>, ConnectionError> {
         Err(ConnectionError::NotImplementedError)
     }
-    
-    async fn cancel_request(
-        &self,
-        _proposal_id: String,
-    ) -> Result<(), ConnectionError> {
+
+    async fn cancel_request(&self, _proposal_id: String) -> Result<(), ConnectionError> {
         Err(ConnectionError::NotImplementedError)
-    }    
+    }
 }
