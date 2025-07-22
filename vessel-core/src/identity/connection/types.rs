@@ -69,8 +69,7 @@ pub trait ConnectionEntityAccessor:
     fn get_id(&self) -> String;
     fn get_peer_did_uri(&self) -> Option<String>;
     fn get_peer_key(&self) -> Option<String>;
-    fn get_own_did_uri(&self) -> String;
-    fn get_own_key(&self) -> String;
+    fn get_own_key(&self) -> Option<String>;
     fn get_own_keysecure(&self) -> Option<KeySecure>;
     fn get_own_shared_secret(&self) -> Option<String>;
     fn get_state(&self) -> State;
@@ -138,12 +137,12 @@ impl ConnectionProposal {
         self.public_key.to_owned()
     }
 
-    pub fn get_did_uri(&self) -> &String {
-        &self.did_uri
+    pub fn get_did_uri(&self) -> String {
+        self.did_uri.to_owned()
     }
 
-    pub fn get_context(&self) -> &String {
-        &self.context
+    pub fn get_context(&self) -> String {
+        self.context.to_owned()
     }
 }
 
@@ -157,6 +156,8 @@ pub trait ConnectionAPI: Clone {
     /// A peer that receive the connection proposal need to generate a new [`ConnectionEntityAccessor`] object
     /// implementation, and save it to the local storage. The state should be set to [`State::Pending`], and
     /// also without any keysecure, shared secret and the public key generated yet
+    /// 
+    /// At this stage, the generated [`ConnectionEntityAccessor`] object will be generated without password,
     async fn request_connect(&self, proposal: ConnectionProposal) -> Result<(), ConnectionError>;
 
     /// list_proposals is an RPC call method used by the peer to list all new connection proposals
@@ -252,7 +253,6 @@ pub trait ConnectionAPI: Clone {
         &self,
         password: String,
         peer_did_uri: String,
-        own_did_uri: String,
     ) -> Result<(), ConnectionError>;
 
     /// remove_proposal is an RPC call method used by the sender to remove the connection proposal from the peer

@@ -82,12 +82,13 @@ where
         &self,
         password: String,
         peer_did_uri: String,
-        own_did_uri: String,
     ) -> Result<(), ConnectionError> {
-        let mut connection = Connection::generate(password, peer_did_uri.clone(), own_did_uri)?;
+        let mut connection = Connection::generate(password, peer_did_uri.clone())?;
 
         let proposal = ConnectionProposal::new(
-            connection.get_own_key(),
+            connection.get_own_key().ok_or_else(|| {
+                ConnectionError::EntityError("Own key is missing".to_string())
+            })?,
             peer_did_uri,
             CONTEXT_CONNECTION_REQUEST,
         );
@@ -120,8 +121,14 @@ where
         Err(ConnectionError::NotImplementedError)
     }
 
-    async fn request_connect(&self, _proposal: ConnectionProposal) -> Result<(), ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+    async fn request_connect(&self,proposal: ConnectionProposal) -> Result<(), ConnectionError> {
+        let mut connection = Connection::generate_without_password(proposal.get_did_uri())?;
+        connection.set_proposal(proposal);
+
+        self.repo_connection()
+            .save(&connection)
+            .await
+            .map_err(|err| ConnectionError::EntityError(err.to_string()))
     }
 
     async fn response_challenge(

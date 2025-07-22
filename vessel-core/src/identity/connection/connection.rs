@@ -23,8 +23,7 @@ pub struct Connection {
     id: String,
     peer_did_uri: Option<String>,
     peer_key: Option<String>,
-    own_did_uri: String,
-    own_key: String,
+    own_key: Option<String>,
     own_keysecure: Option<KeySecure>,
     own_shared_secret: Option<String>,
     state: State,
@@ -52,7 +51,6 @@ impl Connection {
         password: String,
         peer_did_uri: String,
         peer_key: String,
-        own_did_uri: String,
         challenge: String,
     ) -> Result<Self, ConnectionError> {
         let (own_keypairs, own_keysecure) = Self::generate_keys(password)?;
@@ -68,8 +66,7 @@ impl Connection {
             id: Uuid::new_v4().to_string(),
             peer_did_uri: Some(peer_did_uri),
             peer_key: Some(peer_key),
-            own_did_uri,
-            own_key: own_keypairs.pub_key().to_hex().hex(),
+            own_key: Some(own_keypairs.pub_key().to_hex().hex()),
             own_keysecure: Some(own_keysecure),
             own_shared_secret: Some(own_shared_secret),
             challenge: Some(challenge),
@@ -82,23 +79,46 @@ impl Connection {
         Ok(out)
     }
 
+    pub fn generate_without_password(peer_did_uri: String) -> Result<Self, ConnectionError> {
+        let out = Self {
+            id: Uuid::new_v4().to_string(),
+            peer_did_uri: Some(peer_did_uri),
+            peer_key: None,
+            own_key: None,
+            own_keysecure: None,
+            own_shared_secret: None,
+            challenge: None,
+            state: State::Pending,
+            propopsal: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+
+        Ok(out)
+    }
+
     pub fn generate(
         password: String,
         peer_did_uri: String,
-        own_did_uri: String,
     ) -> Result<Self, ConnectionError> {
         // need to generate the keypair and shared secret
         let (own_keypairs, own_keysecure) = Self::generate_keys(password)?;
+
+        let own_shared_secret = own_keypairs
+            .clone()
+            .secret(ByteHex::from(peer_did_uri.clone()))
+            .to_blake3()
+            .map_err(|err| ConnectionError::SharedSecretError(err.to_string()))?
+            .hex();
 
         // Create the connection instance
         let out = Self {
             id: Uuid::new_v4().to_string(),
             peer_did_uri: Some(peer_did_uri),
             peer_key: None,
-            own_did_uri,
-            own_key: own_keypairs.pub_key().to_hex().hex(),
+            own_key: Some(own_keypairs.pub_key().to_hex().hex()),
             own_keysecure: Some(own_keysecure),
-            own_shared_secret: None,
+            own_shared_secret: Some(own_shared_secret),
             challenge: None,
             state: State::Pending,
             propopsal: None,
@@ -170,11 +190,7 @@ impl ConnectionEntityAccessor for Connection {
         self.peer_key.to_owned()
     }
 
-    fn get_own_did_uri(&self) -> String {
-        self.own_did_uri.to_owned()
-    }
-
-    fn get_own_key(&self) -> String {
+    fn get_own_key(&self) -> Option<String> {
         self.own_key.to_owned()
     }
 
@@ -254,12 +270,10 @@ mod tests {
     #[test]
     fn test_success() {
         let (peer_uri, peer_key, peer_keypair) = generate_peer();
-        let (own_uri, _) = generate_own();
         let connection = Connection::generate_with_challenge(
             "testing".to_string(),
             peer_uri,
             peer_key,
-            own_uri,
             "challenge".to_string(),
         );
 
@@ -267,19 +281,17 @@ mod tests {
         assert_eq!(connection.clone().unwrap().state, State::Pending);
 
         let peer_secret =
-            generate_peer_secret(peer_keypair, connection.clone().unwrap().get_own_key());
+            generate_peer_secret(peer_keypair, connection.clone().unwrap().get_own_key().unwrap());
         assert_eq!(connection.unwrap().own_shared_secret.unwrap(), peer_secret);
     }
 
     #[test]
     fn test_update_state() {
         let (peer_uri, peer_key, _) = generate_peer();
-        let (own_uri, _) = generate_own();
         let mut connection = Connection::generate_with_challenge(
             "testing".to_string(),
             peer_uri,
             peer_key,
-            own_uri,
             "challenge".to_string(),
         )
         .unwrap();
