@@ -21,6 +21,8 @@ prople-crypto.workspace = true
 rst-common.workspace = true
 rstdev-domain.workspace = true
 multiaddr.workspace = true
+derive_more.workspace = true
+the-newtype.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
