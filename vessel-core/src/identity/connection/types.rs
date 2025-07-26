@@ -29,8 +29,8 @@
 //!
 //! // Approve a request
 //! api.request_response(
-//!     connection_id, 
-//!     Approval::Approve, 
+//!     connection_id,
+//!     Approval::Approve,
 //!     Some("MyPassword123!@#".to_string())
 //! ).await?;
 //! ```
@@ -101,10 +101,9 @@
 //! PeerDIDURI::validate("did:example:peer123")?;
 //! ```
 
-
 use std::fmt::{Debug, Display};
 
-use derive_more::{From, Into, AsRef};
+use derive_more::{AsRef, From, Into};
 use the_newtype::Newtype;
 
 use rst_common::standard::async_trait::async_trait;
@@ -123,9 +122,9 @@ use prople_crypto::keysecure::KeySecure;
 #[serde(crate = "self::serde")]
 pub enum ConnectionError {
     /// UUID format validation failed
-    /// 
+    ///
     /// This error occurs when a connection ID doesn't match UUID v4 format.
-    /// 
+    ///
     /// # Common Causes
     /// - Empty string: `""`
     /// - Invalid format: `"not-a-uuid"`  
@@ -140,29 +139,29 @@ pub enum ConnectionError {
     /// ```
     #[error("invalid UUID format: {0}")]
     InvalidUUIDFormat(String),
-    
+
     #[error("invalid DID URI: {reason}")]
     InvalidDIDURI { reason: String },
-    
+
     #[error("invalid hex key: expected {expected} chars, got {actual}")]
     InvalidHexKeyLength { expected: usize, actual: usize },
-    
+
     #[error("hex key contains invalid characters: {invalid_chars}")]
     InvalidHexKeyChars { invalid_chars: String },
-    
+
     #[error("password too weak: {}", requirements.join(", "))]
     WeakPassword { requirements: Vec<String> },
-    
+
     // ✅ Specific crypto errors
     #[error("ECDH key agreement failed: {0}")]
     ECDHFailure(String),
-    
+
     #[error("KeySecure encryption failed: {0}")]
     KeySecureEncryption(String),
-    
+
     #[error("Blake3 hashing failed: {0}")]
     Blake3Hashing(String),
-    
+
     // ✅ State transition errors
     #[error("invalid state transition: cannot go from {from} to {to}")]
     InvalidStateTransition { from: State, to: State },
@@ -179,10 +178,10 @@ pub enum ConnectionError {
     #[error("shared secret error: {0}")]
     SharedSecretError(String),
 
-    #[error("json serialization error: {0}")]  // ✅ Fixed message
+    #[error("json serialization error: {0}")] // ✅ Fixed message
     JSONError(String),
 
-    #[error("json deserialization error: {0}")]  // ✅ Fixed message
+    #[error("json deserialization error: {0}")] // ✅ Fixed message
     JSONUnserializeError(String),
 
     // ✅ Add missing critical error variants
@@ -300,27 +299,29 @@ impl ConnectionID {
     /// Validates connection ID format without creating instance
     pub fn validate(id: &str) -> Result<(), ConnectionError> {
         if id.is_empty() {
-            return Err(ConnectionError::ValidationError("Connection ID cannot be empty".to_string()));
+            return Err(ConnectionError::ValidationError(
+                "Connection ID cannot be empty".to_string(),
+            ));
         }
-        
+
         use rst_common::standard::uuid::Uuid;
         Uuid::parse_str(id)
             .map_err(|_| ConnectionError::ValidationError("Invalid UUID format".to_string()))?;
-        
+
         Ok(())
     }
-    
+
     /// Creates a new ConnectionID with validation
     pub fn new(id: String) -> Result<Self, ConnectionError> {
         Self::validate(&id)?;
         Ok(Self(id))
     }
-    
+
     /// Creates ConnectionID without validation (for internal use)
     pub(crate) fn from_validated(id: String) -> Self {
         Self(id)
     }
-    
+
     /// Generates a new random ConnectionID
     pub fn generate() -> Self {
         use rst_common::standard::uuid::Uuid;
@@ -342,31 +343,39 @@ impl PeerDIDURI {
     /// Validates DID URI format without creating instance
     pub fn validate(uri: &str) -> Result<(), ConnectionError> {
         if !uri.starts_with("did:") {
-            return Err(ConnectionError::ValidationError("DID URI must start with 'did:'".to_string()));
+            return Err(ConnectionError::ValidationError(
+                "DID URI must start with 'did:'".to_string(),
+            ));
         }
-        
+
         let parts: Vec<&str> = uri.split(':').collect();
         if parts.len() < 3 {
-            return Err(ConnectionError::ValidationError("Invalid DID URI format: insufficient components".to_string()));
+            return Err(ConnectionError::ValidationError(
+                "Invalid DID URI format: insufficient components".to_string(),
+            ));
         }
-        
+
         if parts[1].is_empty() {
-            return Err(ConnectionError::ValidationError("Invalid DID URI format: method cannot be empty".to_string()));
+            return Err(ConnectionError::ValidationError(
+                "Invalid DID URI format: method cannot be empty".to_string(),
+            ));
         }
-        
+
         if parts[2].is_empty() {
-            return Err(ConnectionError::ValidationError("Invalid DID URI format: identifier cannot be empty".to_string()));
+            return Err(ConnectionError::ValidationError(
+                "Invalid DID URI format: identifier cannot be empty".to_string(),
+            ));
         }
-        
+
         Ok(())
     }
-    
+
     /// Creates a new PeerDIDURI with validation
     pub fn new(uri: String) -> Result<Self, ConnectionError> {
         Self::validate(&uri)?;
         Ok(Self(uri))
     }
-    
+
     /// Creates PeerDIDURI without validation (for internal use)  
     pub(crate) fn from_validated(uri: String) -> Self {
         Self(uri)
@@ -386,35 +395,40 @@ impl Display for PeerKey {
 impl PeerKey {
     /// Validates peer key format without creating instance
     pub fn validate(key: &str) -> Result<(), ConnectionError> {
-        let key_clean = if key.starts_with("0x") { &key[2..] } else { key };
-        
+        let key_clean = if key.starts_with("0x") {
+            &key[2..]
+        } else {
+            key
+        };
+
         if key_clean.len() % 2 != 0 {
             return Err(ConnectionError::ValidationError(
-                "Invalid peer key: odd number of hex characters".to_string()
+                "Invalid peer key: odd number of hex characters".to_string(),
             ));
         }
-        
+
         if !key_clean.chars().all(|c| c.is_ascii_hexdigit()) {
             return Err(ConnectionError::ValidationError(
-                "Invalid peer key: contains non-hex characters".to_string()
+                "Invalid peer key: contains non-hex characters".to_string(),
             ));
         }
-        
+
         if key_clean.len() != 64 {
-            return Err(ConnectionError::ValidationError(
-                format!("Invalid peer key length: expected 64 hex characters, got {}", key_clean.len())
-            ));
+            return Err(ConnectionError::ValidationError(format!(
+                "Invalid peer key length: expected 64 hex characters, got {}",
+                key_clean.len()
+            )));
         }
-        
+
         Ok(())
     }
-    
+
     /// Creates new PeerKey with validation
     pub fn new(key: String) -> Result<Self, ConnectionError> {
         Self::validate(&key)?;
         Ok(Self(key))
     }
-    
+
     /// Creates PeerKey without validation (for internal use)
     pub(crate) fn from_validated(key: String) -> Self {
         Self(key)
@@ -448,25 +462,32 @@ pub struct PasswordValidator;
 impl PasswordValidator {
     pub fn validate(password: &str) -> Result<(), ConnectionError> {
         if password.is_empty() {
-            return Err(ConnectionError::InvalidPassword("Password cannot be empty".to_string()));
+            return Err(ConnectionError::InvalidPassword(
+                "Password cannot be empty".to_string(),
+            ));
         }
-        
-        if password.len() < 12 {  // ✅ Increased from 8 to 12
-            return Err(ConnectionError::InvalidPassword("Password must be at least 12 characters long".to_string()));
+
+        if password.len() < 12 {
+            // ✅ Increased from 8 to 12
+            return Err(ConnectionError::InvalidPassword(
+                "Password must be at least 12 characters long".to_string(),
+            ));
         }
-        
+
         // ✅ Add complexity requirements
         let has_lowercase = password.chars().any(|c| c.is_lowercase());
         let has_uppercase = password.chars().any(|c| c.is_uppercase());
         let has_digit = password.chars().any(|c| c.is_ascii_digit());
-        let has_special = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
-        
+        let has_special = password
+            .chars()
+            .any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
+
         if !has_lowercase || !has_uppercase || !has_digit || !has_special {
             return Err(ConnectionError::InvalidPassword(
                 "Password must contain at least one lowercase letter, one uppercase letter, one digit, and one special character".to_string()
             ));
         }
-        
+
         Ok(())
     }
 }
@@ -495,8 +516,8 @@ pub trait ConnectionEntityOwn {
 /// This trait contain `get_own_keysecure` method which will return the `KeySecure` object of the "own key"
 /// Each time a connection request is sent, it will generate a new ECDH key pairs, including the private key
 /// for the self keys, we need to save the private key in a secure storage which is using [`KeySecure`] object
-/// 
-/// This trait splitted into two traits, [`ConnectionEntityPeer`] and [`ConnectionEntityOwn`] 
+///
+/// This trait splitted into two traits, [`ConnectionEntityPeer`] and [`ConnectionEntityOwn`]
 pub trait ConnectionEntityAccessor:
     ConnectionEntityPeer
     + ConnectionEntityOwn
@@ -519,23 +540,23 @@ pub trait ConnectionAPI: Clone {
     type EntityAccessor: ConnectionEntityAccessor;
 
     /// Handles incoming connection requests from remote peers.
-    /// 
+    ///
     /// This method is called when a peer sends a connection request via RPC.
     /// The sender provides their DID URI so the receiver knows who is requesting connection.
     async fn request_connect(
         &self,
         connection_id: ConnectionID,
-        sender_did_uri: PeerDIDURI,     // ✅ Added: Who is making the request
-        receiver_did_uri: PeerDIDURI,   // ✅ Added: Who should receive the request  
-        sender_public_key: PeerKey,     // ✅ Renamed for clarity
+        sender_did_uri: PeerDIDURI, // ✅ Added: Who is making the request
+        receiver_did_uri: PeerDIDURI, // ✅ Added: Who should receive the request
+        sender_public_key: PeerKey, // ✅ Renamed for clarity
     ) -> Result<(), ConnectionError>;
 
     /// Handles connection approval notifications from remote peers.
     async fn request_approval(
         &self,
         connection_id: ConnectionID,
-        approver_did_uri: PeerDIDURI,   // ✅ Added: Who approved the connection
-        approver_public_key: PeerKey,   // ✅ Renamed for clarity
+        approver_did_uri: PeerDIDURI, // ✅ Added: Who approved the connection
+        approver_public_key: PeerKey, // ✅ Renamed for clarity
     ) -> Result<(), ConnectionError>;
 
     /// request_response is a method to send the response of the connection request
@@ -578,8 +599,8 @@ pub trait ConnectionAPI: Clone {
     async fn request_submit(
         &self,
         password: String,
-        peer_did_uri: PeerDIDURI,       // ✅ Changed from String to PeerDIDURI
-        own_did_uri: PeerDIDURI,        // ✅ Changed from String to PeerDIDURI
+        peer_did_uri: PeerDIDURI, // ✅ Changed from String to PeerDIDURI
+        own_did_uri: PeerDIDURI,  // ✅ Changed from String to PeerDIDURI
     ) -> Result<(), ConnectionError>;
 
     /// request_submissions is a method to get all connection requests that have been submitted
@@ -599,7 +620,11 @@ pub trait RepoBuilder: Clone + Sync + Send {
     type EntityAccessor: ConnectionEntityAccessor;
 
     async fn save(&self, connection: &Self::EntityAccessor) -> Result<(), ConnectionError>;
-    async fn update_state(&self, connection_id: ConnectionID, state: State) -> Result<(), ConnectionError>;
+    async fn update_state(
+        &self,
+        connection_id: ConnectionID,
+        state: State,
+    ) -> Result<(), ConnectionError>;
     async fn remove(&self, connection_id: ConnectionID) -> Result<(), ConnectionError>;
     async fn get_connection(
         &self,
@@ -618,28 +643,29 @@ pub trait RpcBuilder: Clone {
     async fn request_connect(
         &self,
         connection_id: ConnectionID,
-        own_did_uri: PeerDIDURI,        // ✅ Added: Sender's DID URI
-        peer_did_uri: PeerDIDURI,       // ✅ Added: Receiver's DID URI (for context)
-        peer_public_key: PeerKey,       // ✅ Renamed: This is sender's public key
+        own_did_uri: PeerDIDURI,  // ✅ Added: Sender's DID URI
+        peer_did_uri: PeerDIDURI, // ✅ Added: Receiver's DID URI (for context)
+        peer_public_key: PeerKey, // ✅ Renamed: This is sender's public key
     ) -> Result<(), ConnectionError>;
-    
+
     async fn request_approval(
         &self,
         connection_id: ConnectionID,
-        own_did_uri: PeerDIDURI,        // ✅ Added: Approver's DID URI
-        peer_public_key: PeerKey,       // This is approver's public key
+        own_did_uri: PeerDIDURI,  // ✅ Added: Approver's DID URI
+        peer_public_key: PeerKey, // This is approver's public key
     ) -> Result<(), ConnectionError>;
-    
+
     async fn request_remove(
-        &self, 
+        &self,
         connection_id: ConnectionID,
-        own_did_uri: PeerDIDURI,        // ✅ Added: Requester's DID URI
+        own_did_uri: PeerDIDURI, // ✅ Added: Requester's DID URI
     ) -> Result<(), ConnectionError>;
 }
 
 /// `ConnectionAPIImplBuilder` is a trait behavior that provides
 /// base application logic's handlers
-pub trait ConnectionAPIImplBuilder<TEntityAccessor>: ConnectionAPI<EntityAccessor = TEntityAccessor>
+pub trait ConnectionAPIImplBuilder<TEntityAccessor>:
+    ConnectionAPI<EntityAccessor = TEntityAccessor>
 where
     TEntityAccessor: ConnectionEntityAccessor,
 {
@@ -653,58 +679,58 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_connection_id_validation() {
         // ✅ Valid UUID
         let valid_id = "550e8400-e29b-41d4-a716-446655440000";
         assert!(ConnectionID::new(valid_id.to_string()).is_ok());
-        
+
         // ✅ Invalid UUIDs
         let invalid_ids = ["", "not-a-uuid", "123-456-789"];
         for invalid_id in invalid_ids {
             assert!(ConnectionID::new(invalid_id.to_string()).is_err());
         }
     }
-    
+
     #[test]
     fn test_peer_key_validation() {
         // ✅ Valid key (64 hex characters)
         let valid_key = "1234567890abcdef".repeat(4); // 64 chars
         assert!(PeerKey::new(valid_key).is_ok());
-        
+
         // ✅ Valid key with 0x prefix
         let key_with_prefix = format!("0x{}", "1234567890abcdef".repeat(4));
         assert!(PeerKey::new(key_with_prefix).is_ok());
-        
+
         // ✅ Invalid keys
-        assert!(PeerKey::new("short".to_string()).is_err());           // Too short
+        assert!(PeerKey::new("short".to_string()).is_err()); // Too short
         assert!(PeerKey::new("invalid_hex_chars".to_string()).is_err()); // Non-hex
-        assert!(PeerKey::new("123".to_string()).is_err());             // Odd length
+        assert!(PeerKey::new("123".to_string()).is_err()); // Odd length
     }
-    
+
     #[test]
     fn test_did_uri_validation() {
         // ✅ Valid DID
         assert!(PeerDIDURI::new("did:example:123456".to_string()).is_ok());
-        
+
         // ✅ Invalid DIDs
         assert!(PeerDIDURI::new("not-a-did".to_string()).is_err());
         assert!(PeerDIDURI::new("did:".to_string()).is_err());
         assert!(PeerDIDURI::new("did:method".to_string()).is_err());
     }
-    
+
     #[test]
     fn test_password_validation() {
         // ✅ Valid password
         assert!(PasswordValidator::validate("StrongPassword123!@#").is_ok());
-        
+
         // ✅ Invalid passwords
-        assert!(PasswordValidator::validate("").is_err());                    // Empty
-        assert!(PasswordValidator::validate("short").is_err());               // Too short
-        assert!(PasswordValidator::validate("onlylowercase").is_err());       // Missing requirements
-        assert!(PasswordValidator::validate("ONLYUPPERCASE").is_err());       // Missing requirements
-        assert!(PasswordValidator::validate("NoNumbers!@#").is_err());        // Missing numbers
-        assert!(PasswordValidator::validate("NoSpecialChars123").is_err());   // Missing special chars
+        assert!(PasswordValidator::validate("").is_err()); // Empty
+        assert!(PasswordValidator::validate("short").is_err()); // Too short
+        assert!(PasswordValidator::validate("onlylowercase").is_err()); // Missing requirements
+        assert!(PasswordValidator::validate("ONLYUPPERCASE").is_err()); // Missing requirements
+        assert!(PasswordValidator::validate("NoNumbers!@#").is_err()); // Missing numbers
+        assert!(PasswordValidator::validate("NoSpecialChars123").is_err()); // Missing special chars
     }
 }

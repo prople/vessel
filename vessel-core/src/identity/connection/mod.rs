@@ -1,6 +1,6 @@
 //! # Connection Module
 //!
-//! The `connection` module provides domain abstractions for maintaining secure, private 
+//! The `connection` module provides domain abstractions for maintaining secure, private
 //! connections between two peers in the vessel identity system.
 //!
 //! ## Overview
@@ -29,10 +29,10 @@
 //!
 //! ```rust,ignore
 //! use vessel_core::identity::connection::api::ConnectionManager;
-//! 
+//!
 //! // Example usage would go here once the API is stabilized
 //! ```
 
-pub mod types;
 pub mod api;
 pub mod connection;
+pub mod types;
