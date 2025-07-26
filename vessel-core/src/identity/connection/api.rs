@@ -325,6 +325,13 @@ async fn request_submit(
     peer_did_uri: PeerDIDURI,
     own_did_uri: PeerDIDURI,
 ) -> Result<(), ConnectionError> {
+    // Step 0: Validate that peer and own DIDs are different (PREVENT SELF-CONNECTIONS)
+    if peer_did_uri.as_ref() == own_did_uri.as_ref() {
+        return Err(ConnectionError::ValidationError(
+            "Cannot create connection to self: peer_did_uri and own_did_uri must be different".to_string()
+        ));
+    }
+    
     // Step 1: Generate unique connection ID for this request
     let connection_id = ConnectionID::generate();
     
@@ -914,8 +921,35 @@ mod tests {
         }
 
         #[tokio::test]
-        async fn test_request_submit_identical_did_uris() {
-            // Option 1: If self-connections are allowed, expect normal flow
+        async fn test_request_submit_identical_did_uris_rejected() {
+            // No mock expectations since validation should fail before any operations
+            let repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+            let (password, peer_did, _) = create_valid_test_data();
+            let api = generate_connection_api(repo, rpc);
+            
+            // Test self-connection rejection
+            let result = api.request_submit(
+                password,
+                peer_did.clone(),
+                peer_did, // Same as peer_did - should be rejected
+            ).await;
+            
+            // Should fail with ValidationError
+            assert!(result.is_err(), "Self-connection should be rejected");
+            
+            match result.unwrap_err() {
+                ConnectionError::ValidationError(msg) => {
+                    assert!(msg.contains("Cannot create connection to self"));
+                    assert!(msg.contains("peer_did_uri and own_did_uri must be different"));
+                },
+                other => panic!("Expected ValidationError, got: {:?}", other),
+            }
+        }
+
+        #[tokio::test]
+        async fn test_request_submit_different_did_uris_allowed() {
+            // This test ensures that different DIDs still work properly
             let mut repo = MockFakeRepo::new();
             repo.expect_save()
                 .times(1)
@@ -926,19 +960,38 @@ mod tests {
                 .times(1)
                 .returning(|_, _, _, _| Ok(()));
 
+            let (password, peer_did, own_did) = create_valid_test_data();
+            let api = generate_connection_api(repo, rpc);
+            
+            // Verify that different DIDs are still allowed
+            assert_ne!(peer_did.as_ref(), own_did.as_ref(), "Test data should have different DIDs");
+            
+            let result = api.request_submit(password, peer_did, own_did).await;
+            assert!(result.is_ok(), "Different DIDs should be allowed");
+        }
+
+        #[tokio::test]
+        async fn test_request_submit_self_connection_validation_early_return() {
+            // Verify that self-connection validation happens BEFORE any processing
+            // No mock expectations should be set since validation should fail immediately
+            let repo = MockFakeRepo::new(); // No expectations = will panic if called
+            let rpc = MockFakeRPCClient::new(); // No expectations = will panic if called
+            
             let (password, peer_did, _) = create_valid_test_data();
             let api = generate_connection_api(repo, rpc);
             
-            // Test connecting to self (same DID)
             let result = api.request_submit(
                 password,
                 peer_did.clone(),
-                peer_did, // Same as peer_did - self-connection
+                peer_did, // Self-connection
             ).await;
             
-            // Since the connection is being created and saved, it should succeed
-            // Self-connections appear to be allowed by the current implementation
-            assert!(result.is_ok(), "Self-connection should be allowed");
+            // Should fail immediately without calling repo or RPC
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+            
+            // If we reach this point without panics, it means repo.save() and rpc.request_connect()
+            // were never called, which is exactly what we want
         }
     }
 
