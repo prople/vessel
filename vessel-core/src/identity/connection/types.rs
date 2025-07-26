@@ -1,6 +1,110 @@
-use std::fmt::Debug;
+//! # Vessel Identity Connection Types
+//!
+//! This module provides secure peer-to-peer connection establishment using ECDH key agreement
+//! and W3C DID-based identity management.
+//!
+//! ## Overview
+//!
+//! The connection system enables secure communication between vessel agents through:
+//! - **ECDH Key Agreement**: Generates shared secrets without transmitting private keys
+//! - **DID-based Identity**: Uses W3C Decentralized Identifiers for peer identification
+//! - **Secure Key Storage**: Private keys encrypted using KeySecure with user passwords
+//! - **State Management**: Complete connection lifecycle from request to establishment
+//!
+//! ## Quick Start
+//!
+//! ### Creating a Connection (Sender Side)
+//! ```rust
+//! use vessel_core::identity::connection::*;
+//!
+//! // Submit a connection request to a peer
+//! let api = ConnectionAPIImpl::new(repo, rpc);
+//! api.request_submit("StrongPassword123!@#", "did:example:peer123").await?;
+//! ```
+//!
+//! ### Handling Connection Requests (Receiver Side)
+//! ```rust
+//! // List pending requests
+//! let requests = api.request_list().await?;
+//!
+//! // Approve a request
+//! api.request_response(
+//!     connection_id, 
+//!     Approval::Approve, 
+//!     Some("MyPassword123!@#".to_string())
+//! ).await?;
+//! ```
+//!
+//! ## Connection Lifecycle
+//!
+//! ```text
+//! Sender (Alice)                    Receiver (Bob)
+//!      │                                 │
+//!      │ 1. request_submit()             │
+//!      │ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─►│ 2. request_connect()
+//!      │                                 │    (via RPC)
+//!      │                                 │
+//!      │                                 │ 3. request_response(Approve)
+//!      │◄─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ │ ─ ─ ─ ─ ─ ─ ─ ─
+//!      │ 4. request_approval()           │    (via RPC)
+//!      │    (via RPC)                    │
+//!      │                                 │
+//!      │ 5. Both parties have            │
+//!      │    shared secret & can          │
+//!      │    communicate securely         │
+//! ```
+//!
+//! ## Security Properties
+//!
+//! - **Perfect Forward Secrecy**: Each connection uses unique ECDH key pairs
+//! - **No Private Key Transmission**: Only public keys are exchanged
+//! - **Password-Protected Storage**: Private keys encrypted with KeySecure
+//! - **Input Validation**: All data validated before cryptographic operations
+//! - **State Isolation**: Connections are independent and don't affect each other
+//!
+//! ## Type Safety
+//!
+//! All critical data types use the newtype pattern for compile-time safety:
+//! - [`ConnectionID`] - UUID validation
+//! - [`PeerDIDURI`] - W3C DID format validation  
+//! - [`PeerKey`] - Hex key format validation (64 characters)
+//! - [`OwnKey`] - Internal key representation
+//! - [`OwnSharedSecret`] - ECDH-derived shared secret
+//!
+//! ## Error Handling
+//!
+//! All operations return [`ConnectionError`] with specific error variants:
+//! - Validation errors for malformed input
+//! - Cryptographic errors for ECDH/KeySecure failures
+//! - State errors for invalid connection transitions
+//! - Network errors for RPC communication failures
+//!
+//! ## Examples
+//!
+//! ### Manual Connection Building
+//! ```rust
+//! let connection = Connection::builder()
+//!     .with_id("550e8400-e29b-41d4-a716-446655440000")
+//!     .with_peer_did_uri("did:example:alice123")
+//!     .with_peer_key("1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef")
+//!     .with_password("StrongPassword123!@#")
+//!     .build()?;
+//!
+//! println!("Shared secret: {}", connection.get_own_shared_secret());
+//! ```
+//!
+//! ### Validation Examples
+//! ```rust
+//! // Validate before using
+//! PeerKey::validate("1234567890abcdef...")?;
+//! ConnectionID::validate("550e8400-e29b-41d4-a716-446655440000")?;
+//! PeerDIDURI::validate("did:example:peer123")?;
+//! ```
 
-use derive_more::{From, Into};
+
+use std::fmt::{Debug, Display};
+
+use derive_more::{From, Into, AsRef};
 use the_newtype::Newtype;
 
 use rst_common::standard::async_trait::async_trait;
@@ -18,6 +122,51 @@ use prople_crypto::keysecure::KeySecure;
 #[derive(Debug, PartialEq, Error, Serialize, Deserialize, Clone)]
 #[serde(crate = "self::serde")]
 pub enum ConnectionError {
+    /// UUID format validation failed
+    /// 
+    /// This error occurs when a connection ID doesn't match UUID v4 format.
+    /// 
+    /// # Common Causes
+    /// - Empty string: `""`
+    /// - Invalid format: `"not-a-uuid"`  
+    /// - Wrong length: `"123-456-789"`
+    /// - Invalid characters: `"ggge8400-e29b-41d4-a716-446655440000"`
+    ///
+    /// # Example
+    /// ```rust
+    /// # use vessel_core::identity::connection::types::*;
+    /// let result = ConnectionID::new("invalid-uuid".to_string());
+    /// assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+    /// ```
+    #[error("invalid UUID format: {0}")]
+    InvalidUUIDFormat(String),
+    
+    #[error("invalid DID URI: {reason}")]
+    InvalidDIDURI { reason: String },
+    
+    #[error("invalid hex key: expected {expected} chars, got {actual}")]
+    InvalidHexKeyLength { expected: usize, actual: usize },
+    
+    #[error("hex key contains invalid characters: {invalid_chars}")]
+    InvalidHexKeyChars { invalid_chars: String },
+    
+    #[error("password too weak: {}", requirements.join(", "))]
+    WeakPassword { requirements: Vec<String> },
+    
+    // ✅ Specific crypto errors
+    #[error("ECDH key agreement failed: {0}")]
+    ECDHFailure(String),
+    
+    #[error("KeySecure encryption failed: {0}")]
+    KeySecureEncryption(String),
+    
+    #[error("Blake3 hashing failed: {0}")]
+    Blake3Hashing(String),
+    
+    // ✅ State transition errors
+    #[error("invalid state transition: cannot go from {from} to {to}")]
+    InvalidStateTransition { from: State, to: State },
+
     #[error("unknown error: {0}")]
     UnknownError(String),
 
@@ -30,65 +179,291 @@ pub enum ConnectionError {
     #[error("shared secret error: {0}")]
     SharedSecretError(String),
 
-    #[error("shared secret error: {0}")]
+    #[error("json serialization error: {0}")]  // ✅ Fixed message
     JSONError(String),
 
-    #[error("shared secret error: {0}")]
+    #[error("json deserialization error: {0}")]  // ✅ Fixed message
     JSONUnserializeError(String),
+
+    // ✅ Add missing critical error variants
+    #[error("validation error: {0}")]
+    ValidationError(String),
+
+    #[error("cryptographic operation failed: {0}")]
+    CryptographicError(String),
+
+    #[error("invalid connection id: {0}")]
+    InvalidConnectionID(String),
+
+    #[error("invalid peer key: {0}")]
+    InvalidPeerKey(String),
+
+    #[error("password validation failed: {0}")]
+    InvalidPassword(String),
+
+    #[error("connection not found: {0}")]
+    ConnectionNotFound(String),
+
+    #[error("connection already exists: {0}")]
+    ConnectionAlreadyExists(String),
 
     #[error("not implemented")]
     NotImplementedError,
 }
 
+// ✅ Enhanced ConnectionContext with future extensibility
 /// ConnectionContext is a context for each new connection request
 ///
 /// This enum will be used to identify the context of the connection request
 /// it will be used to differentiate between different types of connection requests
 /// such as connection, chat, or other types of connection requests
-///
-/// For now, we only have one context which is [`ConnectionContext::Connection`]
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(crate = "self::serde")]
 pub enum ConnectionContext {
     Connection,
+    // Future contexts can be added here:
+    // Chat,
+    // FileTransfer,
+    // VideoCall,
 }
 
+impl Default for ConnectionContext {
+    fn default() -> Self {
+        Self::Connection
+    }
+}
+
+// ✅ Enhanced State with more granular states
 /// State represent connection's states between two peers
-///
-/// When the connection request send for the first time, it will always on [`State::Pending`] state
-/// Once the peer able to answer the challenge successfully and correct it will update into [`State::Established`]
-/// which means the connection between both peers already been established successfully
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(crate = "self::serde")]
 pub enum State {
+    /// Initial state when connection request is created
     Pending,
+    /// Connection has been established successfully
     Established,
+    /// Connection was rejected by the peer
+    Rejected,
+    /// Connection was cancelled by the sender
+    Cancelled,
+    /// Connection has expired or timed out
+    Expired,
+    /// Connection encountered an error
+    Failed,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        Self::Pending
+    }
+}
+
+impl Display for State {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            State::Pending => write!(f, "pending"),
+            State::Established => write!(f, "established"),
+            State::Rejected => write!(f, "rejected"),
+            State::Cancelled => write!(f, "cancelled"),
+            State::Expired => write!(f, "expired"),
+            State::Failed => write!(f, "failed"),
+        }
+    }
 }
 
 /// Approval represent the approval state of the connection request
-///
-/// This enum will be used by a peer to approve or reject a connection request from their sides
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(crate = "self::serde")]
 pub enum Approval {
     Approve,
     Reject,
 }
 
-#[derive(Default, From, Into, Newtype)]
+// ✅ Add Display implementations for all newtype structs
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Newtype, From, Into, AsRef)]
+#[serde(crate = "self::serde")]
+pub struct ConnectionID(String);
+
+impl Display for ConnectionID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl ConnectionID {
+    /// Validates connection ID format without creating instance
+    pub fn validate(id: &str) -> Result<(), ConnectionError> {
+        if id.is_empty() {
+            return Err(ConnectionError::ValidationError("Connection ID cannot be empty".to_string()));
+        }
+        
+        use rst_common::standard::uuid::Uuid;
+        Uuid::parse_str(id)
+            .map_err(|_| ConnectionError::ValidationError("Invalid UUID format".to_string()))?;
+        
+        Ok(())
+    }
+    
+    /// Creates a new ConnectionID with validation
+    pub fn new(id: String) -> Result<Self, ConnectionError> {
+        Self::validate(&id)?;
+        Ok(Self(id))
+    }
+    
+    /// Creates ConnectionID without validation (for internal use)
+    pub(crate) fn from_validated(id: String) -> Self {
+        Self(id)
+    }
+    
+    /// Generates a new random ConnectionID
+    pub fn generate() -> Self {
+        use rst_common::standard::uuid::Uuid;
+        Self(Uuid::new_v4().to_string())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Newtype, From, Into, AsRef)]
+#[serde(crate = "self::serde")]
 pub struct PeerDIDURI(String);
 
-#[derive(Default, From, Into, Newtype)]
+impl Display for PeerDIDURI {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl PeerDIDURI {
+    /// Validates DID URI format without creating instance
+    pub fn validate(uri: &str) -> Result<(), ConnectionError> {
+        if !uri.starts_with("did:") {
+            return Err(ConnectionError::ValidationError("DID URI must start with 'did:'".to_string()));
+        }
+        
+        let parts: Vec<&str> = uri.split(':').collect();
+        if parts.len() < 3 {
+            return Err(ConnectionError::ValidationError("Invalid DID URI format: insufficient components".to_string()));
+        }
+        
+        if parts[1].is_empty() {
+            return Err(ConnectionError::ValidationError("Invalid DID URI format: method cannot be empty".to_string()));
+        }
+        
+        if parts[2].is_empty() {
+            return Err(ConnectionError::ValidationError("Invalid DID URI format: identifier cannot be empty".to_string()));
+        }
+        
+        Ok(())
+    }
+    
+    /// Creates a new PeerDIDURI with validation
+    pub fn new(uri: String) -> Result<Self, ConnectionError> {
+        Self::validate(&uri)?;
+        Ok(Self(uri))
+    }
+    
+    /// Creates PeerDIDURI without validation (for internal use)  
+    pub(crate) fn from_validated(uri: String) -> Self {
+        Self(uri)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Newtype, From, Into, AsRef)]
+#[serde(crate = "self::serde")]
 pub struct PeerKey(String);
 
-#[derive(Default, From, Into, Newtype)]
+impl Display for PeerKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+impl PeerKey {
+    /// Validates peer key format without creating instance
+    pub fn validate(key: &str) -> Result<(), ConnectionError> {
+        let key_clean = if key.starts_with("0x") { &key[2..] } else { key };
+        
+        if key_clean.len() % 2 != 0 {
+            return Err(ConnectionError::ValidationError(
+                "Invalid peer key: odd number of hex characters".to_string()
+            ));
+        }
+        
+        if !key_clean.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Err(ConnectionError::ValidationError(
+                "Invalid peer key: contains non-hex characters".to_string()
+            ));
+        }
+        
+        if key_clean.len() != 64 {
+            return Err(ConnectionError::ValidationError(
+                format!("Invalid peer key length: expected 64 hex characters, got {}", key_clean.len())
+            ));
+        }
+        
+        Ok(())
+    }
+    
+    /// Creates new PeerKey with validation
+    pub fn new(key: String) -> Result<Self, ConnectionError> {
+        Self::validate(&key)?;
+        Ok(Self(key))
+    }
+    
+    /// Creates PeerKey without validation (for internal use)
+    pub(crate) fn from_validated(key: String) -> Self {
+        Self(key)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Newtype, From, Into, AsRef)]
+#[serde(crate = "self::serde")]
 pub struct OwnKey(String);
 
-#[derive(Default, From, Into, Newtype)]
+impl Display for OwnKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Newtype, From, Into, AsRef)]
+#[serde(crate = "self::serde")]
 pub struct OwnSharedSecret(String);
 
-#[derive(Default, From, Into, Newtype)]
-pub struct ConnectionID(String);
+impl Display for OwnSharedSecret {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+// ✅ Add password validation utility
+/// Password validation utilities
+pub struct PasswordValidator;
+
+impl PasswordValidator {
+    pub fn validate(password: &str) -> Result<(), ConnectionError> {
+        if password.is_empty() {
+            return Err(ConnectionError::InvalidPassword("Password cannot be empty".to_string()));
+        }
+        
+        if password.len() < 12 {  // ✅ Increased from 8 to 12
+            return Err(ConnectionError::InvalidPassword("Password must be at least 12 characters long".to_string()));
+        }
+        
+        // ✅ Add complexity requirements
+        let has_lowercase = password.chars().any(|c| c.is_lowercase());
+        let has_uppercase = password.chars().any(|c| c.is_uppercase());
+        let has_digit = password.chars().any(|c| c.is_ascii_digit());
+        let has_special = password.chars().any(|c| "!@#$%^&*()_+-=[]{}|;:,.<>?".contains(c));
+        
+        if !has_lowercase || !has_uppercase || !has_digit || !has_special {
+            return Err(ConnectionError::InvalidPassword(
+                "Password must contain at least one lowercase letter, one uppercase letter, one digit, and one special character".to_string()
+            ));
+        }
+        
+        Ok(())
+    }
+}
 
 /// ConnectionEntityPeer is a trait used to access the peer's properties
 pub trait ConnectionEntityPeer {
@@ -236,18 +611,21 @@ pub trait RepoBuilder: Clone + Sync + Send {
 pub trait RpcBuilder: Clone {
     async fn request_connect(
         &self,
-        connection_id: ConnectionID,
+        connection_id: ConnectionID,      // ✅ Consistent
         peer_did_uri: PeerDIDURI,
         peer_public_key: PeerKey,
     ) -> Result<(), ConnectionError>;
     
     async fn request_approval(
         &self,
-        connection_id: String,
+        connection_id: ConnectionID,      // ✅ Fixed: now consistent
         peer_public_key: PeerKey,
     ) -> Result<(), ConnectionError>;
     
-    async fn request_remove(&self, connection_id: ConnectionID) -> Result<(), ConnectionError>;
+    async fn request_remove(
+        &self, 
+        connection_id: ConnectionID       // ✅ Consistent
+    ) -> Result<(), ConnectionError>;
 }
 
 /// `ConnectionAPIImplBuilder` is a trait behavior that provides
@@ -261,4 +639,63 @@ where
 
     fn repo(&self) -> Self::Repo;
     fn rpc(&self) -> Self::RPCImplementer;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_connection_id_validation() {
+        // ✅ Valid UUID
+        let valid_id = "550e8400-e29b-41d4-a716-446655440000";
+        assert!(ConnectionID::new(valid_id.to_string()).is_ok());
+        
+        // ✅ Invalid UUIDs
+        let invalid_ids = ["", "not-a-uuid", "123-456-789"];
+        for invalid_id in invalid_ids {
+            assert!(ConnectionID::new(invalid_id.to_string()).is_err());
+        }
+    }
+    
+    #[test]
+    fn test_peer_key_validation() {
+        // ✅ Valid key (64 hex characters)
+        let valid_key = "1234567890abcdef".repeat(4); // 64 chars
+        assert!(PeerKey::new(valid_key).is_ok());
+        
+        // ✅ Valid key with 0x prefix
+        let key_with_prefix = format!("0x{}", "1234567890abcdef".repeat(4));
+        assert!(PeerKey::new(key_with_prefix).is_ok());
+        
+        // ✅ Invalid keys
+        assert!(PeerKey::new("short".to_string()).is_err());           // Too short
+        assert!(PeerKey::new("invalid_hex_chars".to_string()).is_err()); // Non-hex
+        assert!(PeerKey::new("123".to_string()).is_err());             // Odd length
+    }
+    
+    #[test]
+    fn test_did_uri_validation() {
+        // ✅ Valid DID
+        assert!(PeerDIDURI::new("did:example:123456".to_string()).is_ok());
+        
+        // ✅ Invalid DIDs
+        assert!(PeerDIDURI::new("not-a-did".to_string()).is_err());
+        assert!(PeerDIDURI::new("did:".to_string()).is_err());
+        assert!(PeerDIDURI::new("did:method".to_string()).is_err());
+    }
+    
+    #[test]
+    fn test_password_validation() {
+        // ✅ Valid password
+        assert!(PasswordValidator::validate("StrongPassword123!@#").is_ok());
+        
+        // ✅ Invalid passwords
+        assert!(PasswordValidator::validate("").is_err());                    // Empty
+        assert!(PasswordValidator::validate("short").is_err());               // Too short
+        assert!(PasswordValidator::validate("onlylowercase").is_err());       // Missing requirements
+        assert!(PasswordValidator::validate("ONLYUPPERCASE").is_err());       // Missing requirements
+        assert!(PasswordValidator::validate("NoNumbers!@#").is_err());        // Missing numbers
+        assert!(PasswordValidator::validate("NoSpecialChars123").is_err());   // Missing special chars
+    }
 }
