@@ -233,13 +233,17 @@ impl Default for ConnectionContext {
     }
 }
 
-// ✅ Enhanced State with more granular states
+// ✅ Enhanced State with more granular states for connection lifecycle
 /// State represent connection's states between two peers
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq, Hash)]
 #[serde(crate = "self::serde")]
 pub enum State {
     /// Initial state when connection request is created
     Pending,
+    /// Waiting for peer response (we initiated the connection request)
+    PendingOutgoing,
+    /// Received request, waiting for our response (peer initiated the request)
+    PendingIncoming,
     /// Connection has been established successfully
     Established,
     /// Connection was rejected by the peer
@@ -262,6 +266,8 @@ impl Display for State {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             State::Pending => write!(f, "pending"),
+            State::PendingOutgoing => write!(f, "pending_outgoing"),
+            State::PendingIncoming => write!(f, "pending_incoming"),
             State::Established => write!(f, "established"),
             State::Rejected => write!(f, "rejected"),
             State::Cancelled => write!(f, "cancelled"),
@@ -512,26 +518,24 @@ pub trait ConnectionEntityAccessor:
 pub trait ConnectionAPI: Clone {
     type EntityAccessor: ConnectionEntityAccessor;
 
-    /// request_connect is a method to send a connection request to the peer
-    ///
-    /// It will send a connection request to the peer with the given `peer_did_uri` and `peer_public_key`.
-    /// The `peer_did_uri` is the DID URI of the sender's peer, and `peer_public_key` is the public key of the sender's peer.
-    /// The `connection_id` is the unique identifier for the connection request.
+    /// Handles incoming connection requests from remote peers.
+    /// 
+    /// This method is called when a peer sends a connection request via RPC.
+    /// The sender provides their DID URI so the receiver knows who is requesting connection.
     async fn request_connect(
         &self,
         connection_id: ConnectionID,
-        peer_did_uri: PeerDIDURI,
-        peer_public_key: PeerKey,
+        sender_did_uri: PeerDIDURI,     // ✅ Added: Who is making the request
+        receiver_did_uri: PeerDIDURI,   // ✅ Added: Who should receive the request  
+        sender_public_key: PeerKey,     // ✅ Renamed for clarity
     ) -> Result<(), ConnectionError>;
 
-    /// request_approval is a method to notify the peer to approve the connection request
-    ///
-    /// When the sender got this method called, it means the peer already approved the connection request,
-    /// and the sender should update their [`ConnectionEntityAccessor`] and `peer_public_key`.
+    /// Handles connection approval notifications from remote peers.
     async fn request_approval(
         &self,
         connection_id: ConnectionID,
-        peer_public_key: PeerKey,
+        approver_did_uri: PeerDIDURI,   // ✅ Added: Who approved the connection
+        approver_public_key: PeerKey,   // ✅ Renamed for clarity
     ) -> Result<(), ConnectionError>;
 
     /// request_response is a method to send the response of the connection request
@@ -565,15 +569,17 @@ pub trait ConnectionAPI: Clone {
 
     /// request_submit is a method to submit the connection request
     ///
-    /// It will send a connection request to the peer with the given `password` and `peer_did_uri`.
-    /// The `password` used to generate the [`KeySecure`] object for the own key,
-    /// and `peer_did_uri` is the DID URI of the peer.
+    /// It will send a connection request to the peer with the given `password`, `peer_did_uri`, and `own_did_uri`.
+    /// The `password` is used to generate the [`KeySecure`] object for the own key,
+    /// `peer_did_uri` is the DID URI of the target peer, and `own_did_uri` is the DID URI of the sender.
     ///
-    /// When this method called, the sender's vessel should call the [`request_connect`] method to notify the peer
+    /// When this method is called, the sender's vessel should call the [`request_connect`] method to notify the peer
+    /// with proper identity context so the receiver knows who is making the request.
     async fn request_submit(
         &self,
         password: String,
-        peer_did_uri: String,
+        peer_did_uri: PeerDIDURI,       // ✅ Changed from String to PeerDIDURI
+        own_did_uri: PeerDIDURI,        // ✅ Changed from String to PeerDIDURI
     ) -> Result<(), ConnectionError>;
 
     /// request_submissions is a method to get all connection requests that have been submitted
@@ -611,20 +617,23 @@ pub trait RepoBuilder: Clone + Sync + Send {
 pub trait RpcBuilder: Clone {
     async fn request_connect(
         &self,
-        connection_id: ConnectionID,      // ✅ Consistent
-        peer_did_uri: PeerDIDURI,
-        peer_public_key: PeerKey,
+        connection_id: ConnectionID,
+        own_did_uri: PeerDIDURI,        // ✅ Added: Sender's DID URI
+        peer_did_uri: PeerDIDURI,       // ✅ Added: Receiver's DID URI (for context)
+        peer_public_key: PeerKey,       // ✅ Renamed: This is sender's public key
     ) -> Result<(), ConnectionError>;
     
     async fn request_approval(
         &self,
-        connection_id: ConnectionID,      // ✅ Fixed: now consistent
-        peer_public_key: PeerKey,
+        connection_id: ConnectionID,
+        own_did_uri: PeerDIDURI,        // ✅ Added: Approver's DID URI
+        peer_public_key: PeerKey,       // This is approver's public key
     ) -> Result<(), ConnectionError>;
     
     async fn request_remove(
         &self, 
-        connection_id: ConnectionID       // ✅ Consistent
+        connection_id: ConnectionID,
+        own_did_uri: PeerDIDURI,        // ✅ Added: Requester's DID URI
     ) -> Result<(), ConnectionError>;
 }
 
