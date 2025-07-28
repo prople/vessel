@@ -273,12 +273,25 @@ where
     ///
     /// # Implementation Notes
     ///
-    /// Future implementation should:
     /// 1. Locate and remove the connection request from repository
-    /// 2. Clean up any associated cryptographic materials
-    /// 3. Handle cases where the request doesn't exist
-    async fn request_remove(&self, _connection_id: ConnectionID) -> Result<(), ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+    /// 2. Handle cases where the request doesn't exist
+    async fn request_remove(&self, connection_id: ConnectionID) -> Result<(), ConnectionError> {
+        // Step 1: Try to fetch the connection to ensure it exists
+        match self.repo.get_connection(connection_id.clone()).await {
+            Ok(_) => {
+                // Step 2: Remove from repository
+                self.repo.remove(connection_id).await.map_err(|e| {
+                    ConnectionError::EntityError(format!("Failed to remove connection: {}", e))
+                })
+            }
+            Err(ConnectionError::EntityError(_)) | Err(ConnectionError::InvalidConnectionID(_)) => {
+                Err(ConnectionError::InvalidConnectionID(format!(
+                    "Connection not found: {}",
+                    connection_id
+                )))
+            }
+            Err(e) => Err(e),
+        }
     }
 
     /// Submits a new connection request to a remote peer.
@@ -1110,11 +1123,99 @@ mod tests {
     /// Tests for `request_remove` method (when implemented)
     mod request_remove_tests {
         use super::*;
+        use rst_common::with_tokio::tokio;
 
         #[tokio::test]
-        async fn test_request_remove_placeholder() {
-            // Placeholder test for when method is implemented
-            assert!(true, "Placeholder for request_remove tests");
+        async fn test_request_remove_success() {
+            let mut repo = MockFakeRepo::new();
+            let connection_id = ConnectionID::generate();
+
+            let cloned_connection_id_1 = connection_id.clone();
+            let cloned_connection_id_2 = connection_id.clone();
+
+            // Simulate connection exists
+            repo.expect_get_connection()
+                .times(1)
+                .withf(move |id| id == &cloned_connection_id_1)
+                .returning(|_| Ok(Connection::builder()
+                    .with_id(ConnectionID::from("550e8400-e29b-41d4-a716-446655440000".to_string()))
+                    .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
+                    .with_password("StrongPassword123!@#")
+                    .build()
+                    .unwrap()));
+
+            // Simulate successful removal
+            repo.expect_remove()
+                .times(1)
+                .withf(move |id| id == &cloned_connection_id_2)
+                .returning(|_| Ok(()));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_remove(connection_id.clone()).await;
+            assert!(result.is_ok(), "Connection removal should succeed");
+        }
+
+        #[tokio::test]
+        async fn test_request_remove_not_found() {
+            let mut repo = MockFakeRepo::new();
+            let connection_id = ConnectionID::generate();
+
+            let cloned_connection_id_1 = connection_id.clone();
+            let cloned_connection_id_2 = connection_id.clone();
+
+            // Simulate connection not found
+            repo.expect_get_connection()
+                .times(1)
+                .withf(move |id| id == &cloned_connection_id_1)
+                .returning(|_| Err(ConnectionError::InvalidConnectionID("not found".to_string())));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_remove(cloned_connection_id_2.clone()).await;
+            assert!(result.is_err(), "Should error if connection not found");
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::InvalidConnectionID(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_remove_repo_failure() {
+            let mut repo = MockFakeRepo::new();
+            let connection_id = ConnectionID::generate();
+
+            let cloned_connection_id_1 = connection_id.clone();
+            let cloned_connection_id_2 = connection_id.clone();
+
+            // Simulate connection exists
+            repo.expect_get_connection()
+                .times(1)
+                .withf(move |id| id == &connection_id)
+                .returning(|_| Ok(Connection::builder()
+                    .with_id(ConnectionID::from("550e8400-e29b-41d4-a716-446655440000".to_string()))
+                    .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
+                    .with_password("StrongPassword123!@#")
+                    .build()
+                    .unwrap()));
+
+            // Simulate repo remove failure
+            repo.expect_remove()
+                .times(1)
+                .withf(move |id| id == &cloned_connection_id_1)
+                .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_remove(cloned_connection_id_2.clone()).await;
+            assert!(result.is_err(), "Should error if repo remove fails");
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
         }
     }
 
