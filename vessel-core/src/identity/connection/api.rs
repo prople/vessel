@@ -260,7 +260,8 @@ where
     /// Removes a connection request from local storage.
     ///
     /// This method is typically called via RPC when a peer cancels their
-    /// connection request. It removes the request from local storage.
+    /// connection request, or locally when a user wishes to delete a pending or failed request.
+    /// It ensures the connection exists before attempting removal, and returns a clear error if not.
     ///
     /// # Arguments
     ///
@@ -269,12 +270,19 @@ where
     /// # Returns
     ///
     /// * `Ok(())` - Connection request removed successfully
-    /// * `Err(ConnectionError)` - Error occurred during removal
+    /// * `Err(ConnectionError)` - Error occurred during removal (not found, repository failure, etc.)
     ///
-    /// # Implementation Notes
+    /// # Implementation Details
     ///
-    /// 1. Locate and remove the connection request from repository
-    /// 2. Handle cases where the request doesn't exist
+    /// 1. Checks if the connection exists in the repository.
+    /// 2. If found, removes it from persistent storage.
+    /// 3. If not found, returns a `ConnectionError::InvalidConnectionID`.
+    /// 4. Any repository errors are wrapped in `ConnectionError::EntityError`.
+    ///
+    /// # Security
+    ///
+    /// All cryptographic materials associated with the connection are deleted as part of entity removal.
+    /// No additional cleanup is required.
     async fn request_remove(&self, connection_id: ConnectionID) -> Result<(), ConnectionError> {
         // Step 1: Try to fetch the connection to ensure it exists
         match self.repo.get_connection(connection_id.clone()).await {
@@ -1137,12 +1145,16 @@ mod tests {
             repo.expect_get_connection()
                 .times(1)
                 .withf(move |id| id == &cloned_connection_id_1)
-                .returning(|_| Ok(Connection::builder()
-                    .with_id(ConnectionID::from("550e8400-e29b-41d4-a716-446655440000".to_string()))
-                    .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap()));
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::from(
+                            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+                        ))
+                        .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
+                        .with_password("StrongPassword123!@#")
+                        .build()
+                        .unwrap())
+                });
 
             // Simulate successful removal
             repo.expect_remove()
@@ -1169,7 +1181,11 @@ mod tests {
             repo.expect_get_connection()
                 .times(1)
                 .withf(move |id| id == &cloned_connection_id_1)
-                .returning(|_| Err(ConnectionError::InvalidConnectionID("not found".to_string())));
+                .returning(|_| {
+                    Err(ConnectionError::InvalidConnectionID(
+                        "not found".to_string(),
+                    ))
+                });
 
             let rpc = MockFakeRPCClient::new();
             let api = generate_connection_api(repo, rpc);
@@ -1194,12 +1210,16 @@ mod tests {
             repo.expect_get_connection()
                 .times(1)
                 .withf(move |id| id == &connection_id)
-                .returning(|_| Ok(Connection::builder()
-                    .with_id(ConnectionID::from("550e8400-e29b-41d4-a716-446655440000".to_string()))
-                    .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap()));
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::from(
+                            "550e8400-e29b-41d4-a716-446655440000".to_string(),
+                        ))
+                        .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
+                        .with_password("StrongPassword123!@#")
+                        .build()
+                        .unwrap())
+                });
 
             // Simulate repo remove failure
             repo.expect_remove()
