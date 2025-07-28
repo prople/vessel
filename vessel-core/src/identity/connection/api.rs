@@ -417,8 +417,9 @@ where
     ///
     /// # Implementation Details
     ///
-    /// 1. Query repository for all connections in outgoing states.
-    /// 2. Return the filtered list.
+    /// - Queries the repository for connections in `PendingOutgoing` and `Established` states.
+    /// - Returns the full list of matching connections.
+    /// - Errors are wrapped in `ConnectionError::EntityError`.
     async fn request_submissions(&self) -> Result<Vec<Self::EntityAccessor>, ConnectionError> {
         // Outgoing states: PendingOutgoing, Established
         let outgoing_states = vec![State::PendingOutgoing, State::Established];
@@ -440,8 +441,9 @@ where
     ///
     /// # Implementation Details
     ///
-    /// 1. Query repository for all connections in incoming states.
-    /// 2. Return the filtered list.
+    /// - Queries the repository for connections in `PendingIncoming` and `Established` states.
+    /// - Returns the full list of matching connections.
+    /// - Errors are wrapped in `ConnectionError::EntityError`.
     async fn request_list(&self) -> Result<Vec<Self::EntityAccessor>, ConnectionError> {
         // Incoming states: PendingIncoming, Established
         let incoming_states = vec![State::PendingIncoming, State::Established];
