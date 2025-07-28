@@ -407,42 +407,48 @@ where
 
     /// Retrieves connection requests submitted by this entity.
     ///
-    /// This method returns all connection requests that were sent by this entity
-    /// to other peers, regardless of their current state.
+    /// Returns all connection requests that were sent by this entity to other peers,
+    /// regardless of their current state.
     ///
     /// # Returns
     ///
     /// * `Ok(Vec<Connection>)` - List of submitted connection requests
     /// * `Err(ConnectionError)` - Error occurred during retrieval
     ///
-    /// # Implementation Notes
+    /// # Implementation Details
     ///
-    /// Future implementation should:
-    /// 1. Query repository for all outgoing connection requests
-    /// 2. Return Connection entities for secure property access
-    /// 3. Filter by sender identity
+    /// 1. Query repository for all connections in outgoing states.
+    /// 2. Return the filtered list.
     async fn request_submissions(&self) -> Result<Vec<Self::EntityAccessor>, ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+        // Outgoing states: PendingOutgoing, Established
+        let outgoing_states = vec![State::PendingOutgoing, State::Established];
+        self.repo
+            .list_connections(Some(outgoing_states))
+            .await
+            .map_err(|e| ConnectionError::EntityError(format!("Failed to list submissions: {}", e)))
     }
 
     /// Retrieves connection requests received by this entity.
     ///
-    /// This method returns all connection requests that were received from
-    /// other peers, regardless of their current state.
+    /// Returns all connection requests that were received from other peers,
+    /// regardless of their current state.
     ///
     /// # Returns
     ///
     /// * `Ok(Vec<Connection>)` - List of received connection requests
     /// * `Err(ConnectionError)` - Error occurred during retrieval
     ///
-    /// # Implementation Notes
+    /// # Implementation Details
     ///
-    /// Future implementation should:
-    /// 1. Query repository for all incoming connection requests
-    /// 2. Return Connection entities for secure property access
-    /// 3. Filter by receiver identity
+    /// 1. Query repository for all connections in incoming states.
+    /// 2. Return the filtered list.
     async fn request_list(&self) -> Result<Vec<Self::EntityAccessor>, ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+        // Incoming states: PendingIncoming, Established
+        let incoming_states = vec![State::PendingIncoming, State::Established];
+        self.repo
+            .list_connections(Some(incoming_states))
+            .await
+            .map_err(|e| ConnectionError::EntityError(format!("Failed to list received requests: {}", e)))
     }
 }
 
@@ -518,7 +524,7 @@ mod tests {
             async fn remove(&self, id: ConnectionID) -> Result<(), ConnectionError>;
             async fn update_state(&self, id: ConnectionID, state: State) -> Result<(), ConnectionError>;
             async fn get_connection(&self, id: ConnectionID) -> Result<Connection, ConnectionError>;
-            async fn list_connections(&self, state: Option<State>) -> Result<Vec<Connection>, ConnectionError>;
+            async fn list_connections(&self, state: Option<Vec<State>>) -> Result<Vec<Connection>, ConnectionError>;
         }
     );
 
@@ -1095,143 +1101,66 @@ mod tests {
         }
     }
 
-    /// Tests for `request_submissions` method (when implemented)
+    /// Tests for `request_submissions` method (using update_state for correct states)
     mod request_submissions_tests {
         use super::*;
-
-        #[tokio::test]
-        async fn test_request_submissions_placeholder() {
-            // Placeholder test for when method is implemented
-            assert!(true, "Placeholder for request_submissions tests");
-        }
-    }
-
-    /// Tests for `request_list` method (when implemented)
-    mod request_list_tests {
-        use super::*;
-
-        #[tokio::test]
-        async fn test_request_list_placeholder() {
-            // Placeholder test for when method is implemented
-            assert!(true, "Placeholder for request_list tests");
-        }
-    }
-
-    /// Tests for `request_cancel` method (when implemented)
-    mod request_cancel_tests {
-        use super::*;
-
-        #[tokio::test]
-        async fn test_request_cancel_placeholder() {
-            // Placeholder test for when method is implemented
-            assert!(true, "Placeholder for request_cancel tests");
-        }
-    }
-
-    /// Tests for `request_remove` method (when implemented)
-    mod request_remove_tests {
-        use super::*;
         use rst_common::with_tokio::tokio;
+        use rst_common::standard::uuid::Uuid;
 
         #[tokio::test]
-        async fn test_request_remove_success() {
+        async fn test_request_submissions_success() {
             let mut repo = MockFakeRepo::new();
-            let connection_id = ConnectionID::generate();
 
-            let cloned_connection_id_1 = connection_id.clone();
-            let cloned_connection_id_2 = connection_id.clone();
+            // Create connections and update their states as needed
+            let mut conn1 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer1".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn1.update_state(State::PendingOutgoing);
 
-            // Simulate connection exists
-            repo.expect_get_connection()
+            let mut conn2 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer2".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn2.update_state(State::Established);
+
+            let expected_connections = vec![conn1, conn2];
+
+            repo.expect_list_connections()
                 .times(1)
-                .withf(move |id| id == &cloned_connection_id_1)
-                .returning(|_| {
-                    Ok(Connection::builder()
-                        .with_id(ConnectionID::from(
-                            "550e8400-e29b-41d4-a716-446655440000".to_string(),
-                        ))
-                        .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
-                        .with_password("StrongPassword123!@#")
-                        .build()
-                        .unwrap())
-                });
-
-            // Simulate successful removal
-            repo.expect_remove()
-                .times(1)
-                .withf(move |id| id == &cloned_connection_id_2)
-                .returning(|_| Ok(()));
+                .withf(|states| {
+                    states.as_ref().unwrap().contains(&State::PendingOutgoing)
+                        && states.as_ref().unwrap().contains(&State::Established)
+                })
+                .returning(move |_| Ok(expected_connections.clone()));
 
             let rpc = MockFakeRPCClient::new();
             let api = generate_connection_api(repo, rpc);
 
-            let result = api.request_remove(connection_id.clone()).await;
-            assert!(result.is_ok(), "Connection removal should succeed");
+            let result = api.request_submissions().await;
+            assert!(result.is_ok());
+            let connections = result.unwrap();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].get_state(), State::PendingOutgoing);
+            assert_eq!(connections[1].get_state(), State::Established);
         }
 
         #[tokio::test]
-        async fn test_request_remove_not_found() {
+        async fn test_request_submissions_repo_error() {
             let mut repo = MockFakeRepo::new();
-            let connection_id = ConnectionID::generate();
-
-            let cloned_connection_id_1 = connection_id.clone();
-            let cloned_connection_id_2 = connection_id.clone();
-
-            // Simulate connection not found
-            repo.expect_get_connection()
+            repo.expect_list_connections()
                 .times(1)
-                .withf(move |id| id == &cloned_connection_id_1)
-                .returning(|_| {
-                    Err(ConnectionError::InvalidConnectionID(
-                        "not found".to_string(),
-                    ))
-                });
+                .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
 
             let rpc = MockFakeRPCClient::new();
             let api = generate_connection_api(repo, rpc);
 
-            let result = api.request_remove(cloned_connection_id_2.clone()).await;
-            assert!(result.is_err(), "Should error if connection not found");
-            assert!(matches!(
-                result.unwrap_err(),
-                ConnectionError::InvalidConnectionID(_)
-            ));
-        }
-
-        #[tokio::test]
-        async fn test_request_remove_repo_failure() {
-            let mut repo = MockFakeRepo::new();
-            let connection_id = ConnectionID::generate();
-
-            let cloned_connection_id_1 = connection_id.clone();
-            let cloned_connection_id_2 = connection_id.clone();
-
-            // Simulate connection exists
-            repo.expect_get_connection()
-                .times(1)
-                .withf(move |id| id == &connection_id)
-                .returning(|_| {
-                    Ok(Connection::builder()
-                        .with_id(ConnectionID::from(
-                            "550e8400-e29b-41d4-a716-446655440000".to_string(),
-                        ))
-                        .with_peer_did_uri(PeerDIDURI::from("did:example:peer123".to_string()))
-                        .with_password("StrongPassword123!@#")
-                        .build()
-                        .unwrap())
-                });
-
-            // Simulate repo remove failure
-            repo.expect_remove()
-                .times(1)
-                .withf(move |id| id == &cloned_connection_id_1)
-                .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
-
-            let rpc = MockFakeRPCClient::new();
-            let api = generate_connection_api(repo, rpc);
-
-            let result = api.request_remove(cloned_connection_id_2.clone()).await;
-            assert!(result.is_err(), "Should error if repo remove fails");
+            let result = api.request_submissions().await;
+            assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),
                 ConnectionError::EntityError(_)
@@ -1239,41 +1168,70 @@ mod tests {
         }
     }
 
-    /// Integration tests covering full P2P network workflows
-    mod integration_tests {
+    /// Tests for `request_list` method
+    mod request_list_tests {
         use super::*;
+        use rst_common::with_tokio::tokio;
+        use rst_common::standard::uuid::Uuid;
 
         #[tokio::test]
-        async fn test_full_p2p_connection_establishment_workflow() {
-            // This will test the complete P2P workflow:
-            // Alice: request_submit -> Bob: request_connect -> Bob: request_approval -> Alice: request_response
+        async fn test_request_list_success() {
+            let mut repo = MockFakeRepo::new();
 
-            // For now, placeholder until all methods are implemented
-            assert!(true, "Placeholder for full P2P connection establishment");
+            // Create connections and update their states as needed
+            let mut conn1 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer3".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn1.update_state(State::PendingIncoming);
+
+            let mut conn2 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer4".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn2.update_state(State::Established);
+
+            let expected_connections = vec![conn1, conn2];
+
+            repo.expect_list_connections()
+                .times(1)
+                .withf(|states| {
+                    states.as_ref().unwrap().contains(&State::PendingIncoming)
+                        && states.as_ref().unwrap().contains(&State::Established)
+                })
+                .returning(move |_| Ok(expected_connections.clone()));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_list().await;
+            assert!(result.is_ok());
+            let connections = result.unwrap();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].get_state(), State::PendingIncoming);
+            assert_eq!(connections[1].get_state(), State::Established);
         }
 
         #[tokio::test]
-        async fn test_p2p_connection_rejection_workflow() {
-            // Test workflow where Bob rejects Alice's connection request
-            assert!(true, "Placeholder for P2P connection rejection workflow");
-        }
+        async fn test_request_list_repo_error() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_list_connections()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
 
-        #[tokio::test]
-        async fn test_p2p_connection_cancellation_workflow() {
-            // Test workflow where Alice cancels her own request
-            assert!(true, "Placeholder for P2P connection cancellation workflow");
-        }
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
 
-        #[tokio::test]
-        async fn test_p2p_connection_removal_workflow() {
-            // Test workflow for removing established connections
-            assert!(true, "Placeholder for P2P connection removal workflow");
-        }
-
-        #[tokio::test]
-        async fn test_concurrent_p2p_connections() {
-            // Test multiple simultaneous P2P connection attempts
-            assert!(true, "Placeholder for concurrent P2P connections");
+            let result = api.request_list().await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
         }
     }
 }

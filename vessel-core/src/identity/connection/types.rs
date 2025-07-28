@@ -632,7 +632,7 @@ pub trait RepoBuilder: Clone + Sync + Send {
     ) -> Result<Self::EntityAccessor, ConnectionError>;
     async fn list_connections(
         &self,
-        state: Option<State>,
+        states: Option<Vec<State>>,
     ) -> Result<Vec<Self::EntityAccessor>, ConnectionError>;
 }
 
