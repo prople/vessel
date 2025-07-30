@@ -501,9 +501,9 @@ pub trait ConnectionEntityPeer {
 
 /// ConnectionEntityOwn is a trait used to access the own's properties
 pub trait ConnectionEntityOwn {
-    fn get_own_key(&self) -> OwnKey;
-    fn get_own_keysecure(&self) -> KeySecure;
-    fn get_own_shared_secret(&self) -> OwnSharedSecret;
+    fn get_own_key(&self) -> Option<OwnKey>;
+    fn get_own_keysecure(&self) -> Option<KeySecure>;
+    fn get_own_shared_secret(&self) -> Option<OwnSharedSecret>;
 }
 
 /// `ConnectionEntityAccessor` it's a special trait used to access main Connection entity

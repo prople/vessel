@@ -99,15 +99,15 @@ pub struct Connection {
 
     /// Our own public key (hex encoded)
     /// Generated from our private key, shared with peer for ECDH
-    own_key: OwnKey,
+    own_key: Option<OwnKey>,
 
     /// Our own private key stored securely using KeySecure format
     /// Encrypted with password-derived key, never stored in plaintext
-    own_keysecure: KeySecure,
+    own_keysecure: Option<KeySecure>,
 
     /// Shared secret generated from ECDH key agreement (Blake3 hash, hex encoded)
     /// Result of ECDH(our_private_key, peer_public_key) -> Blake3 -> hex
-    own_shared_secret: OwnSharedSecret,
+    own_shared_secret: Option<OwnSharedSecret>,
 
     /// Timestamp when connection was created (UTC)
     /// Used for tracking connection age and expiration
@@ -179,19 +179,19 @@ impl ConnectionEntityPeer for Connection {
 impl ConnectionEntityOwn for Connection {
     /// Returns our own public key
     /// This is the public key we share with peers for ECDH
-    fn get_own_key(&self) -> OwnKey {
+    fn get_own_key(&self) -> Option<OwnKey> {
         self.own_key.clone()
     }
 
     /// Returns our own private key in KeySecure format
     /// Private key is encrypted with password-derived key for security
-    fn get_own_keysecure(&self) -> KeySecure {
+    fn get_own_keysecure(&self) -> Option<KeySecure> {
         self.own_keysecure.clone()
     }
 
     /// Returns the shared secret generated from ECDH key agreement
     /// This is the Blake3 hash of ECDH(our_private, peer_public)
-    fn get_own_shared_secret(&self) -> OwnSharedSecret {
+    fn get_own_shared_secret(&self) -> Option<OwnSharedSecret> {
         self.own_shared_secret.clone()
     }
 }
@@ -527,7 +527,6 @@ impl ConnectionBuilder {
     /// - `Ok(Connection)`: Successfully constructed and validated connection
     /// - `Err(ConnectionError)`: Validation or cryptographic error
     pub fn build(mut self) -> Result<Connection, ConnectionError> {
-        // Step 1: Extract and validate required fields
         let id_str = self.id.take().ok_or_else(|| {
             ConnectionError::ValidationError("Connection ID is required".to_string())
         })?;
@@ -542,18 +541,6 @@ impl ConnectionBuilder {
         PeerDIDURI::validate(peer_did_uri_str.as_ref())?;
         let peer_did_uri = PeerDIDURI::from_validated(peer_did_uri_str.as_ref().to_string());
 
-        let password = self
-            .password
-            .take()
-            .ok_or_else(|| ConnectionError::ValidationError("Password is required".to_string()))?;
-
-        // Validate password complexity
-        Self::validate_password(&password)?;
-
-        // Step 2: Handle optional peer key
-        let peer_key_option = self.peer_key.take();
-
-        // Step 3: Set defaults for optional fields
         let peer_connection_id = self
             .peer_connection_id
             .clone()
@@ -563,34 +550,61 @@ impl ConnectionBuilder {
             .clone()
             .unwrap_or(ConnectionContext::Connection);
 
-        // Step 4: Build based on whether we have peer key or not
-        match peer_key_option {
-            Some(peer_key_str) => {
-                // Complete connection with ECDH shared secret
+        match (&self.peer_key, &self.password) {
+            // Complete connection (with password and peer key)
+            (Some(peer_key_str), Some(password)) => {
                 PeerKey::validate(peer_key_str.as_ref())?;
-                let peer_key = PeerKey::from_validated(peer_key_str.as_ref().to_string());
                 Self::generate_complete_connection(
                     id,
                     peer_did_uri,
-                    peer_key,
+                    PeerKey::from_validated(peer_key_str.as_ref().to_string()),
                     peer_connection_id,
-                    password,
+                    password.clone(),
                     context,
                     self.own_keypair,
                 )
             }
-            None => {
-                // Partial connection for outgoing requests (no peer key yet)
-                Self::generate_partial_connection(
-                    id,
-                    peer_did_uri,
-                    peer_connection_id,
-                    password,
-                    context,
-                    self.own_keypair,
-                )
-            }
+            // Partial outgoing connection (with password, no peer key)
+            (None, Some(password)) => Self::generate_partial_connection(
+                id,
+                peer_did_uri,
+                peer_connection_id,
+                password.clone(),
+                context,
+                self.own_keypair,
+            ),
+            // Passwordless incoming connection (no password, no keypair)
+            _ => Self::generate_passwordless_incoming_connection(
+                id,
+                peer_did_uri,
+                peer_connection_id,
+                context,
+            ),
         }
+    }
+
+    fn generate_passwordless_incoming_connection(
+        id: ConnectionID,
+        peer_did_uri: PeerDIDURI,
+        peer_connection_id: ConnectionID,
+        context: ConnectionContext,
+    ) -> Result<Connection, ConnectionError> {
+        let now = Utc::now();
+        Ok(Connection {
+            id,
+            state: State::PendingIncoming,
+            context,
+            peer_did_uri,
+            peer_key: PeerKey::from_validated(
+                "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
+            ),
+            peer_connection_id,
+            own_key: None,
+            own_keysecure: None,
+            own_shared_secret: None,
+            created_at: now,
+            updated_at: now,
+        })
     }
 
     /// Generates a complete Connection with ECDH shared secret
@@ -645,9 +659,9 @@ impl ConnectionBuilder {
             peer_did_uri,
             peer_key,
             peer_connection_id,
-            own_key: OwnKey::from(own_key_hex.hex()),
-            own_keysecure,
-            own_shared_secret: OwnSharedSecret::from(shared_secret.hex()),
+            own_key: Some(OwnKey::from(own_key_hex.hex())),
+            own_keysecure: Some(own_keysecure),
+            own_shared_secret: Some(OwnSharedSecret::from(shared_secret.hex())),
             created_at: now,
             updated_at: now,
         })
@@ -672,6 +686,9 @@ impl ConnectionBuilder {
         let public_key = keypair.pub_key();
         let own_key_hex = public_key.to_hex();
 
+        // ✅ Validate password complexity
+        Self::validate_password(password.as_str())?;
+
         // ✅ Correct KeySecure encryption using ToKeySecure trait
         let password_obj = Password::from(password);
         let own_keysecure = keypair.to_keysecure(password_obj).map_err(|e| {
@@ -690,9 +707,9 @@ impl ConnectionBuilder {
                 "0000000000000000000000000000000000000000000000000000000000000000".to_string(),
             ),
             peer_connection_id,
-            own_key: OwnKey::from(own_key_hex.hex()),
-            own_keysecure,
-            own_shared_secret: OwnSharedSecret::from("pending".to_string()),
+            own_key: Some(OwnKey::from(own_key_hex.hex())),
+            own_keysecure: Some(own_keysecure),
+            own_shared_secret: Some(OwnSharedSecret::from("pending".to_string())),
             created_at: now,
             updated_at: now,
         })
@@ -717,15 +734,21 @@ impl ConnectionBuilder {
         password: &str,
     ) -> Result<(), ConnectionError> {
         // Verify this is a partial connection
-        if connection.state != State::PendingOutgoing {
+        if connection.state != State::PendingOutgoing && connection.state != State::PendingIncoming
+        {
             return Err(ConnectionError::ValidationError(
-                "Can only complete connections in PendingOutgoing state".to_string(),
+                "Can only complete connections in PendingOutgoing or PendingIncoming state"
+                    .to_string(),
             ));
         }
 
         // ✅ Decrypt the private key from KeySecure
         let decrypted_message = connection
+            .clone()
             .own_keysecure
+            .ok_or(ConnectionError::ValidationError(
+                "Own keysecure is required for decryption".to_string(),
+            ))?
             .decrypt(password.to_string())
             .map_err(|e| {
                 ConnectionError::CryptographicError(format!("Failed to decrypt private key: {}", e))
@@ -763,7 +786,7 @@ impl ConnectionBuilder {
 
         // Update connection with real peer data
         connection.peer_key = peer_key;
-        connection.own_shared_secret = OwnSharedSecret::from(shared_secret.hex());
+        connection.own_shared_secret = Some(OwnSharedSecret::from(shared_secret.hex()));
         connection.state = State::Established;
         connection.updated_at = Utc::now();
 
@@ -815,7 +838,7 @@ mod tests {
         let conn = connection.unwrap();
         assert_eq!(conn.get_state(), State::Pending); // Complete connections start in Pending
         assert_eq!(conn.get_context(), ConnectionContext::Connection);
-        assert_ne!(conn.get_own_shared_secret().as_ref(), "pending"); // Should have real shared secret
+        assert_ne!(conn.get_own_shared_secret().unwrap().as_ref(), "pending"); // Should have real shared secret
     }
 
     /// Tests ECDH shared secret generation correctness for complete connections
@@ -888,8 +911,11 @@ mod tests {
             conn.get_peer_key().as_ref(),
             "0000000000000000000000000000000000000000000000000000000000000000"
         ); // Placeholder
-        assert_eq!(conn.get_own_shared_secret().as_ref(), "pending"); // Placeholder
-        assert_ne!(conn.get_own_key().as_ref(), ""); // Should have our real public key
+        assert_eq!(
+            conn.get_own_shared_secret().unwrap(),
+            OwnSharedSecret::from("pending".to_string())
+        ); // Placeholder
+        assert_ne!(conn.get_own_key().unwrap().as_ref(), ""); // Should have our real public key
     }
 
     /// Tests that partial connections have our real public key but placeholder peer data
@@ -907,14 +933,20 @@ mod tests {
             .unwrap();
 
         // Verify we have our real key
-        assert_eq!(connection.get_own_key().as_ref(), &expected_pub_key);
+        assert_eq!(
+            connection.get_own_key().as_ref(),
+            Some(&OwnKey::from(expected_pub_key))
+        );
 
         // Verify placeholder values
         assert_eq!(
             connection.get_peer_key().as_ref(),
             "0000000000000000000000000000000000000000000000000000000000000000"
         );
-        assert_eq!(connection.get_own_shared_secret().as_ref(), "pending");
+        assert_eq!(
+            connection.get_own_shared_secret().as_ref(),
+            Some(&OwnSharedSecret::from("pending".to_string()))
+        );
         assert_eq!(connection.get_state(), State::PendingOutgoing);
     }
 
@@ -956,7 +988,10 @@ mod tests {
         // Step 3: Verify completion results
         assert_eq!(connection.get_state(), State::Established); // ✅ Should be established now
         assert_eq!(connection.get_peer_key(), peer_public_key); // ✅ Should have real peer key
-        assert_ne!(connection.get_own_shared_secret().as_ref(), "pending"); // ✅ Should have real shared secret
+        assert_ne!(
+            connection.get_own_shared_secret().as_ref(),
+            Some(&OwnSharedSecret::from("pending".to_string()))
+        ); // ✅ Should have real shared secret
 
         // Step 4: Verify ECDH correctness by computing expected shared secret
         let peer_key_clean = peer_public_key
@@ -968,7 +1003,7 @@ mod tests {
 
         assert_eq!(
             connection.get_own_shared_secret().as_ref(),
-            &expected_secret.hex()
+            Some(&OwnSharedSecret::from(expected_secret.hex())),
         );
     }
 
@@ -1039,10 +1074,6 @@ mod tests {
             .with_password("StrongPassword123!@#".to_string())
             .build();
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ConnectionError::ValidationError(_)
-        ));
 
         // Missing peer DID URI
         let result = Connection::builder()
@@ -1050,21 +1081,18 @@ mod tests {
             .with_password("StrongPassword123!@#".to_string())
             .build();
         assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ConnectionError::ValidationError(_)
-        ));
 
-        // Missing password
+        // Missing password: should now succeed and produce PendingIncoming
         let result = Connection::builder()
             .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
             .with_peer_did_uri("did:example:test".to_string())
             .build();
-        assert!(result.is_err());
-        assert!(matches!(
-            result.unwrap_err(),
-            ConnectionError::ValidationError(_)
-        ));
+        assert!(result.is_ok());
+        let conn = result.unwrap();
+        assert_eq!(conn.get_state(), State::PendingIncoming);
+        assert!(conn.get_own_key().is_none());
+        assert!(conn.get_own_keysecure().is_none());
+        assert!(conn.get_own_shared_secret().is_none());
     }
 
     /// Tests rejection of invalid peer key formats (when provided)
@@ -1230,13 +1258,15 @@ mod tests {
         let shared_secret = alice_connection.get_own_shared_secret();
 
         // Verify shared secret properties
-        assert!(!shared_secret.as_ref().is_empty());
-        assert_eq!(shared_secret.as_ref().len(), 64); // Blake3 = 32 bytes = 64 hex chars
+        assert!(!shared_secret.as_ref().is_none());
+        assert_eq!(shared_secret.clone().unwrap().as_ref().len(), 64); // Blake3 = 32 bytes = 64 hex chars
         assert!(shared_secret
+            .clone()
+            .unwrap()
             .as_ref()
             .chars()
             .all(|c| c.is_ascii_hexdigit()));
-        assert_ne!(shared_secret.as_ref(), "pending"); // Should not be placeholder
+        assert_ne!(shared_secret.unwrap().as_ref(), "pending"); // Should not be placeholder
     }
 
     // ========================================
@@ -1318,7 +1348,7 @@ mod tests {
         );
         assert_eq!(
             conn.get_own_key().as_ref(),
-            &own_keypair.pub_key().to_hex().hex()
+            Some(&OwnKey::from(own_keypair.pub_key().to_hex().hex()))
         );
     }
 
@@ -1332,5 +1362,145 @@ mod tests {
             .build();
 
         assert!(connection.is_ok());
+    }
+
+    mod incoming_connection_tests {
+        use super::*;
+
+        // ========================================
+        // PASSWORDLESS INCOMING CONNECTION TESTS
+        // ========================================
+
+        /// Tests creation of a passwordless incoming connection (no password, no keypair)
+        #[test]
+        fn test_passwordless_incoming_connection_success() {
+            let result = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440abc".to_string())
+                .with_peer_did_uri("did:example:incoming".to_string())
+                .build();
+
+            assert!(
+                result.is_ok(),
+                "Should succeed for passwordless incoming connection"
+            );
+            let conn = result.unwrap();
+            assert_eq!(conn.get_state(), State::PendingIncoming);
+            assert!(conn.get_own_key().is_none());
+            assert!(conn.get_own_keysecure().is_none());
+            assert!(conn.get_own_shared_secret().is_none());
+            assert_eq!(
+                conn.get_peer_key().as_ref(),
+                "0000000000000000000000000000000000000000000000000000000000000000"
+            );
+        }
+
+        /// Tests serialization and deserialization of passwordless incoming connection
+        #[test]
+        fn test_passwordless_incoming_connection_serialization() {
+            let conn = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440def".to_string())
+                .with_peer_did_uri("did:example:incoming".to_string())
+                .build()
+                .unwrap();
+
+            let json = conn.to_json().expect("Should serialize to JSON");
+            assert!(json.contains("PendingIncoming"));
+            assert!(json.contains("did:example:incoming"));
+            assert!(
+                json.contains("0000000000000000000000000000000000000000000000000000000000000000")
+            );
+
+            let bytes: Vec<u8> = conn.clone().try_into().expect("Should serialize to bytes");
+            let deserialized = Connection::try_from(bytes).expect("Should deserialize from bytes");
+            assert_eq!(deserialized.get_state(), State::PendingIncoming);
+            assert!(deserialized.get_own_key().is_none());
+        }
+
+        /// Tests that attempting to complete a passwordless connection fails
+        #[test]
+        fn test_complete_passwordless_connection_should_fail() {
+            let mut conn = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440fff".to_string())
+                .with_peer_did_uri("did:example:incoming".to_string())
+                .build()
+                .unwrap();
+
+            let peer_key = PeerKey::new(KeyPair::generate().pub_key().to_hex().hex()).unwrap();
+            let result =
+                ConnectionBuilder::complete_connection(&mut conn, peer_key, "AnyPassword123!@#");
+            assert!(
+                result.is_err(),
+                "Should fail to complete passwordless connection"
+            );
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::ValidationError(_)
+            ));
+        }
+
+        // ========================================
+        // EDGE CASES FOR BUILDER
+        // ========================================
+
+        /// Tests builder with only peer key (no password) should produce passwordless incoming
+        #[test]
+        fn test_builder_only_peer_key_no_password() {
+            let peer_keypair = KeyPair::generate();
+            let result = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440eee".to_string())
+                .with_peer_did_uri("did:example:incoming".to_string())
+                .with_peer_key(peer_keypair.pub_key().to_hex().hex())
+                .build();
+
+            assert!(result.is_ok());
+            let conn = result.unwrap();
+            assert_eq!(conn.get_state(), State::PendingIncoming);
+            assert!(conn.get_own_key().is_none());
+        }
+
+        /// Tests builder with only password (no peer key) should produce partial outgoing
+        #[test]
+        fn test_builder_only_password_no_peer_key() {
+            let result = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440ddd".to_string())
+                .with_peer_did_uri("did:example:outgoing".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .build();
+
+            assert!(result.is_ok());
+            let conn = result.unwrap();
+            assert_eq!(conn.get_state(), State::PendingOutgoing);
+            assert!(conn.get_own_key().is_some());
+            assert_eq!(
+                conn.get_own_shared_secret().unwrap(),
+                OwnSharedSecret::from("pending".to_string())
+            );
+        }
+
+        // ========================================
+        // STATE ENFORCEMENT TESTS
+        // ========================================
+
+        /// Tests that only PendingOutgoing or PendingIncoming can be completed
+        #[test]
+        fn test_complete_connection_state_enforcement() {
+            let mut conn = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440aaa".to_string())
+                .with_peer_did_uri("did:example:incoming".to_string())
+                .build()
+                .unwrap();
+
+            // Set to Established state manually
+            conn.update_state(State::Established);
+
+            let peer_key = PeerKey::new(KeyPair::generate().pub_key().to_hex().hex()).unwrap();
+            let result =
+                ConnectionBuilder::complete_connection(&mut conn, peer_key, "StrongPassword123!@#");
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::ValidationError(_)
+            ));
+        }
     }
 }

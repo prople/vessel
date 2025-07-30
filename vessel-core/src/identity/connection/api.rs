@@ -378,10 +378,16 @@ where
         })?;
 
         // Step 4: Extract our public key for transmission to peer
-        let our_public_key =
-            PeerKey::new(connection.get_own_key().as_ref().to_string()).map_err(|e| {
-                ConnectionError::ValidationError(format!("Invalid own public key: {}", e))
-            })?;
+        let our_public_key = PeerKey::new(
+            connection
+                .get_own_key()
+                .ok_or_else(|| {
+                    ConnectionError::ValidationError("Missing own public key".to_string())
+                })?
+                .as_ref()
+                .to_string(),
+        )
+        .map_err(|e| ConnectionError::ValidationError(format!("Invalid own public key: {}", e)))?;
 
         // Step 5: Notify peer via RPC with complete identity context
         // Implement automatic rollback pattern on network failure
@@ -450,7 +456,9 @@ where
         self.repo
             .list_connections(Some(incoming_states))
             .await
-            .map_err(|e| ConnectionError::EntityError(format!("Failed to list received requests: {}", e)))
+            .map_err(|e| {
+                ConnectionError::EntityError(format!("Failed to list received requests: {}", e))
+            })
     }
 }
 
@@ -749,9 +757,10 @@ mod tests {
                     connection.get_state() == State::PendingOutgoing
                         && connection.get_peer_key().as_ref()
                             == "0000000000000000000000000000000000000000000000000000000000000000"
-                        && connection.get_own_shared_secret().as_ref() == "pending"
-                        && connection.get_own_key().as_ref().len() == 64
-                        && connection.get_own_key().as_ref()
+                        && connection.get_own_shared_secret().as_ref()
+                            == Some(&OwnSharedSecret::from("pending".to_string()))
+                        && connection.get_own_key().unwrap().as_ref().len() == 64
+                        && connection.get_own_key().unwrap().as_ref()
                             != "0000000000000000000000000000000000000000000000000000000000000000"
                 })
                 .returning(|_| Ok(()));
@@ -1106,8 +1115,8 @@ mod tests {
     /// Tests for `request_submissions` method (using update_state for correct states)
     mod request_submissions_tests {
         use super::*;
-        use rst_common::with_tokio::tokio;
         use rst_common::standard::uuid::Uuid;
+        use rst_common::with_tokio::tokio;
 
         #[tokio::test]
         async fn test_request_submissions_success() {
@@ -1173,8 +1182,8 @@ mod tests {
     /// Tests for `request_list` method
     mod request_list_tests {
         use super::*;
-        use rst_common::with_tokio::tokio;
         use rst_common::standard::uuid::Uuid;
+        use rst_common::with_tokio::tokio;
 
         #[tokio::test]
         async fn test_request_list_success() {
