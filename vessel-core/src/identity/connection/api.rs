@@ -133,19 +133,19 @@ where
     type EntityAccessor = Connection;
 
     /// Handles incoming connection requests from remote peers.
-///
-/// This method is called when a peer sends a connection request via RPC.
-/// It stores the incoming request in pending state. No cryptographic material
-/// (keypair, KeySecure, shared secret) is generated until the request is approved.
-///
-/// # Arguments
-/// * `connection_id` - Unique identifier for this connection request
-/// * `sender_did_uri` - DID URI of the requesting peer
-/// * `sender_public_key` - Public key from the peer for ECDH key exchange
-///
-/// # Returns
-/// * `Ok(())` - Connection request successfully received and stored
-/// * `Err(ConnectionError)` - Error occurred during request processing
+    ///
+    /// This method is called when a peer sends a connection request via RPC.
+    /// It stores the incoming request in pending state. No cryptographic material
+    /// (keypair, KeySecure, shared secret) is generated until the request is approved.
+    ///
+    /// # Arguments
+    /// * `connection_id` - Unique identifier for this connection request
+    /// * `sender_did_uri` - DID URI of the requesting peer
+    /// * `sender_public_key` - Public key from the peer for ECDH key exchange
+    ///
+    /// # Returns
+    /// * `Ok(())` - Connection request successfully received and stored
+    /// * `Err(ConnectionError)` - Error occurred during request processing
     async fn request_connect(
         &self,
         connection_id: ConnectionID,
@@ -1105,10 +1105,10 @@ mod tests {
                 .times(1)
                 .withf(|connection: &Connection| {
                     // Validate connection properties
-                    connection.get_state() == State::PendingIncoming &&
-                    connection.get_own_key().is_none() &&
-                    connection.get_own_keysecure().is_none() &&
-                    connection.get_own_shared_secret().is_none()
+                    connection.get_state() == State::PendingIncoming
+                        && connection.get_own_key().is_none()
+                        && connection.get_own_keysecure().is_none()
+                        && connection.get_own_shared_secret().is_none()
                 })
                 .returning(|_| Ok(()));
 
@@ -1117,9 +1117,18 @@ mod tests {
 
             let connection_id = ConnectionID::generate();
             let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
-            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+            let sender_public_key = PeerKey::new(
+                "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string(),
+            )
+            .unwrap();
 
-            let result = api.request_connect(connection_id.clone(), sender_did_uri.clone(), sender_public_key.clone()).await;
+            let result = api
+                .request_connect(
+                    connection_id.clone(),
+                    sender_did_uri.clone(),
+                    sender_public_key.clone(),
+                )
+                .await;
             assert!(result.is_ok(), "request_connect should succeed");
         }
 
@@ -1131,11 +1140,19 @@ mod tests {
 
             let invalid_id = ConnectionID::from("not-a-uuid".to_string());
             let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
-            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+            let sender_public_key = PeerKey::new(
+                "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string(),
+            )
+            .unwrap();
 
-            let result = api.request_connect(invalid_id, sender_did_uri, sender_public_key).await;
+            let result = api
+                .request_connect(invalid_id, sender_did_uri, sender_public_key)
+                .await;
             assert!(result.is_err());
-            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::ValidationError(_)
+            ));
         }
 
         #[tokio::test]
@@ -1146,11 +1163,19 @@ mod tests {
 
             let connection_id = ConnectionID::generate();
             let invalid_did_uri = PeerDIDURI::from_validated("invalid-did".to_string());
-            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+            let sender_public_key = PeerKey::new(
+                "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string(),
+            )
+            .unwrap();
 
-            let result = api.request_connect(connection_id, invalid_did_uri, sender_public_key).await;
+            let result = api
+                .request_connect(connection_id, invalid_did_uri, sender_public_key)
+                .await;
             assert!(result.is_err());
-            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::ValidationError(_)
+            ));
         }
 
         #[tokio::test]
@@ -1163,9 +1188,14 @@ mod tests {
             let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
             let invalid_public_key = PeerKey::from_validated("shortkey".to_string());
 
-            let result = api.request_connect(connection_id, sender_did_uri, invalid_public_key).await;
+            let result = api
+                .request_connect(connection_id, sender_did_uri, invalid_public_key)
+                .await;
             assert!(result.is_err());
-            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::ValidationError(_)
+            ));
         }
 
         #[tokio::test]
@@ -1180,11 +1210,19 @@ mod tests {
 
             let connection_id = ConnectionID::generate();
             let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
-            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+            let sender_public_key = PeerKey::new(
+                "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string(),
+            )
+            .unwrap();
 
-            let result = api.request_connect(connection_id, sender_did_uri, sender_public_key).await;
+            let result = api
+                .request_connect(connection_id, sender_did_uri, sender_public_key)
+                .await;
             assert!(result.is_err());
-            assert!(matches!(result.unwrap_err(), ConnectionError::EntityError(_)));
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
         }
     }
 
