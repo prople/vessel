@@ -133,38 +133,52 @@ where
     type EntityAccessor = Connection;
 
     /// Handles incoming connection requests from remote peers.
-    ///
-    /// This method is called when a peer sends a connection request via RPC.
-    /// It should save the incoming request in pending state and generate
-    /// necessary cryptographic materials.
-    ///
-    /// # Arguments
-    ///
-    /// * `connection_id` - Unique identifier for this connection request
-    /// * `sender_did_uri` - DID URI of the requesting peer
-    /// * `receiver_did_uri` - DID URI of the receiving peer (us)
-    /// * `sender_public_key` - Public key from the peer for ECDH key exchange
-    ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Connection request successfully received and stored
-    /// * `Err(ConnectionError)` - Error occurred during request processing
-    ///
-    /// # Implementation Notes
-    ///
-    /// Future implementation should:
-    /// 1. Validate the peer DID URI and public key
-    /// 2. Generate local ECDH keypair
-    /// 3. Store connection request in pending state
-    /// 4. Store private key securely using KeySecure
+///
+/// This method is called when a peer sends a connection request via RPC.
+/// It stores the incoming request in pending state. No cryptographic material
+/// (keypair, KeySecure, shared secret) is generated until the request is approved.
+///
+/// # Arguments
+/// * `connection_id` - Unique identifier for this connection request
+/// * `sender_did_uri` - DID URI of the requesting peer
+/// * `sender_public_key` - Public key from the peer for ECDH key exchange
+///
+/// # Returns
+/// * `Ok(())` - Connection request successfully received and stored
+/// * `Err(ConnectionError)` - Error occurred during request processing
     async fn request_connect(
         &self,
-        _connection_id: ConnectionID,
-        _sender_did_uri: PeerDIDURI,
-        _receiver_did_uri: PeerDIDURI,
-        _sender_public_key: PeerKey,
+        connection_id: ConnectionID,
+        sender_did_uri: PeerDIDURI,
+        sender_public_key: PeerKey,
     ) -> Result<(), ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+        // Step 1: Validate all inputs
+        ConnectionID::validate(connection_id.as_ref())?;
+        PeerDIDURI::validate(sender_did_uri.as_ref())?;
+        PeerKey::validate(sender_public_key.as_ref())?;
+
+        // Step 2: Build passwordless incoming connection (no password, no keypair)
+        let connection = Connection::builder()
+            .with_id(connection_id.as_ref().to_string())
+            .with_peer_did_uri(sender_did_uri.as_ref().to_string())
+            .with_peer_key(sender_public_key.as_ref().to_string())
+            // No password, no own_keypair
+            .build()
+            .map_err(|e| match e {
+                ConnectionError::ValidationError(_) => e,
+                ConnectionError::CryptographicError(_) => e,
+                _ => ConnectionError::CryptographicError(format!(
+                    "Connection creation failed: {}",
+                    e
+                )),
+            })?;
+
+        // Step 3: Save to repository in PendingIncoming state
+        self.repo.save(&connection).await.map_err(|e| {
+            ConnectionError::EntityError(format!("Failed to save incoming connection: {}", e))
+        })?;
+
+        Ok(())
     }
 
     /// Handles connection approval notifications from remote peers.
@@ -1079,14 +1093,98 @@ mod tests {
         }
     }
 
-    /// Tests for `request_connect` method (when implemented)
+    /// Tests for `request_connect` method
     mod request_connect_tests {
         use super::*;
+        use rst_common::with_tokio::tokio;
 
         #[tokio::test]
-        async fn test_request_connect_placeholder() {
-            // Placeholder test for when method is implemented
-            assert!(true, "Placeholder for request_connect tests");
+        async fn test_request_connect_success() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_save()
+                .times(1)
+                .withf(|connection: &Connection| {
+                    // Validate connection properties
+                    connection.get_state() == State::PendingIncoming &&
+                    connection.get_own_key().is_none() &&
+                    connection.get_own_keysecure().is_none() &&
+                    connection.get_own_shared_secret().is_none()
+                })
+                .returning(|_| Ok(()));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let connection_id = ConnectionID::generate();
+            let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
+            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+
+            let result = api.request_connect(connection_id.clone(), sender_did_uri.clone(), sender_public_key.clone()).await;
+            assert!(result.is_ok(), "request_connect should succeed");
+        }
+
+        #[tokio::test]
+        async fn test_request_connect_invalid_connection_id() {
+            let repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let invalid_id = ConnectionID::from("not-a-uuid".to_string());
+            let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
+            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+
+            let result = api.request_connect(invalid_id, sender_did_uri, sender_public_key).await;
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+        }
+
+        #[tokio::test]
+        async fn test_request_connect_invalid_sender_did_uri() {
+            let repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let connection_id = ConnectionID::generate();
+            let invalid_did_uri = PeerDIDURI::from_validated("invalid-did".to_string());
+            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+
+            let result = api.request_connect(connection_id, invalid_did_uri, sender_public_key).await;
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+        }
+
+        #[tokio::test]
+        async fn test_request_connect_invalid_sender_public_key() {
+            let repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let connection_id = ConnectionID::generate();
+            let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
+            let invalid_public_key = PeerKey::from_validated("shortkey".to_string());
+
+            let result = api.request_connect(connection_id, sender_did_uri, invalid_public_key).await;
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), ConnectionError::ValidationError(_)));
+        }
+
+        #[tokio::test]
+        async fn test_request_connect_repo_save_failure() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_save()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("repo save failed".to_string())));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let connection_id = ConnectionID::generate();
+            let sender_did_uri = PeerDIDURI::new("did:example:peer123".to_string()).unwrap();
+            let sender_public_key = PeerKey::new("abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd".to_string()).unwrap();
+
+            let result = api.request_connect(connection_id, sender_did_uri, sender_public_key).await;
+            assert!(result.is_err());
+            assert!(matches!(result.unwrap_err(), ConnectionError::EntityError(_)));
         }
     }
 

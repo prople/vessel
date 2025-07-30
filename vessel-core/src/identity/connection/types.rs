@@ -547,7 +547,6 @@ pub trait ConnectionAPI: Clone {
         &self,
         connection_id: ConnectionID,
         sender_did_uri: PeerDIDURI, // ✅ Added: Who is making the request
-        receiver_did_uri: PeerDIDURI, // ✅ Added: Who should receive the request
         sender_public_key: PeerKey, // ✅ Renamed for clarity
     ) -> Result<(), ConnectionError>;
 
