@@ -28,6 +28,7 @@ use rst_common::standard::async_trait::async_trait;
 ///
 /// - Each connection generates new ECDH keypairs
 /// - Private keys are stored securely using `KeySecure`
+///
 /// - Shared secrets are generated only after successful approval
 /// - All cryptographic operations are handled through the Connection entity
 ///
@@ -156,10 +157,13 @@ where
         ConnectionID::validate(connection_id.as_ref())?;
         PeerDIDURI::validate(sender_did_uri.as_ref())?;
         PeerKey::validate(sender_public_key.as_ref())?;
+        
+        let own_connection_id = ConnectionID::generate();
 
         // Step 2: Build passwordless incoming connection (no password, no keypair)
         let connection = Connection::builder()
-            .with_id(connection_id.as_ref().to_string())
+            .with_id(own_connection_id)
+            .with_peer_connection_id(connection_id.as_ref().to_string())
             .with_peer_did_uri(sender_did_uri.as_ref().to_string())
             .with_peer_key(sender_public_key.as_ref().to_string())
             // No password, no own_keypair
@@ -247,28 +251,44 @@ where
         Err(ConnectionError::NotImplementedError)
     }
 
-    /// Cancels a previously submitted connection request.
+    /// Cancels a previously submitted connection request (sender perspective).
     ///
-    /// This method cancels a connection request that was sent to a peer,
-    /// removing it from local storage and notifying the peer.
+    /// This method performs the following steps:
+    /// 1. Fetches the connection entity using the peer's connection ID.
+    /// 2. Notifies the peer to remove the connection via RPC (`request_remove`).
+    /// 3. Removes the connection entity from local storage.
     ///
-    /// # Arguments
+    /// # State Transition
+    /// - Connection is deleted from local storage; peer is notified to do the same.
     ///
-    /// * `connection_id` - Unique identifier for the connection request to cancel
+    /// # Security
+    /// - All cryptographic materials associated with the connection are securely deleted.
     ///
-    /// # Returns
-    ///
-    /// * `Ok(())` - Connection request cancelled successfully
-    /// * `Err(ConnectionError)` - Error occurred during cancellation
-    ///
-    /// # Implementation Notes
-    ///
-    /// Future implementation should:
-    /// 1. Remove connection request from local repository
-    /// 2. Call request_remove via RPC to notify peer
-    /// 3. Clean up any associated cryptographic materials
-    async fn request_cancel(&self, _connection_id: ConnectionID) -> Result<(), ConnectionError> {
-        Err(ConnectionError::NotImplementedError)
+    /// # Errors
+    /// - Returns `InvalidConnectionID` if the connection is not found.
+    /// - Returns `EntityError` for repository or RPC failures.
+    async fn request_cancel(&self, connection_id: ConnectionID) -> Result<(), ConnectionError> {
+        // Step 1: Fetch the connection entity
+        let connection = match self.repo.get_connection_by_peer_conn_id(connection_id.clone()).await {
+            Ok(conn) => conn,
+            Err(ConnectionError::InvalidConnectionID(_)) | Err(ConnectionError::ConnectionNotFound(_)) => {
+                return Err(ConnectionError::InvalidConnectionID(format!("Connection not found: {}", connection_id)));
+            }
+            Err(e) => return Err(e),
+        };
+
+        // Step 2: Notify peer via RPC using peer_did_uri
+        let peer_did_uri = connection.get_peer_did_uri();
+        self.rpc.request_remove(connection_id.clone(), peer_did_uri.clone()).await.map_err(|e| {
+            ConnectionError::EntityError(format!("Failed to notify peer: {}", e))
+        })?;
+
+        // Step 3: Remove the connection entity from the repository
+        self.repo.remove(connection_id).await.map_err(|e| {
+            ConnectionError::EntityError(format!("Failed to remove connection: {}", e))
+        })?;
+
+        Ok(())
     }
 
     /// Removes a connection request from local storage.
@@ -299,7 +319,7 @@ where
     /// No additional cleanup is required.
     async fn request_remove(&self, connection_id: ConnectionID) -> Result<(), ConnectionError> {
         // Step 1: Try to fetch the connection to ensure it exists
-        match self.repo.get_connection(connection_id.clone()).await {
+        match self.repo.get_connection_by_peer_conn_id(connection_id.clone()).await {
             Ok(_) => {
                 // Step 2: Remove from repository
                 self.repo.remove(connection_id).await.map_err(|e| {
@@ -549,6 +569,10 @@ mod tests {
             async fn update_state(&self, id: ConnectionID, state: State) -> Result<(), ConnectionError>;
             async fn get_connection(&self, id: ConnectionID) -> Result<Connection, ConnectionError>;
             async fn list_connections(&self, state: Option<Vec<State>>) -> Result<Vec<Connection>, ConnectionError>;
+            async fn get_connection_by_peer_conn_id(
+                &self,
+                peer_connection_id: ConnectionID,
+            ) -> Result<Connection, ConnectionError>;
         }
     );
 
@@ -563,7 +587,7 @@ mod tests {
         impl RpcBuilder for FakeRPCClient {
             async fn request_connect(&self, connection_id: ConnectionID, sender_did_uri: PeerDIDURI, receiver_did_uri: PeerDIDURI, sender_public_key: PeerKey) -> Result<(), ConnectionError>;
             async fn request_approval(&self, connection_id: ConnectionID, approver_did_uri: PeerDIDURI, approver_public_key: PeerKey) -> Result<(), ConnectionError>;
-            async fn request_remove(&self, connection_id: ConnectionID, own_did_uri: PeerDIDURI) -> Result<(), ConnectionError>;
+            async fn request_remove(&self, connection_id: ConnectionID, peer_did_uri: PeerDIDURI) -> Result<(), ConnectionError>;
         }
     );
 
@@ -1374,6 +1398,137 @@ mod tests {
             let api = generate_connection_api(repo, rpc);
 
             let result = api.request_list().await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+    }
+
+    /// Tests for `request_cancel` method
+    mod request_cancel_tests {
+        use super::*;
+        use rst_common::with_tokio::tokio;
+
+        #[tokio::test]
+        async fn test_request_cancel_success() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns a valid connection, rpc and repo.remove succeed
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Ok(Connection::builder()
+                    .with_id(ConnectionID::generate())
+                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer123".to_string()).unwrap())
+                    .build().unwrap()));
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Ok(()));
+            repo.expect_remove()
+                .times(1)
+                .returning(|_| Ok(()));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_ok(), "Cancellation should succeed");
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_connection_not_found() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns not found error
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Err(ConnectionError::InvalidConnectionID("not found".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::InvalidConnectionID(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_repo_error_other() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns a generic error
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("db error".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_rpc_failure() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns valid connection, rpc fails
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Ok(Connection::builder()
+                    .with_id(ConnectionID::generate())
+                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer123".to_string()).unwrap())
+                    .build().unwrap()));
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Err(ConnectionError::EntityError("rpc failed".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_remove_failure() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns valid connection, rpc succeeds, repo.remove fails
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Ok(Connection::builder()
+                    .with_id(ConnectionID::generate())
+                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer123".to_string()).unwrap())
+                    .build().unwrap()));
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Ok(()));
+            repo.expect_remove()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
             assert!(result.is_err());
             assert!(matches!(
                 result.unwrap_err(),

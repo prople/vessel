@@ -629,6 +629,10 @@ pub trait RepoBuilder: Clone + Sync + Send {
         &self,
         connection_id: ConnectionID,
     ) -> Result<Self::EntityAccessor, ConnectionError>;
+    async fn get_connection_by_peer_conn_id(
+        &self,
+        peer_connection_id: ConnectionID,
+    ) -> Result<Self::EntityAccessor, ConnectionError>;
     async fn list_connections(
         &self,
         states: Option<Vec<State>>,
@@ -657,7 +661,7 @@ pub trait RpcBuilder: Clone {
     async fn request_remove(
         &self,
         connection_id: ConnectionID,
-        own_did_uri: PeerDIDURI, // ✅ Added: Requester's DID URI
+        peer_did_uri: PeerDIDURI, // ✅ Added: Requester's DID URI
     ) -> Result<(), ConnectionError>;
 }
 
