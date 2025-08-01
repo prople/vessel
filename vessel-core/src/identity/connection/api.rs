@@ -97,6 +97,60 @@ where
         Self { repo, rpc }
     }
 
+    /// Handles the approval of a pending incoming connection request.
+    ///
+    /// This method performs the complete approval workflow including cryptographic
+    /// key generation, shared secret creation, and peer notification. It includes
+    /// idempotency protection for already-established connections.
+    ///
+    /// # Arguments
+    ///
+    /// * `connection` - The connection entity to approve (must be in `PendingIncoming` state)
+    /// * `password` - Password for encrypting the private key (required, will be validated)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Connection successfully approved and established
+    /// * `Err(ConnectionError)` - Error occurred during approval process
+    ///
+    /// # Idempotency
+    ///
+    /// If the connection is already in `Established` state, this method returns
+    /// `Ok(())` immediately without performing any operations. This makes it safe
+    /// to call multiple times on the same connection.
+    ///
+    /// # Implementation Workflow
+    ///
+    /// 1. **Idempotency Check**: Return early if already established
+    /// 2. **State Validation**: Ensure connection is in `PendingIncoming` state
+    /// 3. **Password Validation**: Verify password complexity requirements
+    /// 4. **Key Generation**: Create new ECDH keypair for this connection
+    /// 5. **Connection Building**: Reconstruct connection with cryptographic materials
+    /// 6. **State Update**: Mark connection as `Established`
+    /// 7. **Persistence**: Save complete connection to repository
+    /// 8. **Peer Notification**: Send approval notification via RPC
+    /// 9. **Rollback**: Restore original connection if RPC fails
+    ///
+    /// # Cryptographic Operations
+    ///
+    /// - Generates new ECDH keypair using cryptographically secure randomness
+    /// - Derives shared secret from peer's public key and our private key
+    /// - Encrypts private key using password-based KeySecure mechanism
+    /// - Public key is transmitted to peer for their shared secret generation
+    ///
+    /// # Error Handling
+    ///
+    /// - **Password validation errors**: Returns `InvalidPassword` or `ValidationError`
+    /// - **Repository failures**: Returns `EntityError` with context
+    /// - **RPC failures**: Triggers automatic rollback, returns original RPC error
+    /// - **State transition errors**: Returns `InvalidStateTransition` with state details
+    ///
+    /// # Security Model
+    ///
+    /// - Password must meet complexity requirements (enforced by `PasswordValidator`)
+    /// - Private keys are never stored in plaintext (encrypted via KeySecure)
+    /// - Shared secrets are derived using standard ECDH key exchange
+    /// - Atomic operations ensure consistent state even during failures
     pub(super) async fn handle_approval(
         &self,
         connection: Connection,
@@ -163,6 +217,58 @@ where
         }
     }
 
+    /// Handles the rejection of a pending incoming connection request.
+    ///
+    /// This method performs connection rejection by removing the connection locally
+    /// and notifying the peer. It includes idempotency protection for already-rejected
+    /// or cancelled connections.
+    ///
+    /// # Arguments
+    ///
+    /// * `connection` - The connection entity to reject (must be in `PendingIncoming` state)
+    ///
+    /// # Returns
+    ///
+    /// * `Ok(())` - Connection successfully rejected and removed
+    /// * `Err(ConnectionError)` - Error occurred during rejection process
+    ///
+    /// # Idempotency
+    ///
+    /// If the connection is already in `Rejected` or `Cancelled` state, this method
+    /// returns `Ok(())` immediately without performing any operations. This makes it
+    /// safe to call multiple times on the same connection.
+    ///
+    /// # Implementation Workflow
+    ///
+    /// 1. **Idempotency Check**: Return early if already rejected/cancelled
+    /// 2. **State Validation**: Ensure connection is in `PendingIncoming` state  
+    /// 3. **Information Extraction**: Get peer connection ID and DID for notification
+    /// 4. **Local Removal**: Remove connection from repository immediately
+    /// 5. **Peer Notification**: Notify peer via RPC to remove their copy
+    ///
+    /// # Error Handling Strategy
+    ///
+    /// This method uses a "local-first" approach:
+    /// - **Local removal succeeds, RPC fails**: Still returns error but doesn't rollback
+    /// - **Local removal fails**: Returns error immediately, no RPC call attempted
+    /// - **Both fail**: Returns the local removal error (more critical)
+    ///
+    /// The rationale is that local removal is more important than peer notification.
+    /// If RPC fails but local removal succeeded, the connection is still effectively
+    /// rejected from our perspective.
+    ///
+    /// # Security Considerations
+    ///
+    /// - All cryptographic materials are securely deleted during entity removal
+    /// - Peer is notified using their connection ID and DID for proper context
+    /// - No sensitive information is leaked in error messages
+    /// - Operation is atomic from local storage perspective
+    ///
+    /// # State Transitions
+    ///
+    /// - **Successful rejection**: `PendingIncoming` → `[REMOVED]`
+    /// - **Invalid state**: Returns `InvalidStateTransition` error
+    /// - **Idempotent cases**: No state change, returns success
     pub(super) async fn handle_rejection(
         &self,
         connection: Connection,
@@ -328,27 +434,45 @@ where
     /// Responds to a connection request with approval or rejection.
     ///
     /// This method allows the receiving peer to approve or reject an incoming
-    /// connection request. On approval, it generates shared secrets and notifies
-    /// the requesting peer.
+    /// connection request. It includes idempotency checks to safely handle
+    /// duplicate requests.
     ///
     /// # Arguments
     ///
     /// * `connection_id` - Unique identifier for the connection request
     /// * `approval` - Whether to approve or reject the connection
-    /// * `password` - Optional password for additional security verification
+    /// * `password` - Optional password for additional security verification (required for approval)
     ///
     /// # Returns
     ///
-    /// * `Ok(())` - Response sent successfully
+    /// * `Ok(())` - Response processed successfully (including idempotent cases)
     /// * `Err(ConnectionError)` - Error occurred during response processing
     ///
-    /// # Implementation Notes
+    /// # Idempotency Behavior
     ///
-    /// Future implementation should:
-    /// 1. Validate the connection request exists and is pending
-    /// 2. If approved: generate shared secret, update state, call request_approval via RPC
-    /// 3. If rejected: remove connection request, notify peer
-    /// 4. Handle password verification if provided
+    /// This method is idempotent for already-processed requests:
+    /// - **Approval on Established connections**: Returns `Ok(())` without processing
+    /// - **Rejection on Rejected/Cancelled connections**: Returns `Ok(())` without processing
+    /// - **Cross-operations** (approval on rejected, rejection on established): Still fail with state errors
+    ///
+    /// # Implementation Flow
+    ///
+    /// 1. **Input Validation**: Validates connection ID format
+    /// 2. **Connection Retrieval**: Fetches connection from repository
+    /// 3. **Idempotency Check**: Early return for already-processed states
+    /// 4. **State Validation**: Ensures connection is in `PendingIncoming` state
+    /// 5. **Delegation**: Routes to `handle_approval` or `handle_rejection`
+    ///
+    /// # State Transitions
+    ///
+    /// - **Approval**: `PendingIncoming` → `Established` (generates shared secrets, notifies peer)
+    /// - **Rejection**: `PendingIncoming` → `Removed` (removes connection, notifies peer)
+    ///
+    /// # Security Considerations
+    ///
+    /// - Password complexity validation enforced for approvals
+    /// - ECDH key exchange performed securely
+    /// - Atomic operations with rollback on RPC failures
     async fn request_response(
         &self,
         connection_id: ConnectionID,
