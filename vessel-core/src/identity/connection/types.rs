@@ -554,7 +554,6 @@ pub trait ConnectionAPI: Clone {
     async fn request_approval(
         &self,
         connection_id: ConnectionID,
-        approver_did_uri: PeerDIDURI, // ✅ Added: Who approved the connection
         approver_public_key: PeerKey, // ✅ Renamed for clarity
     ) -> Result<(), ConnectionError>;
 
@@ -654,7 +653,6 @@ pub trait RpcBuilder: Clone {
     async fn request_approval(
         &self,
         connection_id: ConnectionID,
-        own_did_uri: PeerDIDURI,  // ✅ Added: Approver's DID URI
         peer_public_key: PeerKey, // This is approver's public key
     ) -> Result<(), ConnectionError>;
 
