@@ -1720,7 +1720,7 @@ mod tests {
         async fn test_request_response_approval_weak_password() {
             let weak_passwords = vec![
                 "short",
-                "onlylowercase", 
+                "onlylowercase",
                 "ONLYUPPERCASE",
                 "NoNumbers!@#",
                 "NoSpecialChars123",
@@ -1729,7 +1729,7 @@ mod tests {
             // ✅ FIX: Test each weak password separately with its own mocks
             for weak_password in weak_passwords {
                 let mut repo = MockFakeRepo::new(); // ✅ Create fresh repo for each test
-                let rpc = MockFakeRPCClient::new();   // ✅ Create fresh RPC for each test
+                let rpc = MockFakeRPCClient::new(); // ✅ Create fresh RPC for each test
 
                 let connection = create_pending_incoming_connection();
                 let connection_id = connection.get_id().clone();
@@ -1749,7 +1749,11 @@ mod tests {
                     )
                     .await;
 
-                assert!(result.is_err(), "Should reject weak password: {}", weak_password);
+                assert!(
+                    result.is_err(),
+                    "Should reject weak password: {}",
+                    weak_password
+                );
                 assert!(matches!(
                     result.unwrap_err(),
                     ConnectionError::ValidationError(_) | ConnectionError::InvalidPassword(_)
@@ -1922,286 +1926,6 @@ mod tests {
         }
 
         /// Tests for `request_submissions` method (using update_state for correct states)
-        mod request_submissions_tests {
-            use super::*;
-            use rst_common::standard::uuid::Uuid;
-            use rst_common::with_tokio::tokio;
-
-            #[tokio::test]
-            async fn test_request_submissions_success() {
-                let mut repo = MockFakeRepo::new();
-
-                // Create connections and update their states as needed
-                let mut conn1 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer1".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn1.update_state(State::PendingOutgoing);
-
-                let mut conn2 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer2".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn2.update_state(State::Established);
-
-                let expected_connections = vec![conn1, conn2];
-
-                repo.expect_list_connections()
-                    .times(1)
-                    .withf(|states| {
-                        states.as_ref().unwrap().contains(&State::PendingOutgoing)
-                            && states.as_ref().unwrap().contains(&State::Established)
-                    })
-                    .returning(move |_| Ok(expected_connections.clone()));
-
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
-
-                let result = api.request_submissions().await;
-                assert!(result.is_ok());
-                let connections = result.unwrap();
-                assert_eq!(connections.len(), 2);
-                assert_eq!(connections[0].get_state(), State::PendingOutgoing);
-                assert_eq!(connections[1].get_state(), State::Established);
-            }
-
-            #[tokio::test]
-            async fn test_request_submissions_repo_error() {
-                let mut repo = MockFakeRepo::new();
-                repo.expect_list_connections()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
-
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
-
-                let result = api.request_submissions().await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-        }
-
-        /// Tests for `request_list` method
-        mod request_list_tests {
-            use super::*;
-            use rst_common::standard::uuid::Uuid;
-            use rst_common::with_tokio::tokio;
-
-            #[tokio::test]
-            async fn test_request_list_success() {
-                let mut repo = MockFakeRepo::new();
-
-                // Create connections and update their states as needed
-                let mut conn1 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer3".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn1.update_state(State::PendingIncoming);
-
-                let mut conn2 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer4".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn2.update_state(State::Established);
-
-                let expected_connections = vec![conn1, conn2];
-
-                repo.expect_list_connections()
-                    .times(1)
-                    .withf(|states| {
-                        states.as_ref().unwrap().contains(&State::PendingIncoming)
-                            && states.as_ref().unwrap().contains(&State::Established)
-                    })
-                    .returning(move |_| Ok(expected_connections.clone()));
-
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
-
-                let result = api.request_list().await;
-                assert!(result.is_ok());
-                let connections = result.unwrap();
-                assert_eq!(connections.len(), 2);
-                assert_eq!(connections[0].get_state(), State::PendingIncoming);
-                assert_eq!(connections[1].get_state(), State::Established);
-            }
-
-            #[tokio::test]
-            async fn test_request_list_repo_error() {
-                let mut repo = MockFakeRepo::new();
-                repo.expect_list_connections()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
-
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
-
-                let result = api.request_list().await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-        }
-
-        /// Tests for `request_cancel` method
-        mod request_cancel_tests {
-            use super::*;
-            use rst_common::with_tokio::tokio;
-
-            #[tokio::test]
-            async fn test_request_cancel_success() {
-                let mut repo = MockFakeRepo::new();
-                let mut rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns a valid connection, rpc and repo.remove succeed
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Ok(Connection::builder()
-                            .with_id(ConnectionID::generate())
-                            .with_peer_did_uri(
-                                PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
-                            )
-                            .build()
-                            .unwrap())
-                    });
-                rpc.expect_request_remove()
-                    .times(1)
-                    .returning(|_, _| Ok(()));
-                repo.expect_remove().times(1).returning(|_| Ok(()));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_ok(), "Cancellation should succeed");
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_connection_not_found() {
-                let mut repo = MockFakeRepo::new();
-                let rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns not found error
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Err(ConnectionError::InvalidConnectionID(
-                            "not found".to_string(),
-                        ))
-                    });
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::InvalidConnectionID(_)
-                ));
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_repo_error_other() {
-                let mut repo = MockFakeRepo::new();
-                let rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns a generic error
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("db error".to_string())));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_rpc_failure() {
-                let mut repo = MockFakeRepo::new();
-                let mut rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns valid connection, rpc fails
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Ok(Connection::builder()
-                            .with_id(ConnectionID::generate())
-                            .with_peer_did_uri(
-                                PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
-                            )
-                            .build()
-                            .unwrap())
-                    });
-                rpc.expect_request_remove()
-                    .times(1)
-                    .returning(|_, _| Err(ConnectionError::EntityError("rpc failed".to_string())));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_remove_failure() {
-                let mut repo = MockFakeRepo::new();
-                let mut rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns valid connection, rpc succeeds, repo.remove fails
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Ok(Connection::builder()
-                            .with_id(ConnectionID::generate())
-                            .with_peer_did_uri(
-                                PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
-                            )
-                            .build()
-                            .unwrap())
-                    });
-                rpc.expect_request_remove()
-                    .times(1)
-                    .returning(|_, _| Ok(()));
-                repo.expect_remove()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-        }
 
         /// Tests for `handle_approval` method - DIRECT TESTING (FIXED)
         mod handle_approval_tests {
@@ -2997,6 +2721,287 @@ mod tests {
                     panic!("Expected EntityError with formatted RPC error message");
                 }
             }
+        }
+    }
+
+    mod request_submissions_tests {
+        use super::*;
+        use rst_common::standard::uuid::Uuid;
+        use rst_common::with_tokio::tokio;
+
+        #[tokio::test]
+        async fn test_request_submissions_success() {
+            let mut repo = MockFakeRepo::new();
+
+            // Create connections and update their states as needed
+            let mut conn1 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer1".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn1.update_state(State::PendingOutgoing);
+
+            let mut conn2 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer2".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn2.update_state(State::Established);
+
+            let expected_connections = vec![conn1, conn2];
+
+            repo.expect_list_connections()
+                .times(1)
+                .withf(|states| {
+                    states.as_ref().unwrap().contains(&State::PendingOutgoing)
+                        && states.as_ref().unwrap().contains(&State::Established)
+                })
+                .returning(move |_| Ok(expected_connections.clone()));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_submissions().await;
+            assert!(result.is_ok());
+            let connections = result.unwrap();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].get_state(), State::PendingOutgoing);
+            assert_eq!(connections[1].get_state(), State::Established);
+        }
+
+        #[tokio::test]
+        async fn test_request_submissions_repo_error() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_list_connections()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_submissions().await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+    }
+
+    /// Tests for `request_list` method
+    mod request_list_tests {
+        use super::*;
+        use rst_common::standard::uuid::Uuid;
+        use rst_common::with_tokio::tokio;
+
+        #[tokio::test]
+        async fn test_request_list_success() {
+            let mut repo = MockFakeRepo::new();
+
+            // Create connections and update their states as needed
+            let mut conn1 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer3".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn1.update_state(State::PendingIncoming);
+
+            let mut conn2 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer4".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn2.update_state(State::Established);
+
+            let expected_connections = vec![conn1, conn2];
+
+            repo.expect_list_connections()
+                .times(1)
+                .withf(|states| {
+                    states.as_ref().unwrap().contains(&State::PendingIncoming)
+                        && states.as_ref().unwrap().contains(&State::Established)
+                })
+                .returning(move |_| Ok(expected_connections.clone()));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_list().await;
+            assert!(result.is_ok());
+            let connections = result.unwrap();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].get_state(), State::PendingIncoming);
+            assert_eq!(connections[1].get_state(), State::Established);
+        }
+
+        #[tokio::test]
+        async fn test_request_list_repo_error() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_list_connections()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
+
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api.request_list().await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+    }
+
+    /// Tests for `request_cancel` method
+    mod request_cancel_tests {
+        use super::*;
+        use rst_common::with_tokio::tokio;
+
+        #[tokio::test]
+        async fn test_request_cancel_success() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns a valid connection, rpc and repo.remove succeed
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::generate())
+                        .with_peer_did_uri(
+                            PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
+                        )
+                        .build()
+                        .unwrap())
+                });
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Ok(()));
+            repo.expect_remove().times(1).returning(|_| Ok(()));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_ok(), "Cancellation should succeed");
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_connection_not_found() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns not found error
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Err(ConnectionError::InvalidConnectionID(
+                        "not found".to_string(),
+                    ))
+                });
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::InvalidConnectionID(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_repo_error_other() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns a generic error
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("db error".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_rpc_failure() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns valid connection, rpc fails
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::generate())
+                        .with_peer_did_uri(
+                            PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
+                        )
+                        .build()
+                        .unwrap())
+                });
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Err(ConnectionError::EntityError("rpc failed".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_remove_failure() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns valid connection, rpc succeeds, repo.remove fails
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::generate())
+                        .with_peer_did_uri(
+                            PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
+                        )
+                        .build()
+                        .unwrap())
+                });
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Ok(()));
+            repo.expect_remove()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
         }
     }
 }
