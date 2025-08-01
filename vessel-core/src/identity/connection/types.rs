@@ -115,6 +115,10 @@ use rstdev_domain::entity::ToJSON;
 
 use prople_crypto::keysecure::KeySecure;
 
+use super::notification::{
+    ApprovalNotification, NotificationID, NotificationRepoBuilder, NotificationService,
+};
+
 /// ConnectionError is a base error types for the `Connection` domain
 ///
 /// It will contains any possible errors for the `connection`
@@ -539,6 +543,45 @@ pub trait ConnectionEntityAccessor:
 pub trait ConnectionAPI: Clone {
     type EntityAccessor: ConnectionEntityAccessor;
 
+    /// Retrieves all pending connection approval notifications.
+    ///
+    /// Returns notifications that require user action to complete the connection.
+    /// These are approvals received from peers that need user password to finalize.
+    ///
+    /// # Returns
+    /// * `Ok(Vec<ApprovalNotification>)` - List of pending approval notifications
+    /// * `Err(ConnectionError)` - Error occurred during retrieval
+    ///
+    /// # Use Case
+    /// This method is typically called by UI components to display a list of
+    /// pending approvals that users can act upon.
+    async fn request_notifications(&self) -> Result<Vec<ApprovalNotification>, ConnectionError>;
+
+    /// Completes a pending connection approval with user-provided password.
+    ///
+    /// Takes a notification ID and user password to finalize the ECDH key exchange
+    /// and establish the secure connection.
+    ///
+    /// # Arguments
+    /// * `notification_id` - ID of the approval notification to complete
+    /// * `password` - User password for private key decryption and shared secret generation
+    ///
+    /// # Returns
+    /// * `Ok(())` - Connection successfully established and notification cleaned up
+    /// * `Err(ConnectionError)` - Error occurred during completion
+    ///
+    /// # Security Flow
+    /// 1. Validates notification exists and is still pending
+    /// 2. Retrieves the associated connection from storage
+    /// 3. Uses user password to decrypt private key and complete ECDH
+    /// 4. Updates connection state to Established
+    /// 5. Cleans up the notification
+    async fn request_complete_approval(
+        &self,
+        notification_id: NotificationID,
+        password: String,
+    ) -> Result<(), ConnectionError>;
+
     /// Handles incoming connection requests from remote peers.
     ///
     /// This method is called when a peer sends a connection request via RPC.
@@ -671,9 +714,13 @@ where
     TEntityAccessor: ConnectionEntityAccessor,
 {
     type Repo: RepoBuilder<EntityAccessor = TEntityAccessor>;
+    type RepoNotif: NotificationRepoBuilder;
     type RPCImplementer: RpcBuilder;
+    type NotificationSvc: NotificationService;
 
     fn repo(&self) -> Self::Repo;
+    fn repo_notif(&self) -> Self::RepoNotif;
+    fn notif_svc(&self) -> Self::NotificationSvc;
     fn rpc(&self) -> Self::RPCImplementer;
 }
 

@@ -5,29 +5,72 @@
 //! shared secrets for secure communication between decentralized identity participants.
 //!
 //! ## Key Features
-//! - ECDH key agreement for secure shared secret generation
-//! - KeySecure encryption for private key storage
-//! - Comprehensive input validation (UUID, DID URI, hex keys, password complexity)
-//! - Builder pattern for ergonomic connection creation
-//! - JSON and binary serialization support
-//! - State management for connection lifecycle
+//! - **ECDH key agreement** for secure shared secret generation
+//! - **KeySecure encryption** for private key storage
+//! - **Multiple connection patterns**: Complete, Partial (outgoing), and Passwordless (incoming)
+//! - **Connection completion workflow** for notification-based approvals
+//! - **Comprehensive input validation** (UUID, DID URI, hex keys, password complexity)
+//! - **Builder pattern** for ergonomic connection creation with existing KeySecure support
+//! - **JSON and binary serialization** support
+//! - **Enhanced state management** for connection lifecycle
 //!
-//! ## Usage Example
+//! ## Connection Types
+//!
+//! ### Complete Connections (Traditional)
+//! Created when both peer's public key and password are provided:
 //! ```rust
-//! use prople_crypto::ecdh::keypair::KeyPair;
-//!
-//! // Generate keypairs for Alice and Bob
-//! let alice_keypair = KeyPair::generate();
-//! let bob_keypair = KeyPair::generate();
-//!
-//! // Alice creates connection to Bob
-//! let alice_connection = Connection::builder()
+//! let connection = Connection::builder()
 //!     .with_id("550e8400-e29b-41d4-a716-446655440000")
 //!     .with_peer_did_uri("did:example:bob")
-//!     .with_peer_key(bob_keypair.pub_key().to_hex().hex())
-//!     .with_password("StrongPassword123!@#")
-//!     .with_own_keypair(alice_keypair)
+//!     .with_peer_key(bob_public_key)  // ✅ Peer key provided
+//!     .with_password("StrongPassword123!@#")  // ✅ Password provided
 //!     .build()?;
+//! // State: Pending, has shared secret immediately
+//! ```
+//!
+//! ### Partial Connections (Outgoing Requests)
+//! Created for connection requests where peer's key is not yet known:
+//! ```rust
+//! let connection = Connection::builder()
+//!     .with_id("550e8400-e29b-41d4-a716-446655440000")
+//!     .with_peer_did_uri("did:example:bob")
+//!     // ❌ No peer key - creates partial connection
+//!     .with_password("StrongPassword123!@#")  // ✅ Password for our KeySecure
+//!     .build()?;
+//! // State: PendingOutgoing, placeholder shared secret
+//! ```
+//!
+//! ### Passwordless Connections (Incoming Requests)
+//! Created for incoming requests where no cryptographic setup is needed yet:
+//! ```rust
+//! let connection = Connection::builder()
+//!     .with_id("550e8400-e29b-41d4-a716-446655440000")
+//!     .with_peer_did_uri("did:example:alice")
+//!     // ❌ No peer key, no password
+//!     .build()?;
+//! // State: PendingIncoming, no cryptographic material
+//! ```
+//!
+//! ## Connection Completion Workflow
+//!
+//! For notification-based approval systems:
+//! ```rust
+//! // 1. Alice creates partial connection
+//! let alice_partial = Connection::builder()
+//!     .with_password("AlicePassword123!@#")
+//!     // ... other fields
+//!     .build()?;
+//!
+//! // 2. Bob receives request and approves (separate flow)
+//!
+//! // 3. Alice receives notification with Bob's public key
+//!
+//! // 4. Alice completes connection with user password
+//! let alice_complete = alice_partial.complete_with_password(
+//!     &bobs_public_key,
+//!     "AlicePassword123!@#"  // User enters password again
+//! )?;
+//! // State: Established, real shared secret derived
 //! ```
 
 use std::fmt::Debug;
@@ -53,23 +96,34 @@ use super::types::{
 /// # Connection Entity
 ///
 /// Represents a secure connection between two decentralized identity peers using ECDH key agreement.
+/// Supports three connection patterns: Complete, Partial (outgoing), and Passwordless (incoming).
 ///
 /// ## Security Features
 /// - **ECDH Key Agreement**: Generates shared secrets using Elliptic Curve Diffie-Hellman
 /// - **KeySecure Encryption**: Private keys are encrypted using password-derived keys
 /// - **Blake3 Hashing**: Shared secrets are hashed using Blake3 for consistency
-/// - **Input Validation**: Comprehensive validation of all inputs (UUIDs, DIDs, hex keys, passwords)
+/// - **No Password Storage**: Passwords are never stored, only used for encryption/decryption
+/// - **User-Controlled Completion**: Explicit user password required for connection establishment
 ///
-/// ## Connection Lifecycle
-/// 1. **Pending**: Initial state when connection is created
-/// 2. **Established**: State after successful peer handshake
-/// 3. **Failed**: State when connection establishment fails
+/// ## Connection States
+/// - **PendingOutgoing**: Partial connection waiting for peer approval (has our KeySecure)
+/// - **PendingIncoming**: Passwordless incoming connection (no cryptographic material yet)
+/// - **Pending**: Complete connection ready for use (has shared secret)
+/// - **Established**: Completed connection after successful handshake/approval
+/// - **Failed**: Connection that encountered errors during establishment
+///
+/// ## Security Model
+/// - Private keys are encrypted with user passwords using KeySecure
+/// - Shared secrets are derived only when user provides password
+/// - Completion requires explicit user action with password re-entry
+/// - No automatic password storage or caching
 ///
 /// ## Data Storage
 /// - All cryptographic material is stored securely
 /// - Private keys are never stored in plaintext
 /// - Shared secrets are Blake3-hashed for consistency
 /// - Timestamps track creation and updates
+/// - Placeholder values used for incomplete connections
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(crate = "self::serde")]
 pub struct Connection {
@@ -77,8 +131,12 @@ pub struct Connection {
     /// Used to track and reference this specific connection
     id: ConnectionID,
 
-    /// Current state of the connection (Pending, Established, or Failed)
-    /// Tracks the connection lifecycle for state machine management
+    /// Current state of the connection lifecycle
+    /// - PendingOutgoing: Partial connection awaiting peer approval
+    /// - PendingIncoming: Passwordless incoming connection
+    /// - Pending: Complete connection with shared secret
+    /// - Established: Finalized connection after handshake/approval
+    /// - Failed: Connection establishment failed
     state: State,
 
     /// Context of the connection (currently only supports Connection type)
@@ -91,6 +149,7 @@ pub struct Connection {
 
     /// Public key of the peer (hex encoded, 64 characters for X25519)
     /// Used in ECDH key agreement to generate shared secret
+    /// Set to placeholder "0000...000
     peer_key: PeerKey,
 
     /// Connection ID from peer's perspective
@@ -99,14 +158,19 @@ pub struct Connection {
 
     /// Our own public key (hex encoded)
     /// Generated from our private key, shared with peer for ECDH
+    /// None for passwordless incoming connections
     own_key: Option<OwnKey>,
 
     /// Our own private key stored securely using KeySecure format
     /// Encrypted with password-derived key, never stored in plaintext
+    /// None for passwordless incoming connections
+    /// Required for connection completion with user password
     own_keysecure: Option<KeySecure>,
 
     /// Shared secret generated from ECDH key agreement (Blake3 hash, hex encoded)
     /// Result of ECDH(our_private_key, peer_public_key) -> Blake3 -> hex
+    /// Set to "pending" placeholder for partial connections until completion
+    /// None for passwordless incoming connections
     own_shared_secret: Option<OwnSharedSecret>,
 
     /// Timestamp when connection was created (UTC)
@@ -121,15 +185,22 @@ pub struct Connection {
 impl Connection {
     /// Creates a new ConnectionBuilder for fluent connection construction
     ///
+    /// Supports three construction patterns:
+    /// - Complete connections: with peer_key + password
+    /// - Partial connections: with password only (for outgoing requests)
+    /// - Passwordless connections: with neither (for incoming requests)
+    ///
     /// # Returns
     /// - `ConnectionBuilder`: A builder instance for constructing connections
     ///
     /// # Example
     /// ```rust
-    /// let connection = Connection::builder()
+    /// // Partial connection for outgoing request
+    /// let partial = Connection::builder()
     ///     .with_id("550e8400-e29b-41d4-a716-446655440000")
     ///     .with_peer_did_uri("did:example:peer")
-    ///     .build()?;
+    ///     .with_password("StrongPassword123!@#")  // Only password
+    ///     .build()?;  // Creates PendingOutgoing connection
     /// ```
     pub fn builder() -> ConnectionBuilder {
         ConnectionBuilder::new()
@@ -137,10 +208,11 @@ impl Connection {
 
     /// Updates the connection state and refreshes the updated timestamp
     ///
-    /// This method is used to manage the connection lifecycle:
+    /// This method manages the enhanced connection lifecycle:
+    /// - PendingOutgoing -> Established (after completion with peer's key)
+    /// - PendingIncoming -> Established (after approval response)
     /// - Pending -> Established (after successful handshake)
-    /// - Pending -> Failed (if handshake fails)
-    /// - Established -> Failed (if connection drops)
+    /// - Any state -> Failed (if errors occur)
     ///
     /// # Parameters
     /// - `state`: The new state to transition to
@@ -151,6 +223,154 @@ impl Connection {
     pub fn update_state(&mut self, state: State) {
         self.state = state;
         self.updated_at = Utc::now();
+    }
+
+    /// Decrypts the private key and derives the shared secret using the provided password.
+    ///
+    /// This method is used internally by completion workflows and can be called separately
+    /// for connections that already have peer's public key but need shared secret derivation.
+    ///
+    /// # Security Requirements
+    /// - Connection must have a KeySecure (encrypted private key)
+    /// - Connection must have a peer public key (not placeholder)
+    /// - Password must match the one used for KeySecure encryption
+    ///
+    /// # Arguments
+    /// * `password` - Password to decrypt the private key (must match KeySecure password)
+    ///
+    /// # Returns
+    /// * `Ok(())` - Successfully decrypted and derived shared secret
+    /// * `Err(ConnectionError)` - Decryption failed or ECDH operation failed
+    ///
+    /// # Side Effects
+    /// - Updates `own_shared_secret` with real ECDH-derived value
+    /// - Updates `updated_at` timestamp
+    pub fn decrypt_and_derive_shared_secret(
+        &mut self,
+        password: &str,
+    ) -> Result<(), ConnectionError> {
+        // Get the encrypted private key
+        let keysecure = self.get_own_keysecure().ok_or_else(|| {
+            ConnectionError::CryptographicError("Missing KeySecure for decryption".to_string())
+        })?;
+
+        // Decrypt the private key
+        let decrypted = keysecure.decrypt(password.to_string()).map_err(|e| {
+            ConnectionError::CryptographicError(format!("Failed to decrypt KeySecure: {}", e))
+        })?;
+
+        // Convert decrypted bytes back to hex string
+        let private_key_hex = String::from_utf8(decrypted.vec()).map_err(|e| {
+            ConnectionError::CryptographicError(format!("Invalid decrypted data: {}", e))
+        })?;
+
+        // Reconstruct KeyPair from hex string
+        let keypair = KeyPair::from_hex(private_key_hex).map_err(|e| {
+            ConnectionError::CryptographicError(format!("Failed to reconstruct keypair: {}", e))
+        })?;
+
+        // Prepare peer's public key for ECDH computation
+        let peer_key_clean = self
+            .peer_key
+            .as_ref()
+            .strip_prefix("0x")
+            .unwrap_or(self.peer_key.as_ref());
+        let peer_key_hex = ByteHex::from(peer_key_clean.to_string());
+
+        // Compute the ECDH shared secret
+        let secret = keypair.secret(peer_key_hex);
+        let shared_secret = secret.to_blake3().map_err(|e| {
+            ConnectionError::CryptographicError(format!("Shared secret generation failed: {}", e))
+        })?;
+
+        // Update the connection with the derived shared secret
+        self.own_shared_secret = Some(OwnSharedSecret::from(shared_secret.hex()));
+        self.updated_at = Utc::now();
+
+        Ok(())
+    }
+
+    /// Complete this connection with peer's public key and password
+    ///
+    /// This method is the primary way to complete partial connections in notification-based
+    /// approval workflows. It takes a partial connection (PendingOutgoing) and peer's public
+    /// key received via approval notification, then derives the shared secret using the
+    /// user's password.
+    ///
+    /// # Security Model
+    /// - Requires explicit user password entry (no password storage)
+    /// - Uses existing KeySecure from partial connection
+    /// - Derives shared secret using ECDH + Blake3
+    /// - Atomically transitions to Established state
+    ///
+    /// # Arguments
+    /// * `peer_public_key` - Public key received from peer's approval
+    /// * `password` - User password for decrypting our private key
+    ///
+    /// # Returns
+    /// * `Ok(Connection)` - Completed connection in Established state
+    /// * `Err(ConnectionError)` - Validation, decryption, or ECDH error
+    ///
+    /// # State Requirements
+    /// - Connection must be in PendingOutgoing state
+    /// - Connection must have own_keysecure (encrypted private key)
+    ///
+    /// # Example Usage in Notification Workflow
+    /// ```rust
+    /// // 1. User sees approval notification
+    /// // 2. User chooses to complete connection
+    /// // 3. User enters their password
+    /// let completed = partial_connection.complete_with_password(
+    ///     &approval_notification.peer_public_key,
+    ///     &user_entered_password
+    /// )?;
+    /// // 4. Connection is now Established with shared secret
+    /// ```
+    pub fn complete_with_password(
+        &self,
+        peer_public_key: &str,
+        password: &str,
+    ) -> Result<Connection, ConnectionError> {
+        // Validate state
+        if self.get_state() != State::PendingOutgoing {
+            return Err(ConnectionError::InvalidStateTransition {
+                from: self.get_state(),
+                to: State::Established,
+            });
+        }
+
+        // Get existing KeySecure
+        let existing_keysecure = self.get_own_keysecure().ok_or_else(|| {
+            ConnectionError::CryptographicError(
+                "Missing KeySecure for connection completion".to_string(),
+            )
+        })?;
+        // ✅ Use enhanced generate_complete_connection with existing KeySecure
+        let mut complete_connection = ConnectionBuilder::generate_complete_connection(
+            self.get_id(),
+            self.get_peer_did_uri(),
+            PeerKey::from_validated(peer_public_key.to_string()),
+            self.get_peer_connection_id(),
+            password.to_string(),
+            self.get_context(),
+            None,                     // No keypair - use existing KeySecure
+            Some(existing_keysecure), // ✅ Use existing KeySecure
+        )?;
+
+        // ✅ APPLY decrypt_and_derive_shared_secret HERE
+        complete_connection
+            .decrypt_and_derive_shared_secret(password)
+            .map_err(|e| {
+                ConnectionError::CryptographicError(format!(
+                    "Failed to decrypt and derive shared secret during completion: {}",
+                    e
+                ))
+            })?;
+
+        // Update state to Established
+        complete_connection.update_state(State::Established);
+
+        Ok(complete_connection)
     }
 }
 
@@ -270,29 +490,57 @@ impl TryFrom<Vec<u8>> for Connection {
 /// # Connection Builder
 ///
 /// Provides a fluent API for constructing Connection objects with comprehensive validation.
+/// Supports three distinct connection patterns based on provided parameters.
+///
+/// ## Connection Patterns
+///
+/// ### 1. Complete Connections (peer_key + password)
+/// Traditional connections with immediate shared secret generation:
+/// ```rust
+/// let complete = Connection::builder()
+///     .with_peer_key("abc123...")     // ✅ Peer key provided
+///     .with_password("Strong123!@#")  // ✅ Password provided
+///     .build()?;  // State: Pending, has shared secret
+/// ```
+///
+/// ### 2. Partial Connections (password only)
+/// For outgoing requests where peer's key is unknown:
+/// ```rust
+/// let partial = Connection::builder()
+///     .with_password("Strong123!@#")  // ✅ Password for our KeySecure
+///     .build()?;  // State: PendingOutgoing, placeholder shared secret
+/// ```
+///
+/// ### 3. Passwordless Connections (neither)
+/// For incoming requests with no cryptographic setup:
+/// ```rust
+/// let passwordless = Connection::builder()
+///     .build()?;  // State: PendingIncoming, no crypto material
+/// ```
+///
+/// ## Enhanced Features
+/// - **Existing KeySecure Support**: Reuse encrypted private keys from partial connections
+/// - **Connection Completion**: Transform partial connections using peer's public key
+/// - **Comprehensive Validation**: All inputs validated before object creation
+/// - **Flexible Construction**: Optional fields with sensible defaults
 ///
 /// ## Validation Features
 /// - **UUID Validation**: Ensures connection IDs are valid UUID v4 format
 /// - **DID URI Validation**: Validates W3C DID specification compliance
 /// - **Hex Key Validation**: Ensures peer keys are valid 64-character hex strings
-/// - **Password Complexity**: Enforces strong password requirements
-///
-/// ## Builder Pattern Benefits
-/// - **Type Safety**: Compile-time verification of required fields
-/// - **Ergonomic API**: Fluent method chaining for easy use
-/// - **Comprehensive Validation**: All inputs validated before object creation
-/// - **Flexible Construction**: Optional fields with sensible defaults
+/// - **Password Complexity**: Enforces strong password requirements for KeySecure encryption
 ///
 /// ## Required Fields
 /// - `id`: Connection identifier (UUID format)
 /// - `peer_did_uri`: Peer's DID URI (did:method:identifier format)
-/// - `peer_key`: Peer's public key (64-character hex string)
-/// - `password`: Password for KeySecure encryption (min 12 chars, complexity required)
 ///
 /// ## Optional Fields
+/// - `peer_key`: Peer's public key (determines connection type)
+/// - `password`: Password for KeySecure encryption (determines connection type)
 /// - `peer_connection_id`: Peer's connection ID (auto-generated if not provided)
 /// - `context`: Connection context (defaults to Connection)
 /// - `own_keypair`: Our keypair (auto-generated if not provided)
+/// - `own_keysecure`: Existing KeySecure (for connection completion scenarios)
 #[derive(Debug, Default)]
 pub struct ConnectionBuilder {
     /// Connection identifier (required)
@@ -309,6 +557,8 @@ pub struct ConnectionBuilder {
     context: Option<ConnectionContext>,
     /// Our own keypair (optional - auto-generated if not provided)
     own_keypair: Option<KeyPair>,
+    /// Existing KeySecure (optional - for connection completion)
+    own_keysecure: Option<KeySecure>,
 }
 
 impl ConnectionBuilder {
@@ -460,6 +710,72 @@ impl ConnectionBuilder {
         self
     }
 
+    /// Use an existing KeySecure instead of generating new one
+    ///
+    /// This method is primarily used for connection completion scenarios where
+    /// a partial connection already has an encrypted private key that should be reused.
+    ///
+    /// # Parameters
+    /// - `keysecure`: Previously encrypted private key from partial connection
+    ///
+    /// # Use Cases
+    /// - Connection completion: Reuse KeySecure from partial connection
+    /// - Key recovery: Restore connections from persistent storage
+    /// - Testing: Use predetermined KeySecure for reproducible tests
+    ///
+    /// # Validation
+    /// Cannot be used together with `with_own_keypair()` - build() will fail
+    ///
+    /// # Example
+    /// ```rust
+    /// let existing_keysecure = partial_connection.get_own_keysecure().unwrap();
+    /// let completed = Connection::builder()
+    ///     .with_existing_keysecure(existing_keysecure)
+    ///     .with_peer_key(peer_public_key)
+    ///     .with_password("StrongPassword123!@#")
+    ///     .build()?;
+    /// ```
+    pub fn with_existing_keysecure(mut self, keysecure: KeySecure) -> Self {
+        self.own_keysecure = Some(keysecure);
+        self
+    }
+
+    /// Create a builder from an existing partial connection
+    ///
+    /// This method copies all properties from an existing connection except for
+    /// peer_key and password, which must be provided separately for completion.
+    ///
+    /// # Parameters
+    /// - `existing`: The partial connection to copy properties from
+    ///
+    /// # Copied Properties
+    /// - Connection ID, peer DID URI, peer connection ID
+    /// - Connection context and existing KeySecure
+    ///
+    /// # Properties That Must Be Set
+    /// - `peer_key`: Will be provided during completion
+    /// - `password`: Will be provided by user during completion
+    ///
+    /// # Example
+    /// ```rust
+    /// let builder = ConnectionBuilder::from_existing_connection(&partial_connection)
+    ///     .with_peer_key(peer_public_key)      // From approval notification
+    ///     .with_password(user_password);       // From user input
+    /// let completed = builder.build()?;
+    /// ```
+    pub fn from_existing_connection(existing: &Connection) -> Self {
+        Self {
+            id: Some(existing.get_id()),
+            peer_did_uri: Some(existing.get_peer_did_uri()),
+            peer_key: None, // Will be set when completing
+            password: None, // Will be provided when completing
+            peer_connection_id: Some(existing.get_peer_connection_id()),
+            context: Some(existing.get_context()),
+            own_keypair: None, // Will use existing KeySecure
+            own_keysecure: existing.get_own_keysecure(), // ✅ Reuse existing
+        }
+    }
+
     /// Validates password complexity requirements
     ///
     /// # Security Requirements
@@ -517,15 +833,36 @@ impl ConnectionBuilder {
         Ok(())
     }
 
-    /// Builds the Connection object with comprehensive validation and ECDH key generation
+    /// Builds the Connection object with comprehensive validation and cryptographic setup
     ///
-    /// This method supports two build modes:
-    /// 1. **Complete Connection**: When peer_key is provided, generates full ECDH shared secret
-    /// 2. **Partial Connection**: When peer_key is missing, creates connection for outgoing requests
+    /// This method supports three build modes based on provided parameters:
+    ///
+    /// ## 1. Complete Connection (peer_key + password)
+    /// - Generates full ECDH shared secret immediately
+    /// - State: Pending
+    /// - Has real shared secret value
+    ///
+    /// ## 2. Partial Connection (password only)
+    /// - Creates connection for outgoing requests
+    /// - State: PendingOutgoing
+    /// - Has placeholder shared secret ("pending")
+    /// - Has our KeySecure for later completion
+    ///
+    /// ## 3. Passwordless Connection (neither)
+    /// - Creates connection for incoming requests
+    /// - State: PendingIncoming
+    /// - No cryptographic material
     ///
     /// # Returns
     /// - `Ok(Connection)`: Successfully constructed and validated connection
     /// - `Err(ConnectionError)`: Validation or cryptographic error
+    ///
+    /// # Validation Performed
+    /// - Connection ID: Must be valid UUID v4 format
+    /// - Peer DID URI: Must follow W3C DID specification
+    /// - Peer Key (if provided): Must be 64-character hex string
+    /// - Password (if provided): Must meet complexity requirements
+    /// - KeySecure conflicts: Cannot provide both keypair and existing KeySecure
     pub fn build(mut self) -> Result<Connection, ConnectionError> {
         let id_str = self.id.take().ok_or_else(|| {
             ConnectionError::ValidationError("Connection ID is required".to_string())
@@ -562,6 +899,7 @@ impl ConnectionBuilder {
                     password.clone(),
                     context,
                     self.own_keypair,
+                    self.own_keysecure,
                 )
             }
             // Partial outgoing connection (with password, no peer key)
@@ -583,6 +921,36 @@ impl ConnectionBuilder {
         }
     }
 
+    /// Generates a passwordless incoming connection (no cryptographic setup)
+    ///
+    /// Used for incoming connection requests where we haven't set up any
+    /// cryptographic material yet. This represents a "placeholder" connection
+    /// that will be processed through approval workflows.
+    ///
+    /// # Use Cases
+    /// - Incoming connection requests that need user approval
+    /// - Connection records for tracking peer requests
+    /// - Placeholder connections before cryptographic setup
+    ///
+    /// # Properties
+    /// - No KeySecure (no private key)
+    /// - No public key
+    /// - No shared secret
+    /// - Placeholder peer key ("0000...0000")
+    /// - State: PendingIncoming
+    ///
+    /// # Completion Flow
+    /// These connections typically require separate approval and cryptographic setup
+    /// through different workflows than the partial connection completion flow.
+    ///
+    /// # Parameters
+    /// - `id`: Connection identifier
+    /// - `peer_did_uri`: Peer's DID URI
+    /// - `peer_connection_id`: Peer's connection ID
+    /// - `context`: Connection context
+    ///
+    /// # Returns
+    /// - `Ok(Connection)`: Passwordless connection in PendingIncoming state
     fn generate_passwordless_incoming_connection(
         id: ConnectionID,
         peer_did_uri: PeerDIDURI,
@@ -609,8 +977,45 @@ impl ConnectionBuilder {
 
     /// Generates a complete Connection with ECDH shared secret
     ///
-    /// Used when we have both our keypair and the peer's public key.
-    /// This is the original implementation for complete connections.
+    /// Enhanced version that supports both new keypair generation and existing KeySecure reuse.
+    /// This is the core method for creating connections with full cryptographic setup.
+    ///
+    /// # Cryptographic Flows
+    ///
+    /// ## New Keypair (own_keypair + None)
+    /// - Uses provided keypair for ECDH
+    /// - Encrypts keypair with password to create KeySecure
+    /// - Standard complete connection flow
+    ///
+    /// ## Existing KeySecure (None + existing_keysecure)
+    /// - Decrypts existing KeySecure with password to recover keypair
+    /// - Uses recovered keypair for ECDH with peer's public key
+    /// - Reuses existing KeySecure (no re-encryption needed)
+    /// - **Connection completion flow**
+    ///
+    /// ## Generated Keypair (None + None)
+    /// - Generates new random keypair
+    /// - Encrypts with password to create KeySecure
+    /// - Default complete connection flow
+    ///
+    /// # Parameters
+    /// - `id`: Connection identifier
+    /// - `peer_did_uri`: Peer's DID URI
+    /// - `peer_key`: Peer's public key for ECDH
+    /// - `peer_connection_id`: Peer's connection ID
+    /// - `password`: Password for KeySecure encryption/decryption
+    /// - `context`: Connection context
+    /// - `own_keypair`: Optional existing keypair
+    /// - `existing_keysecure`: Optional existing encrypted private key
+    ///
+    /// # Returns
+    /// - `Ok(Connection)`: Complete connection with shared secret in Pending state
+    /// - `Err(ConnectionError)`: Cryptographic or validation error
+    ///
+    /// # Security Properties
+    /// - Shared secret is ECDH(our_private, peer_public) -> Blake3 -> hex
+    /// - Private keys are always encrypted with KeySecure
+    /// - Password is used only for encryption/decryption, never stored
     fn generate_complete_connection(
         id: ConnectionID,
         peer_did_uri: PeerDIDURI,
@@ -619,19 +1024,69 @@ impl ConnectionBuilder {
         password: String,
         context: ConnectionContext,
         own_keypair: Option<KeyPair>,
+        existing_keysecure: Option<KeySecure>,
     ) -> Result<Connection, ConnectionError> {
-        // Use provided keypair or generate a new one using secure randomness
-        let keypair = own_keypair.unwrap_or_else(|| KeyPair::generate());
+        let (keypair, own_keysecure) = match (own_keypair, existing_keysecure) {
+            // Use provided keypair (normal case)
+            (Some(keypair), None) => {
+                let password_obj = Password::from(password.clone());
+                let keysecure = keypair.to_keysecure(password_obj).map_err(|e| {
+                    ConnectionError::CryptographicError(format!(
+                        "KeySecure encryption failed: {}",
+                        e
+                    ))
+                })?;
+                (keypair, keysecure)
+            }
+
+            // Use existing KeySecure (completion case) - decrypt it to get keypair
+            (None, Some(keysecure)) => {
+                let decrypted = keysecure.decrypt(password.clone()).map_err(|e| {
+                    ConnectionError::CryptographicError(format!(
+                        "Failed to decrypt KeySecure: {}",
+                        e
+                    ))
+                })?;
+
+                let private_key_hex = String::from_utf8(decrypted.vec()).map_err(|e| {
+                    ConnectionError::CryptographicError(format!("Invalid decrypted data: {}", e))
+                })?;
+
+                let keypair = KeyPair::from_hex(private_key_hex).map_err(|e| {
+                    ConnectionError::CryptographicError(format!(
+                        "Failed to reconstruct keypair: {}",
+                        e
+                    ))
+                })?;
+
+                (keypair, keysecure)
+            }
+
+            // Generate new keypair (default case)
+            // Generate new keypair (default case)
+            (None, None) => {
+                let keypair = KeyPair::generate();
+                let password_obj = Password::from(password.clone());
+                let keysecure = keypair.to_keysecure(password_obj).map_err(|e| {
+                    ConnectionError::CryptographicError(format!(
+                        "KeySecure encryption failed: {}",
+                        e
+                    ))
+                })?;
+                (keypair, keysecure)
+            }
+
+            // Invalid: both provided
+            (Some(_), Some(_)) => {
+                return Err(ConnectionError::ValidationError(
+                    "Cannot provide both keypair and existing KeySecure".to_string(),
+                ));
+            }
+        };
 
         // Extract our public key for storage and sharing with peer
         let public_key = keypair.pub_key();
         let own_key_hex = public_key.to_hex();
-
-        // ✅ Correct KeySecure encryption using ToKeySecure trait
-        let password_obj = Password::from(password);
-        let own_keysecure = keypair.to_keysecure(password_obj).map_err(|e| {
-            ConnectionError::CryptographicError(format!("KeySecure encryption failed: {}", e))
-        })?;
 
         // Prepare peer's public key for ECDH computation
         let peer_key_clean = peer_key
@@ -670,7 +1125,37 @@ impl ConnectionBuilder {
     /// Generates a partial Connection for outgoing requests (without peer key)
     ///
     /// Used when initiating connection requests where we don't have the peer's
-    /// public key yet. The connection will be completed later when the peer responds.
+    /// public key yet. The connection will be completed later when the peer responds
+    /// with their approval and public key.
+    ///
+    /// # Cryptographic Setup
+    /// - Generates or uses provided keypair for our side
+    /// - Encrypts private key with password using KeySecure
+    /// - Stores our public key for sharing with peer
+    /// - Sets placeholder values for peer data and shared secret
+    ///
+    /// # Placeholder Values
+    /// - `peer_key`: "0000...0000" (64 zeros)
+    /// - `own_shared_secret`: "pending"
+    /// - `state`: PendingOutgoing
+    ///
+    /// # Completion Flow
+    /// Later, when peer approves:
+    /// 1. Peer sends their public key via approval notification
+    /// 2. User calls `complete_with_password()` with peer's key and their password
+    /// 3. Connection derives real shared secret and transitions to Established
+    ///
+    /// # Parameters
+    /// - `id`: Connection identifier
+    /// - `peer_did_uri`: Peer's DID URI
+    /// - `peer_connection_id`: Peer's connection ID
+    /// - `password`: Password for KeySecure encryption
+    /// - `context`: Connection context
+    /// - `own_keypair`: Optional existing keypair
+    ///
+    /// # Returns
+    /// - `Ok(Connection)`: Partial connection in PendingOutgoing state
+    /// - `Err(ConnectionError)`: Validation or cryptographic error
     fn generate_partial_connection(
         id: ConnectionID,
         peer_did_uri: PeerDIDURI,
@@ -717,8 +1202,12 @@ impl ConnectionBuilder {
 
     /// Completes a partial connection when the peer's public key becomes available
     ///
-    /// This method is called when we receive the peer's public key (e.g., during approval).
-    /// It computes the ECDH shared secret and updates the connection to established state.
+    /// This method is used in traditional completion workflows (not the new notification-based
+    /// approach). It modifies an existing connection in-place rather than creating a new one.
+    ///
+    /// # Migration Note
+    /// For new notification-based workflows, prefer `Connection::complete_with_password()`
+    /// which creates a new completed connection instead of modifying the existing one.
     ///
     /// # Parameters
     /// - `connection`: Mutable reference to the partial connection
@@ -726,8 +1215,12 @@ impl ConnectionBuilder {
     /// - `password`: Password to decrypt our private key
     ///
     /// # Returns
-    /// - `Ok(())`: Connection successfully completed
+    /// - `Ok(())`: Connection successfully completed (modified in-place)
     /// - `Err(ConnectionError)`: Cryptographic operation failure
+    ///
+    /// # State Requirements
+    /// - Connection must be in PendingOutgoing or PendingIncoming state
+    /// - Connection must have KeySecure for decryption (PendingOutgoing only)
     pub fn complete_connection(
         connection: &mut Connection,
         peer_key: PeerKey,
@@ -1501,6 +1994,477 @@ mod tests {
                 result.unwrap_err(),
                 ConnectionError::ValidationError(_)
             ));
+        }
+    }
+
+    mod complete_with_password_tests {
+        use super::*;
+
+        /// Tests successful completion of partial connection with correct password
+        #[test]
+        fn test_complete_with_password_success() {
+            // Step 1: Create partial connection (PendingOutgoing)
+            let our_keypair = KeyPair::generate();
+            let connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#")
+                .with_own_keypair(our_keypair.clone())
+                .build()
+                .unwrap();
+
+            assert_eq!(connection.get_state(), State::PendingOutgoing);
+
+            // Step 2: Generate peer's public key
+            let peer_keypair = KeyPair::generate();
+            let peer_public_key = peer_keypair.pub_key().to_hex().hex();
+
+            // Step 3: Complete connection with peer's public key
+            let result =
+                connection.complete_with_password(&peer_public_key, "StrongPassword123!@#");
+
+            assert!(
+                result.is_ok(),
+                "Completion should succeed: {:?}",
+                result.err()
+            );
+
+            let completed_connection = result.unwrap();
+            assert_eq!(completed_connection.get_state(), State::Established);
+            assert_eq!(
+                completed_connection.get_peer_key().to_string(),
+                peer_public_key
+            );
+            assert_ne!(
+                completed_connection
+                    .get_own_shared_secret()
+                    .unwrap()
+                    .as_ref(),
+                "pending"
+            );
+
+            // Step 4: Verify ECDH correctness
+            let expected_secret = our_keypair
+                .secret(ByteHex::from(peer_public_key.clone()))
+                .to_blake3()
+                .unwrap();
+
+            assert_eq!(
+                completed_connection
+                    .get_own_shared_secret()
+                    .unwrap()
+                    .to_string(),
+                expected_secret.hex()
+            );
+        }
+
+        /// Tests completion failure with wrong password
+        #[test]
+        fn test_complete_with_password_wrong_password() {
+            let connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .build()
+                .unwrap();
+
+            let peer_public_key = KeyPair::generate().pub_key().to_hex().hex();
+
+            let result = connection.complete_with_password(&peer_public_key, "WrongPassword456!@#");
+
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::CryptographicError(_)
+            ));
+        }
+
+        /// Tests completion failure for wrong connection state
+        #[test]
+        fn test_complete_with_password_wrong_state() {
+            // Create complete connection (Pending state)
+            let peer_keypair = KeyPair::generate();
+            let connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_peer_key(peer_keypair.pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+
+            assert_eq!(connection.get_state(), State::Pending);
+
+            let another_peer_key = KeyPair::generate().pub_key().to_hex().hex();
+            let result =
+                connection.complete_with_password(&another_peer_key, "StrongPassword123!@#");
+
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::InvalidStateTransition {
+                    from: State::Pending,
+                    to: State::Established
+                }
+            ));
+        }
+
+        /// Tests completion failure when KeySecure is missing
+        #[test]
+        fn test_complete_with_password_missing_keysecure() {
+            // Create connection without KeySecure (passwordless incoming)
+            let mut connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .build()
+                .unwrap();
+
+            // Manually set to PendingOutgoing to bypass state check
+            connection.update_state(State::PendingOutgoing);
+
+            let peer_public_key = KeyPair::generate().pub_key().to_hex().hex();
+            let result =
+                connection.complete_with_password(&peer_public_key, "StrongPassword123!@#");
+
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::CryptographicError(_)
+            ));
+        }
+
+        /// Tests completion with invalid peer public key
+        #[test]
+        fn test_complete_with_password_invalid_peer_key() {
+            let connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .build()
+                .unwrap();
+
+            let invalid_keys = [
+                "short",
+                "not_hex_characters",
+                "",
+                "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12", // Too long
+            ];
+
+            for invalid_key in invalid_keys {
+                let result = connection.complete_with_password(invalid_key, "StrongPassword123!@#");
+
+                assert!(
+                    result.is_err(),
+                    "Should fail for invalid key: {}",
+                    invalid_key
+                );
+            }
+        }
+
+        /// Tests completion preserves original connection properties
+        #[test]
+        fn test_complete_with_password_preserves_properties() {
+            let original_id =
+                ConnectionID::from("550e8400-e29b-41d4-a716-446655440000".to_string());
+            let original_peer_did = PeerDIDURI::from("did:example:peer".to_string());
+            let original_peer_conn_id = ConnectionID::generate();
+
+            let connection = Connection::builder()
+                .with_id(original_id.clone())
+                .with_peer_did_uri(original_peer_did.clone())
+                .with_peer_connection_id(original_peer_conn_id.clone())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+
+            let peer_public_key = KeyPair::generate().pub_key().to_hex().hex();
+            let completed = connection
+                .complete_with_password(&peer_public_key, "StrongPassword123!@#")
+                .unwrap();
+
+            // Verify preserved properties
+            assert_eq!(completed.get_id(), original_id);
+            assert_eq!(completed.get_peer_did_uri(), original_peer_did);
+            assert_eq!(completed.get_peer_connection_id(), original_peer_conn_id);
+            assert_eq!(completed.get_context(), ConnectionContext::Connection);
+        }
+    }
+
+    mod enhanced_builder_tests {
+        use super::*;
+
+        /// Tests with_existing_keysecure method
+        #[test]
+        fn test_builder_with_existing_keysecure() {
+            // Create original connection to get KeySecure
+            let original_keypair = KeyPair::generate();
+            let original_connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .with_own_keypair(original_keypair.clone())
+                .build()
+                .unwrap();
+
+            let existing_keysecure = original_connection.get_own_keysecure().unwrap();
+
+            // Create new connection with existing KeySecure
+            let peer_keypair = KeyPair::generate();
+            let new_connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440001".to_string())
+                .with_peer_did_uri("did:example:newpeer".to_string())
+                .with_peer_key(peer_keypair.pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .with_existing_keysecure(existing_keysecure.clone())
+                .build();
+
+            assert!(new_connection.is_ok());
+            let conn = new_connection.unwrap();
+
+            // Should have same public key (derived from same private key)
+            assert_eq!(
+                conn.get_own_key().unwrap().to_string(),
+                original_keypair.pub_key().to_hex().hex()
+            );
+        }
+
+        /// Tests from_existing_connection method
+        #[test]
+        fn test_builder_from_existing_connection() {
+            let original_connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .build()
+                .unwrap();
+
+            let builder = ConnectionBuilder::from_existing_connection(&original_connection);
+
+            // Should preserve original properties
+            assert_eq!(builder.id, Some(original_connection.get_id()));
+            assert_eq!(
+                builder.peer_did_uri,
+                Some(original_connection.get_peer_did_uri())
+            );
+            assert_eq!(
+                builder.peer_connection_id,
+                Some(original_connection.get_peer_connection_id())
+            );
+            assert_eq!(builder.context, Some(original_connection.get_context()));
+
+            // Should have None for fields that need to be set
+            assert_eq!(builder.peer_key, None);
+            assert_eq!(builder.password, None);
+        }
+
+        /// Tests builder with both keypair and existing KeySecure (should fail)
+        #[test]
+        fn test_builder_with_both_keypair_and_keysecure_should_fail() {
+            let keypair = KeyPair::generate();
+            let existing_keysecure = keypair
+                .to_keysecure(Password::from("password".to_string()))
+                .unwrap();
+
+            let result = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_peer_key(KeyPair::generate().pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .with_own_keypair(keypair)
+                .with_existing_keysecure(existing_keysecure)
+                .build();
+
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::ValidationError(_)
+            ));
+        }
+    }
+
+    mod decrypt_and_derive_tests {
+        use super::*;
+
+        /// Tests successful decryption and shared secret derivation
+        #[test]
+        fn test_decrypt_and_derive_shared_secret_success() {
+            let our_keypair = KeyPair::generate();
+            let peer_keypair = KeyPair::generate();
+
+            let mut connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_peer_key(peer_keypair.pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .with_own_keypair(our_keypair.clone())
+                .build()
+                .unwrap();
+
+            // Should already have shared secret from builder
+            let original_secret = connection.get_own_shared_secret().unwrap();
+
+            // Clear shared secret to test the method
+            connection.own_shared_secret = None;
+
+            let result = connection.decrypt_and_derive_shared_secret("StrongPassword123!@#");
+            assert!(
+                result.is_ok(),
+                "Decryption should succeed: {:?}",
+                result.err()
+            );
+
+            // Should now have the shared secret again
+            let new_secret = connection.get_own_shared_secret().unwrap();
+            assert_eq!(new_secret, original_secret);
+        }
+
+        /// Tests decryption failure with wrong password
+        #[test]
+        fn test_decrypt_and_derive_wrong_password() {
+            let mut connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_peer_key(KeyPair::generate().pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+
+            let result = connection.decrypt_and_derive_shared_secret("WrongPassword456!@#");
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::CryptographicError(_)
+            ));
+        }
+
+        /// Tests failure when KeySecure is missing
+        #[test]
+        fn test_decrypt_and_derive_missing_keysecure() {
+            let mut connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .build()
+                .unwrap();
+
+            let result = connection.decrypt_and_derive_shared_secret("StrongPassword123!@#");
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::CryptographicError(_)
+            ));
+        }
+
+        /// Tests timestamp update after successful operation
+        #[test]
+        fn test_decrypt_and_derive_updates_timestamp() {
+            let mut connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_peer_key(KeyPair::generate().pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+
+            let original_timestamp = connection.get_updated_at();
+            std::thread::sleep(std::time::Duration::from_millis(10));
+
+            connection.own_shared_secret = None; // Clear to test the method
+            let result = connection.decrypt_and_derive_shared_secret("StrongPassword123!@#");
+            assert!(result.is_ok());
+
+            assert!(connection.get_updated_at() > original_timestamp);
+        }
+    }
+
+    mod error_handling_tests {
+        use super::*;
+
+        /// Tests all possible error conditions for complete_with_password
+        #[test]
+        fn test_complete_with_password_all_error_conditions() {
+            // Test each error condition systematically
+
+            // 1. Wrong state
+            let complete_connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_peer_key(KeyPair::generate().pub_key().to_hex().hex())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+
+            let result = complete_connection.complete_with_password(
+                &KeyPair::generate().pub_key().to_hex().hex(),
+                "StrongPassword123!@#",
+            );
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::InvalidStateTransition { .. }
+            ));
+
+            // 2. Missing KeySecure
+            let mut no_keysecure = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440001".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .build()
+                .unwrap();
+            no_keysecure.update_state(State::PendingOutgoing);
+
+            let result = no_keysecure.complete_with_password(
+                &KeyPair::generate().pub_key().to_hex().hex(),
+                "StrongPassword123!@#",
+            );
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::CryptographicError(_)
+            ));
+
+            // 3. Invalid peer public key
+            let partial_connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440002".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .build()
+                .unwrap();
+
+            let result =
+                partial_connection.complete_with_password("invalid_key", "StrongPassword123!@#");
+            assert!(result.is_err());
+
+            // 4. Wrong password
+            let result = partial_connection.complete_with_password(
+                &KeyPair::generate().pub_key().to_hex().hex(),
+                "WrongPassword456!@#",
+            );
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::CryptographicError(_)
+            ));
+        }
+
+        /// Tests boundary conditions for peer key validation
+        #[test]
+        fn test_peer_key_boundary_conditions() {
+            let connection = Connection::builder()
+                .with_id("550e8400-e29b-41d4-a716-446655440000".to_string())
+                .with_peer_did_uri("did:example:peer".to_string())
+                .with_password("StrongPassword123!@#".to_string())
+                .build()
+                .unwrap();
+
+            // Edge cases for peer key length
+            let boundary_cases = [
+                ("", "empty key"),
+                ("1", "single character"),
+                ("12345", "short key"),
+                (&"a".repeat(63), "63 characters"),
+                (&"a".repeat(65), "65 characters"),
+                (&"g".repeat(64), "invalid hex characters"),
+            ];
+
+            for (key, description) in boundary_cases {
+                let result = connection.complete_with_password(key, "StrongPassword123!@#");
+                assert!(result.is_err(), "Should fail for: {}", description);
+            }
         }
     }
 }
