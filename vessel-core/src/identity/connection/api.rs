@@ -371,7 +371,23 @@ where
                 ))
             })?;
 
-        // Step 3: Verify connection is in correct state
+        // ✅ STEP 3: ADD IDEMPOTENCY CHECKS AT REQUEST_RESPONSE LEVEL
+        match approval {
+            Approval::Approve => {
+                // Check if already approved/established
+                if connection.get_state() == State::Established {
+                    return Ok(()); // Idempotent - already processed
+                }
+            }
+            Approval::Reject => {
+                // Check if already rejected/cancelled
+                if matches!(connection.get_state(), State::Rejected | State::Cancelled) {
+                    return Ok(()); // Idempotent - already processed
+                }
+            }
+        }
+
+        // ✅ STEP 4: FIXED - Validate state with correct target state based on approval type
         if connection.get_state() != State::PendingIncoming {
             return Err(ConnectionError::InvalidStateTransition {
                 from: connection.get_state(),
@@ -1553,9 +1569,68 @@ mod tests {
             assert!(result.is_err());
             if let Err(ConnectionError::InvalidStateTransition { from, to }) = result {
                 assert_eq!(from, State::PendingOutgoing);
-                assert_eq!(to, State::Established);
+                assert_eq!(to, State::Established); // ✅ FIXED: Approval targets Established, not Rejected
             } else {
                 panic!("Expected InvalidStateTransition error");
+            }
+        }
+
+        #[tokio::test]
+        async fn test_request_response_invalid_state_cancelled() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            let mut connection = create_pending_incoming_connection();
+            connection.update_state(State::Cancelled);
+            let connection_id = connection.get_id().clone();
+
+            repo.expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(connection.clone()));
+
+            let api = generate_connection_api(repo, rpc);
+
+            // ✅ FIXED: Test with rejection (which should be idempotent for Cancelled)
+            let result = api
+                .request_response(connection_id.clone(), Approval::Reject, None)
+                .await;
+
+            // ✅ FIXED: Cancelled state should be idempotent for rejection
+            assert!(
+                result.is_ok(),
+                "Cancelled state should be idempotent for rejection"
+            );
+
+            // ✅ NEW: Test with approval (which should fail for Cancelled)
+            let mut repo2 = MockFakeRepo::new();
+            let mut connection2 = create_pending_incoming_connection();
+            connection2.update_state(State::Cancelled);
+            let connection_id2 = connection2.get_id().clone();
+
+            repo2
+                .expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(connection2.clone()));
+
+            let api2 = generate_connection_api(repo2, MockFakeRPCClient::new());
+
+            let result2 = api2
+                .request_response(
+                    connection_id2,
+                    Approval::Approve,
+                    Some("StrongPassword123!@#".to_string()),
+                )
+                .await;
+
+            // ✅ FIXED: Approval should fail for Cancelled state
+            assert!(result2.is_err());
+            if let Err(ConnectionError::InvalidStateTransition { from, to }) = result2 {
+                assert_eq!(from, State::Cancelled);
+                assert_eq!(to, State::Established);
+            } else {
+                panic!(
+                    "Expected InvalidStateTransition error for approval on cancelled connection"
+                );
             }
         }
 
@@ -1582,38 +1657,6 @@ mod tests {
             if let Err(ConnectionError::InvalidStateTransition { from, to }) = result {
                 assert_eq!(from, State::Established);
                 assert_eq!(to, State::Rejected);
-            } else {
-                panic!("Expected InvalidStateTransition error");
-            }
-        }
-
-        #[tokio::test]
-        async fn test_request_response_invalid_state_cancelled() {
-            let mut repo = MockFakeRepo::new();
-            let rpc = MockFakeRPCClient::new();
-
-            let mut connection = create_pending_incoming_connection();
-            connection.update_state(State::Cancelled);
-            let connection_id = connection.get_id().clone();
-
-            repo.expect_get_connection()
-                .times(1)
-                .returning(move |_| Ok(connection.clone()));
-
-            let api = generate_connection_api(repo, rpc);
-
-            let result = api
-                .request_response(
-                    connection_id,
-                    Approval::Approve,
-                    Some("StrongPassword123!@#".to_string()),
-                )
-                .await;
-
-            assert!(result.is_err());
-            if let Err(ConnectionError::InvalidStateTransition { from, to }) = result {
-                assert_eq!(from, State::Cancelled);
-                assert_eq!(to, State::Established);
             } else {
                 panic!("Expected InvalidStateTransition error");
             }
@@ -1720,7 +1763,7 @@ mod tests {
         async fn test_request_response_approval_weak_password() {
             let weak_passwords = vec![
                 "short",
-                "onlylowercase", 
+                "onlylowercase",
                 "ONLYUPPERCASE",
                 "NoNumbers!@#",
                 "NoSpecialChars123",
@@ -1729,7 +1772,7 @@ mod tests {
             // ✅ FIX: Test each weak password separately with its own mocks
             for weak_password in weak_passwords {
                 let mut repo = MockFakeRepo::new(); // ✅ Create fresh repo for each test
-                let rpc = MockFakeRPCClient::new();   // ✅ Create fresh RPC for each test
+                let rpc = MockFakeRPCClient::new(); // ✅ Create fresh RPC for each test
 
                 let connection = create_pending_incoming_connection();
                 let connection_id = connection.get_id().clone();
@@ -1749,7 +1792,11 @@ mod tests {
                     )
                     .await;
 
-                assert!(result.is_err(), "Should reject weak password: {}", weak_password);
+                assert!(
+                    result.is_err(),
+                    "Should reject weak password: {}",
+                    weak_password
+                );
                 assert!(matches!(
                     result.unwrap_err(),
                     ConnectionError::ValidationError(_) | ConnectionError::InvalidPassword(_)
@@ -1919,6 +1966,236 @@ mod tests {
 
             let result = api.request_submit(password, peer_did, own_did).await;
             assert!(result.is_ok());
+        }
+
+        #[tokio::test]
+        async fn test_request_response_idempotency_approval_established() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Create connection already in Established state
+            let mut connection = create_pending_incoming_connection();
+            connection.update_state(State::Established);
+            let connection_id = connection.get_id().clone();
+
+            repo.expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(connection.clone()));
+
+            // No save or RPC expectations - should be idempotent
+
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api
+                .request_response(
+                    connection_id,
+                    Approval::Approve,
+                    Some("StrongPassword123!@#".to_string()),
+                )
+                .await;
+
+            assert!(
+                result.is_ok(),
+                "Should handle already established connection idempotently"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_request_response_idempotency_rejection_rejected() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Create connection already in Rejected state
+            let mut connection = create_pending_incoming_connection();
+            connection.update_state(State::Rejected);
+            let connection_id = connection.get_id().clone();
+
+            repo.expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(connection.clone()));
+
+            // No remove or RPC expectations - should be idempotent
+
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api
+                .request_response(connection_id, Approval::Reject, None)
+                .await;
+
+            assert!(
+                result.is_ok(),
+                "Should handle already rejected connection idempotently"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_request_response_idempotency_rejection_cancelled() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Create connection already in Cancelled state
+            let mut connection = create_pending_incoming_connection();
+            connection.update_state(State::Cancelled);
+            let connection_id = connection.get_id().clone();
+
+            repo.expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(connection.clone()));
+
+            // No remove or RPC expectations - should be idempotent
+
+            let api = generate_connection_api(repo, rpc);
+
+            let result = api
+                .request_response(connection_id, Approval::Reject, None)
+                .await;
+
+            assert!(
+                result.is_ok(),
+                "Should handle already cancelled connection idempotently"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_request_response_idempotency_vs_invalid_states() {
+            // Test that non-idempotent invalid states still fail appropriately
+            let invalid_states = vec![State::PendingOutgoing];
+
+            for invalid_state in invalid_states {
+                let mut repo = MockFakeRepo::new();
+                let rpc = MockFakeRPCClient::new();
+
+                let mut connection = create_pending_incoming_connection();
+                connection.update_state(invalid_state.clone());
+                let connection_id = connection.get_id().clone();
+
+                repo.expect_get_connection()
+                    .times(1)
+                    .returning(move |_| Ok(connection.clone()));
+
+                let api = generate_connection_api(repo, rpc);
+
+                let result = api
+                    .request_response(
+                        connection_id,
+                        Approval::Approve,
+                        Some("StrongPassword123!@#".to_string()),
+                    )
+                    .await;
+
+                // Should fail with state transition error, not succeed idempotently
+                assert!(
+                    result.is_err(),
+                    "State {:?} should fail, not be idempotent",
+                    invalid_state
+                );
+                assert!(matches!(
+                    result.unwrap_err(),
+                    ConnectionError::InvalidStateTransition { .. }
+                ));
+            }
+        }
+
+        #[tokio::test]
+        async fn test_request_response_idempotency_correct_target_states() {
+            // Test that idempotency checks use correct target states
+
+            // Test 1: Approval with Established connection
+            let mut repo1 = MockFakeRepo::new();
+            let rpc1 = MockFakeRPCClient::new();
+
+            let mut established_connection = create_pending_incoming_connection();
+            established_connection.update_state(State::Established);
+            let connection_id1 = established_connection.get_id().clone();
+
+            repo1
+                .expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(established_connection.clone()));
+
+            let api1 = generate_connection_api(repo1, rpc1);
+
+            let result1 = api1
+                .request_response(
+                    connection_id1,
+                    Approval::Approve, // Target: Established
+                    Some("StrongPassword123!@#".to_string()),
+                )
+                .await;
+
+            assert!(
+                result1.is_ok(),
+                "Approval on Established should be idempotent"
+            );
+
+            // Test 2: Rejection with Rejected connection
+            let mut repo2 = MockFakeRepo::new();
+            let rpc2 = MockFakeRPCClient::new();
+
+            let mut rejected_connection = create_pending_incoming_connection();
+            rejected_connection.update_state(State::Rejected);
+            let connection_id2 = rejected_connection.get_id().clone();
+
+            repo2
+                .expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(rejected_connection.clone()));
+
+            let api2 = generate_connection_api(repo2, rpc2);
+
+            let result2 = api2
+                .request_response(
+                    connection_id2,
+                    Approval::Reject, // Target: Rejected
+                    None,
+                )
+                .await;
+
+            assert!(
+                result2.is_ok(),
+                "Rejection on Rejected should be idempotent"
+            );
+        }
+
+        #[tokio::test]
+        async fn test_request_response_idempotency_performance() {
+            // Test that idempotent calls are fast (no expensive operations)
+            use std::time::Instant;
+
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            let mut established_connection = create_pending_incoming_connection();
+            established_connection.update_state(State::Established);
+            let connection_id = established_connection.get_id().clone();
+
+            // Only expect get_connection - no save/RPC operations
+            repo.expect_get_connection()
+                .times(1)
+                .returning(move |_| Ok(established_connection.clone()));
+
+            let api = generate_connection_api(repo, rpc);
+
+            let start = Instant::now();
+
+            let result = api
+                .request_response(
+                    connection_id,
+                    Approval::Approve,
+                    Some("StrongPassword123!@#".to_string()),
+                )
+                .await;
+
+            let duration = start.elapsed();
+
+            assert!(result.is_ok(), "Idempotent call should succeed");
+
+            // Idempotent call should be very fast (no crypto, no RPC, no save operations)
+            // This is more of a documentation than assertion, but we can log it
+            println!("Idempotent call took: {:?}", duration);
+
+            // In a real test environment, we might assert duration < 1ms
+            // but in test environment with mocks, timing can vary
         }
 
         /// Tests for `request_submissions` method (using update_state for correct states)
@@ -2400,6 +2677,138 @@ mod tests {
                     result.err()
                 );
             }
+
+            #[tokio::test]
+            async fn test_handle_approval_idempotency_already_established() {
+                let repo = MockFakeRepo::new(); // No expectations - should return early
+                let rpc = MockFakeRPCClient::new(); // No expectations - should return early
+
+                // Create connection already in Established state
+                let mut connection = Connection::builder()
+                    .with_id(ConnectionID::generate())
+                    .with_peer_connection_id(ConnectionID::generate().as_ref().to_string())
+                    .with_peer_did_uri("did:example:sender123".to_string())
+                    .with_peer_key(
+                        "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+                            .to_string(),
+                    )
+                    .with_password("StrongPassword123!@#")
+                    .build()
+                    .unwrap();
+
+                connection.update_state(State::Established); // ✅ Already established
+
+                let api = generate_connection_api(repo, rpc);
+
+                let result = api
+                    .handle_approval(connection, Some("StrongPassword123!@#".to_string()))
+                    .await;
+
+                // ✅ Should succeed idempotently without doing any work
+                assert!(result.is_ok(), "Idempotent approval should succeed");
+            }
+
+            #[tokio::test]
+            async fn test_handle_approval_idempotency_vs_invalid_state() {
+                let repo = MockFakeRepo::new(); // No expectations - should fail validation
+                let rpc = MockFakeRPCClient::new(); // No expectations - should fail validation
+
+                // Create connection in PendingOutgoing state (invalid for approval, not idempotent)
+                let mut connection = create_pending_incoming_connection();
+                connection.update_state(State::PendingOutgoing);
+
+                let api = generate_connection_api(repo, rpc);
+
+                let result = api
+                    .handle_approval(connection, Some("StrongPassword123!@#".to_string()))
+                    .await;
+
+                // ✅ Should fail with state transition error, NOT succeed idempotently
+                assert!(result.is_err());
+                assert!(matches!(
+                    result.unwrap_err(),
+                    ConnectionError::InvalidStateTransition { .. }
+                ));
+            }
+
+            #[tokio::test]
+            async fn test_handle_approval_idempotency_multiple_calls() {
+                // Test that calling approval on already-established connection multiple times is safe
+                let repo = MockFakeRepo::new(); // No expectations - all calls should be idempotent
+                let rpc = MockFakeRPCClient::new(); // No expectations - all calls should be idempotent
+
+                let mut established_connection = Connection::builder()
+                    .with_id(ConnectionID::generate())
+                    .with_peer_connection_id(ConnectionID::generate().as_ref().to_string())
+                    .with_peer_did_uri("did:example:sender123".to_string())
+                    .with_peer_key(
+                        "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+                            .to_string(),
+                    )
+                    .with_password("StrongPassword123!@#")
+                    .build()
+                    .unwrap();
+
+                established_connection.update_state(State::Established);
+
+                let api = generate_connection_api(repo, rpc);
+
+                // Call multiple times - all should succeed idempotently
+                for i in 0..3 {
+                    let result = api
+                        .handle_approval(
+                            established_connection.clone(),
+                            Some("StrongPassword123!@#".to_string()),
+                        )
+                        .await;
+
+                    assert!(result.is_ok(), "Idempotent call {} should succeed", i);
+                }
+            }
+
+            #[tokio::test]
+            async fn test_handle_approval_idempotency_different_passwords() {
+                // Test that idempotency works regardless of password provided
+                let repo = MockFakeRepo::new(); // No expectations - should return early
+                let rpc = MockFakeRPCClient::new(); // No expectations - should return early
+
+                let mut established_connection = Connection::builder()
+                    .with_id(ConnectionID::generate())
+                    .with_peer_connection_id(ConnectionID::generate().as_ref().to_string())
+                    .with_peer_did_uri("did:example:sender123".to_string())
+                    .with_peer_key(
+                        "abcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd"
+                            .to_string(),
+                    )
+                    .with_password("OriginalPassword123!@#")
+                    .build()
+                    .unwrap();
+
+                established_connection.update_state(State::Established);
+
+                let api = generate_connection_api(repo, rpc);
+
+                // Try with different password - should still be idempotent
+                let result = api
+                    .handle_approval(
+                        established_connection.clone(),
+                        Some("DifferentPassword456!@#".to_string()),
+                    )
+                    .await;
+
+                assert!(
+                    result.is_ok(),
+                    "Idempotency should work regardless of password"
+                );
+
+                // Try with no password - should still be idempotent
+                let result = api.handle_approval(established_connection, None).await;
+
+                assert!(
+                    result.is_ok(),
+                    "Idempotency should work even with None password"
+                );
+            }
         }
 
         /// Tests for `handle_rejection` method - DIRECT TESTING
@@ -2717,287 +3126,388 @@ mod tests {
                     panic!("Expected EntityError with formatted RPC error message");
                 }
             }
+
+            #[tokio::test]
+            async fn test_handle_rejection_idempotency_already_rejected() {
+                let repo = MockFakeRepo::new(); // No expectations - should return early
+                let rpc = MockFakeRPCClient::new(); // No expectations - should return early
+
+                let mut connection = create_pending_incoming_connection();
+                connection.update_state(State::Rejected); // ✅ Already rejected
+
+                let api = generate_connection_api(repo, rpc);
+
+                let result = api.handle_rejection(connection).await;
+
+                // ✅ Should succeed idempotently without doing any work
+                assert!(result.is_ok(), "Idempotent rejection should succeed");
+            }
+
+            #[tokio::test]
+            async fn test_handle_rejection_idempotency_already_cancelled() {
+                let repo = MockFakeRepo::new(); // No expectations - should return early
+                let rpc = MockFakeRPCClient::new(); // No expectations - should return early
+
+                let mut connection = create_pending_incoming_connection();
+                connection.update_state(State::Cancelled); // ✅ Already cancelled
+
+                let api = generate_connection_api(repo, rpc);
+
+                let result = api.handle_rejection(connection).await;
+
+                // ✅ Should succeed idempotently without doing any work
+                assert!(
+                    result.is_ok(),
+                    "Idempotent rejection should succeed for cancelled state"
+                );
+            }
+
+            #[tokio::test]
+            async fn test_handle_rejection_idempotency_vs_invalid_state() {
+                let repo = MockFakeRepo::new(); // No expectations - should fail validation
+                let rpc = MockFakeRPCClient::new(); // No expectations - should fail validation
+
+                // Create connection in PendingOutgoing state (invalid for rejection, not idempotent)
+                let mut connection = create_pending_incoming_connection();
+                connection.update_state(State::PendingOutgoing);
+
+                let api = generate_connection_api(repo, rpc);
+
+                let result = api.handle_rejection(connection).await;
+
+                // ✅ Should fail with state transition error, NOT succeed idempotently
+                assert!(result.is_err());
+                assert!(matches!(
+                    result.unwrap_err(),
+                    ConnectionError::InvalidStateTransition { .. }
+                ));
+            }
+
+            #[tokio::test]
+            async fn test_handle_rejection_idempotency_multiple_calls() {
+                // Test calling rejection on already-rejected connection multiple times
+                let repo = MockFakeRepo::new(); // No expectations - all calls should be idempotent
+                let rpc = MockFakeRPCClient::new(); // No expectations - all calls should be idempotent
+
+                let mut rejected_connection = create_pending_incoming_connection();
+                rejected_connection.update_state(State::Rejected);
+
+                let api = generate_connection_api(repo, rpc);
+
+                // Call multiple times - all should succeed idempotently
+                for i in 0..3 {
+                    let result = api.handle_rejection(rejected_connection.clone()).await;
+                    assert!(
+                        result.is_ok(),
+                        "Idempotent rejection call {} should succeed",
+                        i
+                    );
+                }
+            }
+
+            #[tokio::test]
+            async fn test_handle_rejection_idempotency_both_terminal_states() {
+                // Test both Rejected and Cancelled states for idempotency
+                let repo = MockFakeRepo::new(); // No expectations for either call
+                let rpc = MockFakeRPCClient::new(); // No expectations for either call
+
+                let terminal_states = vec![State::Rejected, State::Cancelled];
+
+                let api = generate_connection_api(repo, rpc);
+
+                for state in terminal_states {
+                    let mut connection = create_pending_incoming_connection();
+                    connection.update_state(state.clone());
+
+                    let result = api.handle_rejection(connection).await;
+                    assert!(
+                        result.is_ok(),
+                        "State {:?} should be idempotent for rejection",
+                        state
+                    );
+                }
+            }
         }
     }
-        
-        mod request_submissions_tests {
-            use super::*;
-            use rst_common::standard::uuid::Uuid;
-            use rst_common::with_tokio::tokio;
 
-            #[tokio::test]
-            async fn test_request_submissions_success() {
-                let mut repo = MockFakeRepo::new();
+    mod request_submissions_tests {
+        use super::*;
+        use rst_common::standard::uuid::Uuid;
+        use rst_common::with_tokio::tokio;
 
-                // Create connections and update their states as needed
-                let mut conn1 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer1".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn1.update_state(State::PendingOutgoing);
+        #[tokio::test]
+        async fn test_request_submissions_success() {
+            let mut repo = MockFakeRepo::new();
 
-                let mut conn2 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer2".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn2.update_state(State::Established);
+            // Create connections and update their states as needed
+            let mut conn1 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer1".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn1.update_state(State::PendingOutgoing);
 
-                let expected_connections = vec![conn1, conn2];
+            let mut conn2 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer2".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn2.update_state(State::Established);
 
-                repo.expect_list_connections()
-                    .times(1)
-                    .withf(|states| {
-                        states.as_ref().unwrap().contains(&State::PendingOutgoing)
-                            && states.as_ref().unwrap().contains(&State::Established)
-                    })
-                    .returning(move |_| Ok(expected_connections.clone()));
+            let expected_connections = vec![conn1, conn2];
 
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
+            repo.expect_list_connections()
+                .times(1)
+                .withf(|states| {
+                    states.as_ref().unwrap().contains(&State::PendingOutgoing)
+                        && states.as_ref().unwrap().contains(&State::Established)
+                })
+                .returning(move |_| Ok(expected_connections.clone()));
 
-                let result = api.request_submissions().await;
-                assert!(result.is_ok());
-                let connections = result.unwrap();
-                assert_eq!(connections.len(), 2);
-                assert_eq!(connections[0].get_state(), State::PendingOutgoing);
-                assert_eq!(connections[1].get_state(), State::Established);
-            }
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
 
-            #[tokio::test]
-            async fn test_request_submissions_repo_error() {
-                let mut repo = MockFakeRepo::new();
-                repo.expect_list_connections()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
-
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
-
-                let result = api.request_submissions().await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
+            let result = api.request_submissions().await;
+            assert!(result.is_ok());
+            let connections = result.unwrap();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].get_state(), State::PendingOutgoing);
+            assert_eq!(connections[1].get_state(), State::Established);
         }
 
-        /// Tests for `request_list` method
-        mod request_list_tests {
-            use super::*;
-            use rst_common::standard::uuid::Uuid;
-            use rst_common::with_tokio::tokio;
+        #[tokio::test]
+        async fn test_request_submissions_repo_error() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_list_connections()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
 
-            #[tokio::test]
-            async fn test_request_list_success() {
-                let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
 
-                // Create connections and update their states as needed
-                let mut conn1 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer3".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn1.update_state(State::PendingIncoming);
+            let result = api.request_submissions().await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+    }
 
-                let mut conn2 = Connection::builder()
-                    .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
-                    .with_peer_did_uri(PeerDIDURI::new("did:example:peer4".to_string()).unwrap())
-                    .with_password("StrongPassword123!@#")
-                    .build()
-                    .unwrap();
-                conn2.update_state(State::Established);
+    /// Tests for `request_list` method
+    mod request_list_tests {
+        use super::*;
+        use rst_common::standard::uuid::Uuid;
+        use rst_common::with_tokio::tokio;
 
-                let expected_connections = vec![conn1, conn2];
+        #[tokio::test]
+        async fn test_request_list_success() {
+            let mut repo = MockFakeRepo::new();
 
-                repo.expect_list_connections()
-                    .times(1)
-                    .withf(|states| {
-                        states.as_ref().unwrap().contains(&State::PendingIncoming)
-                            && states.as_ref().unwrap().contains(&State::Established)
-                    })
-                    .returning(move |_| Ok(expected_connections.clone()));
+            // Create connections and update their states as needed
+            let mut conn1 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer3".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn1.update_state(State::PendingIncoming);
 
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
+            let mut conn2 = Connection::builder()
+                .with_id(ConnectionID::from(Uuid::new_v4().to_string()))
+                .with_peer_did_uri(PeerDIDURI::new("did:example:peer4".to_string()).unwrap())
+                .with_password("StrongPassword123!@#")
+                .build()
+                .unwrap();
+            conn2.update_state(State::Established);
 
-                let result = api.request_list().await;
-                assert!(result.is_ok());
-                let connections = result.unwrap();
-                assert_eq!(connections.len(), 2);
-                assert_eq!(connections[0].get_state(), State::PendingIncoming);
-                assert_eq!(connections[1].get_state(), State::Established);
-            }
+            let expected_connections = vec![conn1, conn2];
 
-            #[tokio::test]
-            async fn test_request_list_repo_error() {
-                let mut repo = MockFakeRepo::new();
-                repo.expect_list_connections()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
+            repo.expect_list_connections()
+                .times(1)
+                .withf(|states| {
+                    states.as_ref().unwrap().contains(&State::PendingIncoming)
+                        && states.as_ref().unwrap().contains(&State::Established)
+                })
+                .returning(move |_| Ok(expected_connections.clone()));
 
-                let rpc = MockFakeRPCClient::new();
-                let api = generate_connection_api(repo, rpc);
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
 
-                let result = api.request_list().await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
+            let result = api.request_list().await;
+            assert!(result.is_ok());
+            let connections = result.unwrap();
+            assert_eq!(connections.len(), 2);
+            assert_eq!(connections[0].get_state(), State::PendingIncoming);
+            assert_eq!(connections[1].get_state(), State::Established);
         }
 
-        /// Tests for `request_cancel` method
-        mod request_cancel_tests {
-            use super::*;
-            use rst_common::with_tokio::tokio;
+        #[tokio::test]
+        async fn test_request_list_repo_error() {
+            let mut repo = MockFakeRepo::new();
+            repo.expect_list_connections()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("repo error".to_string())));
 
-            #[tokio::test]
-            async fn test_request_cancel_success() {
-                let mut repo = MockFakeRepo::new();
-                let mut rpc = MockFakeRPCClient::new();
+            let rpc = MockFakeRPCClient::new();
+            let api = generate_connection_api(repo, rpc);
 
-                // Setup: repo returns a valid connection, rpc and repo.remove succeed
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Ok(Connection::builder()
-                            .with_id(ConnectionID::generate())
-                            .with_peer_did_uri(
-                                PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
-                            )
-                            .build()
-                            .unwrap())
-                    });
-                rpc.expect_request_remove()
-                    .times(1)
-                    .returning(|_, _| Ok(()));
-                repo.expect_remove().times(1).returning(|_| Ok(()));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_ok(), "Cancellation should succeed");
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_connection_not_found() {
-                let mut repo = MockFakeRepo::new();
-                let rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns not found error
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Err(ConnectionError::InvalidConnectionID(
-                            "not found".to_string(),
-                        ))
-                    });
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::InvalidConnectionID(_)
-                ));
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_repo_error_other() {
-                let mut repo = MockFakeRepo::new();
-                let rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns a generic error
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("db error".to_string())));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_rpc_failure() {
-                let mut repo = MockFakeRepo::new();
-                let mut rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns valid connection, rpc fails
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Ok(Connection::builder()
-                            .with_id(ConnectionID::generate())
-                            .with_peer_did_uri(
-                                PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
-                            )
-                            .build()
-                            .unwrap())
-                    });
-                rpc.expect_request_remove()
-                    .times(1)
-                    .returning(|_, _| Err(ConnectionError::EntityError("rpc failed".to_string())));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
-
-            #[tokio::test]
-            async fn test_request_cancel_remove_failure() {
-                let mut repo = MockFakeRepo::new();
-                let mut rpc = MockFakeRPCClient::new();
-
-                // Setup: repo returns valid connection, rpc succeeds, repo.remove fails
-                repo.expect_get_connection_by_peer_conn_id()
-                    .times(1)
-                    .returning(|_| {
-                        Ok(Connection::builder()
-                            .with_id(ConnectionID::generate())
-                            .with_peer_did_uri(
-                                PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
-                            )
-                            .build()
-                            .unwrap())
-                    });
-                rpc.expect_request_remove()
-                    .times(1)
-                    .returning(|_, _| Ok(()));
-                repo.expect_remove()
-                    .times(1)
-                    .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
-
-                let api = generate_connection_api(repo, rpc);
-                let connection_id = ConnectionID::generate();
-
-                let result = api.request_cancel(connection_id).await;
-                assert!(result.is_err());
-                assert!(matches!(
-                    result.unwrap_err(),
-                    ConnectionError::EntityError(_)
-                ));
-            }
+            let result = api.request_list().await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
         }
+    }
+
+    /// Tests for `request_cancel` method
+    mod request_cancel_tests {
+        use super::*;
+        use rst_common::with_tokio::tokio;
+
+        #[tokio::test]
+        async fn test_request_cancel_success() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns a valid connection, rpc and repo.remove succeed
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::generate())
+                        .with_peer_did_uri(
+                            PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
+                        )
+                        .build()
+                        .unwrap())
+                });
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Ok(()));
+            repo.expect_remove().times(1).returning(|_| Ok(()));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_ok(), "Cancellation should succeed");
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_connection_not_found() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns not found error
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Err(ConnectionError::InvalidConnectionID(
+                        "not found".to_string(),
+                    ))
+                });
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::InvalidConnectionID(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_repo_error_other() {
+            let mut repo = MockFakeRepo::new();
+            let rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns a generic error
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("db error".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_rpc_failure() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns valid connection, rpc fails
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::generate())
+                        .with_peer_did_uri(
+                            PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
+                        )
+                        .build()
+                        .unwrap())
+                });
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Err(ConnectionError::EntityError("rpc failed".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+
+        #[tokio::test]
+        async fn test_request_cancel_remove_failure() {
+            let mut repo = MockFakeRepo::new();
+            let mut rpc = MockFakeRPCClient::new();
+
+            // Setup: repo returns valid connection, rpc succeeds, repo.remove fails
+            repo.expect_get_connection_by_peer_conn_id()
+                .times(1)
+                .returning(|_| {
+                    Ok(Connection::builder()
+                        .with_id(ConnectionID::generate())
+                        .with_peer_did_uri(
+                            PeerDIDURI::new("did:example:peer123".to_string()).unwrap(),
+                        )
+                        .build()
+                        .unwrap())
+                });
+            rpc.expect_request_remove()
+                .times(1)
+                .returning(|_, _| Ok(()));
+            repo.expect_remove()
+                .times(1)
+                .returning(|_| Err(ConnectionError::EntityError("remove failed".to_string())));
+
+            let api = generate_connection_api(repo, rpc);
+            let connection_id = ConnectionID::generate();
+
+            let result = api.request_cancel(connection_id).await;
+            assert!(result.is_err());
+            assert!(matches!(
+                result.unwrap_err(),
+                ConnectionError::EntityError(_)
+            ));
+        }
+    }
 }
